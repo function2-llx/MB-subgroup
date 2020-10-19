@@ -132,3 +132,6 @@ dmypy.json
 .idea/
 **data/
 data.zip
+
+# tensorboard
+**runs

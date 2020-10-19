@@ -1,12 +1,9 @@
-import os
-import csv
-
 from torchvision import transforms, datasets
 
 from preprocess import splits
 
 
-def load_data():
+def load_data(splits=splits):
     data_transforms = {
         'train': transforms.Compose([
             transforms.RandomResizedCrop(224),
