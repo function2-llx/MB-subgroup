@@ -32,7 +32,7 @@ if __name__ == '__main__':
                 tot += filename.endswith('.dcm')
     bar = tqdm(ncols=80, total=tot)
     for (name, _, mst), split in zip(labels, random.choices(['train', 'val'], weights=[3, 1], k=len(labels))):
-        cnt = {k: 0 for k in ['up', 'left', 'back']}
+        cnt = {k: 0 for k in ['back', 'left', 'up']}
         for dirpath, _, filenames in os.walk(f'../data-dicom/{name}'):
             for filename in filenames:
                 if not filename.endswith('.dcm'):

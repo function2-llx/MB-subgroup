@@ -18,7 +18,7 @@ from utils import load_data
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
 parser.add_argument('--lr', type=float, default=1e-4)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
@@ -35,25 +35,30 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
     for split, data_loader in data_loaders.items():
         training = split == 'train'
         model.train(training)
-        loss, acc, tot = [0] * 3
+        tot_loss = 0
+        acc = {k: 0 for k in ['all', 'back', 'left', 'up']}
+        tot = {k: 0 for k in ['all', 'back', 'left', 'up']}
         with torch.set_grad_enabled(training):
-            for input, label in tqdm(data_loader, ncols=80, desc=f'{split} epoch {epoch}'):
-                input = input.to(device)
-                label = label.to(device)
+            for inputs, ortns, labels in tqdm(data_loader, ncols=80, desc=f'{split} epoch {epoch}'):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
                 if training:
                     optimizer.zero_grad()
-                output = model.forward(input)
-                pred = output.argmax(dim=1)
-                batch_loss = loss_fn(output, label)
-                loss += batch_loss.item()
-                acc += (pred == label).sum().item()
-                tot += len(label)
+                output = model.forward(inputs)
+                preds = output.argmax(dim=1)
+                loss = loss_fn(output, labels)
+                tot_loss += loss.item()
+                for ortn, label, pred in zip(ortns, labels, preds):
+                    flag = (pred == label).item()
+                    for k in ['all', ortn]:
+                        tot[k] += 1
+                        acc[k] += flag
                 if training:
-                    batch_loss.backward()
+                    loss.backward()
                     optimizer.step()
         results[split] = {
-            'loss': loss,
-            'acc': acc / tot,
+            'loss': tot_loss,
+            'acc': {k: v / tot[k] for k, v in acc.items()}
         }
     return results
 
@@ -81,8 +86,11 @@ if __name__ == '__main__':
             results = run_epoch(epoch, model, data_loaders, loss_fn, optimizer)
             for split, result in results.items():
                 for k, v in result.items():
-                    writer.add_scalar(f'{split}/{k}', v, epoch)
-            val_acc = results['val']['acc']
+                    if isinstance(v, dict):
+                        writer.add_scalars(f'{split}/{k}', v, epoch)
+                    else:
+                        writer.add_scalar(f'{split}/{k}', v, epoch)
+            val_acc = results['val']['acc']['all']
             if best_acc < val_acc:
                 best_acc = val_acc
                 torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-training.pth.tar'))
