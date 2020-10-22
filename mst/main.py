@@ -11,20 +11,27 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.models import resnet18
+from torchvision.models import resnet18 as resnet
+from captum.attr import IntegratedGradients
+
 
 from utils import load_data
 
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--lr', type=float, default=1e-4)
-parser.add_argument('--batch_size', type=int, default=16)
+parser.add_argument('--lr', type=float, default=1e-6)
+parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
+parser.add_argument('--ortns', type=str, nargs='*')
 
 args = parser.parse_args()
-model_name = 'lr={lr},bs={batch_size}'.format(**args.__dict__)
+ortns = args.ortns
+if not ortns:
+    ortns = ['back', 'left', 'up']
+model_name = 'lr={lr},bs={batch_size},'.format(**args.__dict__)
+model_name += ','.join(ortns)
 print(model_name)
 
 device = torch.device(args.device)
@@ -58,7 +65,7 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
                     optimizer.step()
         results[split] = {
             'loss': tot_loss,
-            'acc': {k: v / tot[k] for k, v in acc.items()}
+            'acc': {k: v / tot[k] for k, v in acc.items() if k == 'all' or k in ortns}
         }
     return results
 
@@ -71,9 +78,9 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    datasets = load_data()
+    datasets = load_data(ortns)
     data_loaders = {split: DataLoader(datasets[split], args.batch_size, split == 'train') for split in ['train', 'val']}
-    model = resnet18(pretrained=True).to(device)
+    model = resnet(pretrained=True).to(device)
     model.fc = nn.Linear(model.fc.in_features, 4).to(device)
     output_dir = f'output/{model_name}'
     if not args.test:
@@ -102,4 +109,8 @@ if __name__ == '__main__':
             os.path.join(output_dir, 'checkpoint.pth.tar'),
         )
     else:
-        pass
+        model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
+        model.eval()
+        for input, ortn, label in datasets['val']:
+            pred = model.forward(input.unsqueeze(0)).argmax(dim=1).squeeze()
+            break
