@@ -6,18 +6,7 @@ import png
 import pydicom
 from tqdm import tqdm
 
-
-def get_ornt(ds):
-    ornt = np.array(ds.ImageOrientationPatient)
-    p = sorted(np.argpartition(-abs(ornt), 2)[:2])
-    if p == [0, 4]:
-        return 'up'
-    elif p == [1, 5]:
-        return 'left'
-    elif p == [0, 5]:
-        return 'back'
-    else:
-        raise ValueError('cannot determine orientation')
+from utils import get_ornt
 
 
 if __name__ == '__main__':
