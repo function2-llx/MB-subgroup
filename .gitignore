@@ -130,13 +130,6 @@ dmypy.json
 
 .vscode/
 .idea/
-**data/
-data.zip
-data-dicom/
-data-dicom.zip
-
-# tensorboard
-**runs
-data-20201030
-
+data*/
+runs/
 *.zip

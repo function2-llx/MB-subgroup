@@ -35,7 +35,7 @@ if __name__ == '__main__':
                     continue
                 assert len(shape) == 2
                 ornt = get_ornt(ds)
-                output_dir = f'data/{split}/{mst}/{ornt}'
+                output_dir = f'data-20201030/{split}/{mst}/{ornt}'
                 os.makedirs(output_dir, exist_ok=True)
                 # Convert to float to avoid overflow or underflow losses.
                 image_2d = ds.pixel_array.astype(float)
