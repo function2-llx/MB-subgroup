@@ -1,37 +1,37 @@
-import os
 import json
-import shutil
+import os
 import random
+import shutil
 from argparse import ArgumentParser
 
-from tqdm import tqdm
 import numpy as np
 import torch
+from captum.attr import IntegratedGradients, visualization as viz
+from matplotlib.colors import LinearSegmentedColormap
 from torch import nn
-from torch.utils.data import DataLoader
 from torch.optim import Adam
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models import resnet18 as resnet
-from captum.attr import IntegratedGradients
-
+from torchvision import transforms
+from tqdm import tqdm
 
 from utils import load_data
 
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
 parser.add_argument('--lr', type=float, default=1e-6)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
 parser.add_argument('--ortns', type=str, nargs='*')
 
 args = parser.parse_args()
-ortns = args.ortns
-if not ortns:
-    ortns = ['back', 'left', 'up']
+if not args.ortns:
+    args.ortns = ['back', 'left', 'up']
 model_name = 'lr={lr},bs={batch_size},'.format(**args.__dict__)
-model_name += ','.join(ortns)
+model_name += ','.join(args.ortns)
 print(model_name)
 
 device = torch.device(args.device)
@@ -57,7 +57,7 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
                 tot_loss += loss.item()
                 for ortn, label, pred in zip(ortns, labels, preds):
                     flag = (pred == label).item()
-                    for k in ['all', ortn]:
+                    for k in ['all'] + args.ortns:
                         tot[k] += 1
                         acc[k] += flag
                 if training:
@@ -65,7 +65,7 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
                     optimizer.step()
         results[split] = {
             'loss': tot_loss,
-            'acc': {k: v / tot[k] for k, v in acc.items() if k == 'all' or k in ortns}
+            'acc': {k: v / tot[k] for k, v in acc.items() if k == 'all' or k in args.ortns}
         }
     return results
 
@@ -78,12 +78,12 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    datasets = load_data(ortns)
-    data_loaders = {split: DataLoader(datasets[split], args.batch_size, split == 'train') for split in ['train', 'val']}
     model = resnet(pretrained=True).to(device)
     model.fc = nn.Linear(model.fc.in_features, 4).to(device)
     output_dir = f'output/{model_name}'
     if not args.test:
+        datasets = load_data(args.ortns)
+        data_loaders = {split: DataLoader(datasets[split], args.batch_size, split == 'train') for split in ['train', 'val']}
         loss_fn = nn.CrossEntropyLoss()
         optimizer = Adam(model.parameters(), lr=args.lr)
         os.makedirs(output_dir, exist_ok=True)
@@ -109,8 +109,39 @@ if __name__ == '__main__':
             os.path.join(output_dir, 'checkpoint.pth.tar'),
         )
     else:
+        datasets = load_data(args.ortns, norm=False)
         model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
         model.eval()
-        for input, ortn, label in datasets['val']:
-            pred = model.forward(input.unsqueeze(0)).argmax(dim=1).squeeze()
-            break
+        normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        for img, ortn, label in tqdm(datasets['val'], ncols=80):
+            input = normalize(img).to(device).unsqueeze(0)
+            output = model.forward(input)
+            pred = output.argmax(dim=1)
+            integrated_gradients = IntegratedGradients(model)
+            attributions_ig = integrated_gradients.attribute(input, target=pred, n_steps=200)
+            default_cmap = LinearSegmentedColormap.from_list(
+                'custom blue',
+                [
+                    (0, '#ffffff'),
+                    (0.25, '#000000'),
+                    (1, '#000000')
+                ],
+                N=256
+            )
+
+            _ = viz.visualize_image_attr_multiple(
+                np.transpose(
+                    attributions_ig.squeeze().cpu().detach().numpy(),
+                    (1, 2, 0)
+                ),
+                np.transpose(
+                    img.detach().numpy(),
+                    (1, 2, 0),
+                ),
+                methods=['original_image', 'heat_map'],
+                signs=['all', 'positive'],
+                show_colorbar=True,
+                cmap=default_cmap,
+                # outlier_perc=1,
+            )
+            a = 1

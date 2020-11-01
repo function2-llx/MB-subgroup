@@ -28,20 +28,23 @@ class MstFolder(ImageFolder):
         return sample, path, target
 
 
-def load_data(ortns):
+def load_data(ortns, norm=True):
     data_transforms = {
-        'train': transforms.Compose([
+        'train': [
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
-        'val': transforms.Compose([
+        ],
+        'val': [
             transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
+        ],
     }
+    if norm:
+        for v in data_transforms.values():
+            v.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
+    for k, v in data_transforms.items():
+        data_transforms[k] = transforms.Compose(v)
     image_datasets = {split: MstFolder(f'data/{split}', data_transforms[split], ortns=ortns) for split in ['train', 'val']}
     return image_datasets

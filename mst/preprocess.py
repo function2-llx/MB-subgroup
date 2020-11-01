@@ -24,6 +24,7 @@ if __name__ == '__main__':
     import random
     random.seed(23333)
     labels = list(csv.reader(open('../data-dicom/mst-labels.csv')))
+    print('labels ')
 
     tot = 0
     for name, _, _ in labels:
