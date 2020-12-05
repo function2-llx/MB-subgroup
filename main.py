@@ -57,7 +57,7 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
                 tot_loss += loss.item()
                 for ortn, label, pred in zip(ortns, labels, preds):
                     flag = (pred == label).item()
-                    for k in ['all'] + args.ortns:
+                    for k in ['all', ortn]:
                         tot[k] += 1
                         acc[k] += flag
                 if training:
@@ -65,7 +65,7 @@ def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
                     optimizer.step()
         results[split] = {
             'loss': tot_loss,
-            'acc': {k: v / tot[k] for k, v in acc.items() if k == 'all' or k in args.ortns}
+            'acc': {k: v * 100 / tot[k] for k, v in acc.items() if k == 'all' or k in args.ortns}
         }
     return results
 
@@ -92,20 +92,18 @@ if __name__ == '__main__':
         for epoch in range(1, args.epochs + 1):
             results = run_epoch(epoch, model, data_loaders, loss_fn, optimizer)
             for split, result in results.items():
-                for k, v in result.items():
-                    if isinstance(v, dict):
-                        writer.add_scalars(f'{split}/{k}', v, epoch)
-                    else:
-                        writer.add_scalar(f'{split}/{k}', v, epoch)
+                writer.add_scalar(f'{split}/loss', result['loss'], epoch)
+                for ortn, acc in result['acc'].items():
+                    writer.add_scalar(f'{split}/acc/{ortn}', acc, epoch)
             val_acc = results['val']['acc']['all']
             if best_acc < val_acc:
                 best_acc = val_acc
-                torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-training.pth.tar'))
+                torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-train.pth.tar'))
             print(json.dumps(results, indent=4, ensure_ascii=False))
             print('best val acc', best_acc)
             writer.flush()
         shutil.copy(
-            os.path.join(output_dir, 'checkpoint-training.pth.tar'),
+            os.path.join(output_dir, 'checkpoint-train.pth.tar'),
             os.path.join(output_dir, 'checkpoint.pth.tar'),
         )
     else:

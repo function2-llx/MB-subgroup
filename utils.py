@@ -4,6 +4,7 @@ import numpy as np
 import png
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
+from torchvision.datasets.folder import is_image_file
 
 
 def get_ornt(ds) -> (str, int):
@@ -35,29 +36,23 @@ def write_gray_scale(pixel_array: np.ndarray, path: str):
         w.write(png_file, pixel_array)
 
 
-def split_ortn(path):
-    # path will be orientation after the iteration. magic!
-    for i in range(2):
-        path = os.path.split(path)[i]
-    return path
-
-
 class MstFolder(ImageFolder):
-    def __init__(self, root, transform, ortns):
-        from torchvision.datasets.folder import is_image_file
+    @staticmethod
+    def split_ortn(path):
+        return path.split(os.path.sep)[3]
 
+    def __init__(self, root, transform, ortns):
+        # example path: data/train/G3/back/419674douyiming/1.png
         def is_valid_file(path):
-            return is_image_file(path) and split_ortn(path) in ortns
+            return is_image_file(path) and self.split_ortn(path) in ortns
 
         super().__init__(root, transform, is_valid_file=is_valid_file)
 
     def __getitem__(self, index):
         sample, target = super().__getitem__(index)
         path = self.samples[index][0]
-        # path will be orientation after the iteration. magic!
-        for i in range(2):
-            path = os.path.split(path)[i]
-        return sample, path, target
+        ortn = self.split_ortn(path)
+        return sample, ortn, target
 
 
 def load_data(ortns, norm=True):
