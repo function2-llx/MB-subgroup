@@ -1,10 +1,12 @@
 import os
+import json
 
 import numpy as np
 import png
+import torch
+import torchvision
 from torchvision import transforms
-from torchvision.datasets import ImageFolder
-from torchvision.datasets.folder import is_image_file
+from torchvision.datasets import VisionDataset, DatasetFolder
 
 
 def get_ornt(ds) -> (str, int):
@@ -36,26 +38,36 @@ def write_gray_scale(pixel_array: np.ndarray, path: str):
         w.write(png_file, pixel_array)
 
 
-class MstFolder(ImageFolder):
-    @staticmethod
-    def split_ortn(path):
-        return path.split(os.path.sep)[3]
+class MriFolder(VisionDataset):
+    def __init__(self, root, transform, data):
+        super().__init__(root, transform=transform)
+        self.samples = []
+        for path, subtype, exist in data:
+            subtype = int(subtype)
+            exist = int(exist)
+            # target = torch.FloatTensor([0, 0, 0, 0, exist])
+            target = torch.FloatTensor([0, 0, 0, 0])
+            # if exist:
+            #     target[subtype - 1] = 1
+            target[subtype - 1] = 1
+            self.samples.append([os.path.join(root, path), target])
+        self.loader = torchvision.datasets.folder.default_loader
 
-    def __init__(self, root, transform, ortns):
-        # example path: data/train/G3/back/419674douyiming/1.png
-        def is_valid_file(path):
-            return is_image_file(path) and self.split_ortn(path) in ortns
-
-        super().__init__(root, transform, is_valid_file=is_valid_file)
+    def __len__(self):
+        return len(self.samples)
 
     def __getitem__(self, index):
-        sample, target = super().__getitem__(index)
-        path = self.samples[index][0]
-        ortn = self.split_ortn(path)
-        return sample, ortn, target
+        path, target = self.samples[index]
+        sample = self.loader(path)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, target
 
 
-def load_data(ortns, norm=True):
+def load_data(data_dir='data-20201130', norm=True):
     data_transforms = {
         'train': [
             transforms.RandomResizedCrop(224),
@@ -73,5 +85,14 @@ def load_data(ortns, norm=True):
             v.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
     for k, v in data_transforms.items():
         data_transforms[k] = transforms.Compose(v)
-    image_datasets = {split: MstFolder(f'data/{split}', data_transforms[split], ortns=ortns) for split in ['train', 'val']}
+    data_info = {
+        split: json.load(open(os.path.join(data_dir, f'{split}.json')))
+        for split in ['train', 'val']
+    }
+    image_datasets = {
+        split: {
+            ortn: MriFolder(data_dir, data_transforms[split], data_info[split][ortn])
+            for ortn in ['back', 'up', 'left']
+        } for split in ['train', 'val']
+    }
     return image_datasets

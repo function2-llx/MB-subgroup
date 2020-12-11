@@ -8,67 +8,32 @@ import numpy as np
 import torch
 from captum.attr import IntegratedGradients, visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
-from torch import nn
-from torch.optim import Adam
-from torch.utils.data import DataLoader
+from matplotlib import pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.models import resnet18 as resnet
 from torchvision import transforms
 from tqdm import tqdm
 
+from model import Model
 from utils import load_data
+from sklearn.metrics import roc_curve, auc
 
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--lr', type=float, default=1e-6)
+parser.add_argument('--lr', type=float, default=2e-6)
 parser.add_argument('--batch_size', type=int, default=16)
-parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
-parser.add_argument('--ortns', type=str, nargs='*')
+parser.add_argument('--ortns', nargs='*', choices=['back', 'up', 'left'])
 
 args = parser.parse_args()
 if not args.ortns:
-    args.ortns = ['back', 'left', 'up']
-model_name = 'lr={lr},bs={batch_size},'.format(**args.__dict__)
-model_name += ','.join(args.ortns)
+    args.ortns = ['back', 'up', 'left']
+
+model_name = 'lr={lr},bs={batch_size}'.format(**args.__dict__)
 print(model_name)
 
 device = torch.device(args.device)
-
-
-def run_epoch(epoch, model, data_loaders, loss_fn, optimizer):
-    results = {}
-    for split, data_loader in data_loaders.items():
-        training = split == 'train'
-        model.train(training)
-        tot_loss = 0
-        acc = {k: 0 for k in ['all', 'back', 'left', 'up']}
-        tot = {k: 0 for k in ['all', 'back', 'left', 'up']}
-        with torch.set_grad_enabled(training):
-            for inputs, ortns, labels in tqdm(data_loader, ncols=80, desc=f'{split} epoch {epoch}'):
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                if training:
-                    optimizer.zero_grad()
-                output = model.forward(inputs)
-                preds = output.argmax(dim=1)
-                loss = loss_fn(output, labels)
-                tot_loss += loss.item()
-                for ortn, label, pred in zip(ortns, labels, preds):
-                    flag = (pred == label).item()
-                    for k in ['all', ortn]:
-                        tot[k] += 1
-                        acc[k] += flag
-                if training:
-                    loss.backward()
-                    optimizer.step()
-        results[split] = {
-            'loss': tot_loss,
-            'acc': {k: v * 100 / tot[k] for k, v in acc.items() if k == 'all' or k in args.ortns}
-        }
-    return results
-
 
 if __name__ == '__main__':
     random.seed(args.seed)
@@ -78,68 +43,88 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    model = resnet(pretrained=True).to(device)
-    model.fc = nn.Linear(model.fc.in_features, 4).to(device)
-    output_dir = f'output/{model_name}'
     if not args.test:
-        datasets = load_data(args.ortns)
-        data_loaders = {split: DataLoader(datasets[split], args.batch_size, split == 'train') for split in ['train', 'val']}
-        loss_fn = nn.CrossEntropyLoss()
-        optimizer = Adam(model.parameters(), lr=args.lr)
-        os.makedirs(output_dir, exist_ok=True)
-        writer = SummaryWriter(f'runs/{model_name}')
-        best_acc = 0
-        for epoch in range(1, args.epochs + 1):
-            results = run_epoch(epoch, model, data_loaders, loss_fn, optimizer)
-            for split, result in results.items():
-                writer.add_scalar(f'{split}/loss', result['loss'], epoch)
-                for ortn, acc in result['acc'].items():
-                    writer.add_scalar(f'{split}/acc/{ortn}', acc, epoch)
-            val_acc = results['val']['acc']['all']
-            if best_acc < val_acc:
-                best_acc = val_acc
-                torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-train.pth.tar'))
-            print(json.dumps(results, indent=4, ensure_ascii=False))
-            print('best val acc', best_acc)
-            writer.flush()
-        shutil.copy(
-            os.path.join(output_dir, 'checkpoint-train.pth.tar'),
-            os.path.join(output_dir, 'checkpoint.pth.tar'),
-        )
+        datasets = load_data()
+        for ortn in ['left', 'up', 'back']:
+            output_dir = os.path.join('output', model_name, ortn)
+            model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
+            os.makedirs(output_dir, exist_ok=True)
+            writer = SummaryWriter(os.path.join('runs', model_name, ortn))
+            best_acc = 0
+            for epoch in range(1, args.epochs + 1):
+                results = model.train_epoch(epoch)
+                for split, result in results.items():
+                    for k, v in result.items():
+                        writer.add_scalar(f'{split}/loss', v, epoch)
+                val_acc = results['val']['acc']
+                if best_acc < val_acc:
+                    best_acc = val_acc
+                    torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-train.pth.tar'))
+                print(json.dumps(results, indent=4, ensure_ascii=False))
+                print('best val acc', best_acc)
+                writer.flush()
+            shutil.copy(
+                os.path.join(output_dir, 'checkpoint-train.pth.tar'),
+                os.path.join(output_dir, 'checkpoint.pth.tar'),
+            )
     else:
-        datasets = load_data(args.ortns, norm=False)
-        model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
-        model.eval()
-        normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        for img, ortn, label in tqdm(datasets['val'], ncols=80):
-            input = normalize(img).to(device).unsqueeze(0)
-            output = model.forward(input)
-            pred = output.argmax(dim=1)
-            integrated_gradients = IntegratedGradients(model)
-            attributions_ig = integrated_gradients.attribute(input, target=pred, n_steps=200)
-            default_cmap = LinearSegmentedColormap.from_list(
-                'custom blue',
-                [
-                    (0, '#ffffff'),
-                    (0.25, '#000000'),
-                    (1, '#000000')
-                ],
-                N=256
-            )
+        datasets = load_data(norm=False)
+        for ortn in args.ortns:
+            output_dir = os.path.join('output', model_name, ortn)
+            model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
+            model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
+            model.eval()
+            normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            y_true = []
+            y_score = []
+            with torch.no_grad():
+                for img, label in tqdm(datasets['val'][ortn], ncols=80, desc='testing'):
+                    input = normalize(img).to(device).unsqueeze(0)
+                    output = model.resnet.forward(input)[0]
+                    y_true.append(label.long().cpu().numpy())
+                    y_score.append(output.cpu().numpy())
+                y_true = np.array(y_true)
+                y_score = np.array(y_score)
+                for i in range(4):
+                    fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
+                    plt.figure()
+                    lw = 2
+                    plt.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.2f)' % auc(fpr, tpr))
+                    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+                    plt.xlim([0.0, 1.0])
+                    plt.ylim([0.0, 1.05])
+                    plt.xlabel('False Positive Rate')
+                    plt.ylabel('True Positive Rate')
+                    plt.title(f'{ortn}, ')
+                    plt.legend(loc="lower right")
+                    plt.show()
 
-            _ = viz.visualize_image_attr_multiple(
-                np.transpose(
-                    attributions_ig.squeeze().cpu().detach().numpy(),
-                    (1, 2, 0)
-                ),
-                np.transpose(
-                    img.detach().numpy(),
-                    (1, 2, 0),
-                ),
-                methods=['original_image', 'heat_map'],
-                signs=['all', 'positive'],
-                show_colorbar=True,
-                cmap=default_cmap,
-                # outlier_perc=1,
-            )
-            a = 1
+                    # pred = output.argmax(dim=1)
+                    # integrated_gradients = IntegratedGradients(model)
+                    # attributions_ig = integrated_gradients.attribute(input, target=pred, n_steps=200)
+                    # default_cmap = LinearSegmentedColormap.from_list(
+                    #     'custom blue',
+                    #     [
+                    #         (0, '#ffffff'),
+                    #         (0.25, '#000000'),
+                    #         (1, '#000000')
+                    #     ],
+                    #     N=256
+                    # )
+                    #
+                    # _ = viz.visualize_image_attr_multiple(
+                    #     np.transpose(
+                    #         attributions_ig.squeeze().cpu().detach().numpy(),
+                    #         (1, 2, 0)
+                    #     ),
+                    #     np.transpose(
+                    #         img.detach().numpy(),
+                    #         (1, 2, 0),
+                    #     ),
+                    #     methods=['original_image', 'heat_map'],
+                    #     signs=['all', 'positive'],
+                    #     show_colorbar=True,
+                    #     cmap=default_cmap,
+                    #     # outlier_perc=1,
+                    # )
+                    # a = 1

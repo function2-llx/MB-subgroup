@@ -1,52 +1,71 @@
-import os
 import csv
+import json
+import os
+import random
 
-import numpy as np
-import png
 import pydicom
-from tqdm import tqdm
+from tqdm import trange
 
 from utils import get_ornt
 
+random.seed(233333)
+
+data_dir = 'data'
+subtypes = {
+    1: 'WNT',
+    2: 'SHH',
+    3: 'G3',
+    4: 'G4',
+}
 
 if __name__ == '__main__':
-    import random
-    random.seed(23333)
-    labels = list(csv.reader(open('../data-dicom/mst-labels.csv')))
-    print('labels ')
-
+    patient_subtype = dict(csv.reader(open(os.path.join(data_dir, 'tag.csv'))))
+    exists = dict(csv.reader(open(os.path.join(data_dir, 'exists.csv'))))
     tot = 0
-    for name, _, _ in labels:
-        for dirpath, _, filenames in os.walk(f'../data-dicom/{name}'):
+    for _, _, filenames in os.walk(data_dir):
+        for filename in filenames:
+            tot += filename.endswith('.png')
+
+    # splits = {
+    #     split: {ortn: [] for ortn in ['back', 'left', 'up']}
+    #     for split in ['train', 'val']
+    # }
+    splits = {
+        split: {}
+        for split in ['train', 'val']
+    }
+    bar = trange(tot, ncols=80)
+    for patient in os.listdir(data_dir):
+        patient_path = os.path.join(data_dir, patient)
+
+        if not os.path.isdir(patient_path):
+            continue
+        if patient not in patient_subtype:
+            print('lack subtype:', patient)
+            continue
+        split = random.choices(['train', 'val'], [3, 1])[0]
+        subtype = patient_subtype[patient]
+        patient_data = {'subtype': subtype}
+        for ortn in ['back', 'up', 'left']:
+            patient_data[ortn] = []
+        for dirpath, _, filenames in os.walk(patient_path):
             for filename in filenames:
-                tot += filename.endswith('.dcm')
-    bar = tqdm(ncols=80, total=tot)
-    for (name, _, mst), split in zip(labels, random.choices(['train', 'val'], weights=[3, 1], k=len(labels))):
-        cnt = {k: 0 for k in ['back', 'left', 'up']}
-        for dirpath, _, filenames in os.walk(f'../data-dicom/{name}'):
-            for filename in filenames:
-                if not filename.endswith('.dcm'):
+                if not filename.endswith('.png'):
                     continue
-                ds = pydicom.dcmread(os.path.join(dirpath, filename))
+                ds = pydicom.dcmread(os.path.join(dirpath, filename[:-4] + '.dcm'))
                 try:
-                    shape = ds.pixel_array.shape
-                except:
+                    ortn, ortn_id = get_ornt(ds)
+                except AttributeError:
                     bar.update()
                     continue
-                assert len(shape) == 2
-                ornt = get_ornt(ds)
-                output_dir = f'data-20201030/{split}/{mst}/{ornt}'
-                os.makedirs(output_dir, exist_ok=True)
-                # Convert to float to avoid overflow or underflow losses.
-                image_2d = ds.pixel_array.astype(float)
-                # Rescaling grey scale between 0-255
-                image_2d_scaled = (np.maximum(image_2d, 0) / image_2d.max()) * 255.0
-                # Convert to uint
-                image_2d_scaled = np.uint8(image_2d_scaled)
-                # Write the PNG file
-                with open(os.path.join(output_dir, f'{name}-{cnt[ornt]}.png'), 'wb') as png_file:
-                    w = png.Writer(shape[1], shape[0], greyscale=True)
-                    w.write(png_file, image_2d_scaled)
-                cnt[ornt] += 1
+                file_relpath = os.path.relpath(os.path.join(dirpath, filename), data_dir)
+                patient_data[ortn].append({
+                    'path': file_relpath,
+                    'exists': exists[file_relpath],
+                })
                 bar.update()
+        splits[split][patient] = patient_data
+
     bar.close()
+    for split, data in splits.items():
+        json.dump(data, open(os.path.join(data_dir, f'{split}.json'), 'w'), ensure_ascii=False, indent=4)

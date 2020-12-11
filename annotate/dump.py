@@ -1,4 +1,5 @@
 import os
+from argparse import ArgumentParser
 
 import numpy as np
 import png
@@ -15,19 +16,23 @@ def files_cnt(dirpath):
 
 
 if __name__ == '__main__':
-    for patient in os.listdir('.'):
+    parser = ArgumentParser()
+    parser.add_argument('--data_dir', type=str, default='.')
+    args = parser.parse_args()
+
+    for patient in os.listdir(args.data_dir):
         if not os.path.isdir(patient):
             continue
         if files_cnt(patient) == 0:
             print(patient)
 
     tot = 0
-    for dirpath, _, filenames in os.walk('.'):
+    for dirpath, _, filenames in os.walk(args.data_dir):
         for filename in filenames:
             tot += filename.endswith('.dcm')
 
     bar = tqdm(ncols=80, total=tot)
-    for dirpath, _, filenames in os.walk('.'):
+    for dirpath, _, filenames in os.walk(args.data_dir):
         for filename in filenames:
             if not filename.endswith('.dcm'):
                 continue
