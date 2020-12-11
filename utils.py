@@ -42,11 +42,12 @@ class MriFolder(VisionDataset):
     def __init__(self, root, transform, data):
         super().__init__(root, transform=transform)
         self.samples = []
-        for path, subtype, exist in data:
-            subtype = int(subtype)
-            exist = int(exist)
-            # target = torch.FloatTensor([0, 0, 0, 0, exist])
-            target = torch.FloatTensor([0, 0, 0, 0])
+        for patient, info in data.items():
+            subtype = info['subtype_idx']
+            for sample in info['']
+            exists = info['exists']
+            target = torch.FloatTensor([0, 0, 0, 0, exist])
+            # target = torch.FloatTensor([0, 0, 0, 0])
             # if exist:
             #     target[subtype - 1] = 1
             target[subtype - 1] = 1
@@ -67,7 +68,7 @@ class MriFolder(VisionDataset):
         return sample, target
 
 
-def load_data(data_dir='data-20201130', norm=True):
+def load_data(data_dir, norm=True):
     data_transforms = {
         'train': [
             transforms.RandomResizedCrop(224),

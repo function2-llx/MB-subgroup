@@ -130,7 +130,7 @@ dmypy.json
 
 .vscode/
 .idea/
-data*/
+*data*/
 runs/
 *.zip
 output/

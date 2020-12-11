@@ -44,7 +44,7 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = False
 
     if not args.test:
-        datasets = load_data()
+        datasets = load_data('data')
         for ortn in ['left', 'up', 'back']:
             output_dir = os.path.join('output', model_name, ortn)
             model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
@@ -68,7 +68,7 @@ if __name__ == '__main__':
                 os.path.join(output_dir, 'checkpoint.pth.tar'),
             )
     else:
-        datasets = load_data(norm=False)
+        datasets = load_data('data', norm=False)
         for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
             model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
