@@ -19,12 +19,13 @@ from sklearn.metrics import roc_curve, auc
 
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--lr', type=float, default=2e-6)
-parser.add_argument('--batch_size', type=int, default=16)
-parser.add_argument('--epochs', type=int, default=30)
+parser.add_argument('--lr', type=float, default=5e-5)
+parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
-parser.add_argument('--ortns', nargs='*', choices=['back', 'up', 'left'])
+parser.add_argument('--ortns', type=str, nargs='*', choices=['back', 'up', 'left'], default=['up'])
+parser.add_argument('--patience', type=int, default=5)
 
 args = parser.parse_args()
 if not args.ortns:
@@ -45,23 +46,30 @@ if __name__ == '__main__':
 
     if not args.test:
         datasets = load_data('data')
-        for ortn in ['left', 'up', 'back']:
+        for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
             model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
             os.makedirs(output_dir, exist_ok=True)
             writer = SummaryWriter(os.path.join('runs', model_name, ortn))
-            best_acc = 0
+            best_loss = float("inf")
+            patience = 0
             for epoch in range(1, args.epochs + 1):
                 results = model.train_epoch(epoch)
+                print(json.dumps(results, indent=4, ensure_ascii=False))
                 for split, result in results.items():
                     for k, v in result.items():
-                        writer.add_scalar(f'{split}/loss', v, epoch)
-                val_acc = results['val']['acc']
-                if best_acc < val_acc:
-                    best_acc = val_acc
+                        writer.add_scalar(f'{split}/{k}', v, epoch)
+                val_loss = results['val']['loss']
+                if best_loss > val_loss:
+                    best_loss = val_loss
                     torch.save(model.state_dict(), os.path.join(output_dir, 'checkpoint-train.pth.tar'))
-                print(json.dumps(results, indent=4, ensure_ascii=False))
-                print('best val acc', best_acc)
+                    patience = 0
+                else:
+                    patience += 1
+                    print(f'patience {patience}/{args.patience}')
+                    if patience >= args.patience:
+                        print('run out of patience')
+                        break
                 writer.flush()
             shutil.copy(
                 os.path.join(output_dir, 'checkpoint-train.pth.tar'),

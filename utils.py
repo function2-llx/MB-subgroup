@@ -38,20 +38,20 @@ def write_gray_scale(pixel_array: np.ndarray, path: str):
         w.write(png_file, pixel_array)
 
 
-class MriFolder(VisionDataset):
-    def __init__(self, root, transform, data):
+class MriDataset(VisionDataset):
+    def __init__(self, root, ortn, transform, data):
         super().__init__(root, transform=transform)
         self.samples = []
+        cnt = [0, 0]
         for patient, info in data.items():
-            subtype = info['subtype_idx']
-            for sample in info['']
-            exists = info['exists']
-            target = torch.FloatTensor([0, 0, 0, 0, exist])
-            # target = torch.FloatTensor([0, 0, 0, 0])
-            # if exist:
-            #     target[subtype - 1] = 1
-            target[subtype - 1] = 1
-            self.samples.append([os.path.join(root, path), target])
+            subtype = info['subtype_idx'] - 1
+            for sample in info[ortn]:
+                exists = sample['exists']
+                cnt[exists] += 1
+                self.samples.append([os.path.join(root, sample['path']), {
+                    'exists': exists, 'subtype': subtype,
+                }])
+        print(ortn, cnt)
         self.loader = torchvision.datasets.folder.default_loader
 
     def __len__(self):
@@ -60,12 +60,32 @@ class MriFolder(VisionDataset):
     def __getitem__(self, index):
         path, target = self.samples[index]
         sample = self.loader(path)
-        if self.transform is not None:
-            sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
+        sample = self.transform(sample)
         return sample, target
+
+    def collate_fn(self, batch):
+        from torch.utils.data._utils.collate import default_collate
+        return default_collate(batch)
+        # inputs, targets, labels = list(zip(*batch))
+        # return default_collate(inputs), default_collate(targets), labels
+
+    # def get_weight(self) -> (torch.FloatTensor, torch.FloatTensor):
+    #     weight_pos = torch.zeros(5)
+    #     weight_neg = torch.zeros(5)
+    #     for _, target in self.samples:
+    #         exists = target['exists']
+    #         subtype = target['subtype']
+    #         if exists:
+    #             weight_pos[subtype] += 1
+    #             weight_pos[4] += 1
+    #         else:
+    #             weight_neg[subtype] += 1
+    #             weight_neg[4] += 1
+    #     tot = weight_pos + weight_neg
+    #     weight_pos = tot / weight_pos
+    #     weight_neg = tot / weight_neg
+    #
+    #     return torch.ones(5), torch.ones(5)
 
 
 def load_data(data_dir, norm=True):
@@ -92,7 +112,7 @@ def load_data(data_dir, norm=True):
     }
     image_datasets = {
         split: {
-            ortn: MriFolder(data_dir, data_transforms[split], data_info[split][ortn])
+            ortn: MriDataset(data_dir, ortn, data_transforms[split], data_info[split])
             for ortn in ['back', 'up', 'left']
         } for split in ['train', 'val']
     }

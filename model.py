@@ -1,31 +1,41 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
 from torch.optim import Adam
+from torch.utils.data import DataLoader
+from torchvision.models import resnet50 as resnet
 from tqdm import tqdm
-from torchvision.models import resnet18 as resnet
-from ignite.contrib.metrics.roc_auc import roc_auc_compute_fn
+
+from utils import MriDataset
+
+__all__ = ['Model']
 
 
 class Model(nn.Module):
-    def __init__(self, ortn, train_set, val_set, args):
+    @staticmethod
+    def get_exists(output):
+        return output[4:6].argmax().item()
+
+    @staticmethod
+    def get_subtype(output):
+        return output[:4].argmax().item()
+
+    def __init__(self, ortn, train_set: MriDataset, val_set: MriDataset, args):
         super().__init__()
         self.ortn = ortn
         self.data_loaders = {
-            'train': DataLoader(train_set, batch_size=args.batch_size, shuffle=True),
-            'val': DataLoader(val_set, batch_size=args.batch_size, shuffle=False),
+            'train': DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=train_set.collate_fn),
+            'val': DataLoader(val_set, batch_size=args.batch_size, shuffle=False, collate_fn=val_set.collate_fn),
         }
         self.args = args
 
         self.resnet = resnet(pretrained=True)
-        self.resnet.fc = nn.Sequential(
-            nn.Linear(self.resnet.fc.in_features, 4),
-            nn.Sigmoid(),
-        ).to(self.args.device)
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 6)
 
         self.optimizer = Adam(self.parameters(), lr=args.lr)
-        # self.loss_fn = nn.BCELoss()
+        # weight_pos, weight_neg = train_set.get_weight()
+        # self.weight_pos = nn.Parameter(weight_pos, requires_grad=False)
+        # self.weight_neg = nn.Parameter(weight_neg, requires_grad=False)
 
         self.to(self.args.device)
 
@@ -37,24 +47,22 @@ class Model(nn.Module):
             training = split == 'train'
             self.train(training)
             with torch.set_grad_enabled(training):
-                for inputs, labels in tqdm(data_loader, ncols=80, desc=f'model {self.ortn} {split} epoch {epoch}'):
+                for inputs, targets in tqdm(data_loader, ncols=80, desc=f'model {self.ortn} {split} epoch {epoch}'):
                     inputs = inputs.to(self.args.device)
-                    labels = labels.to(self.args.device)
-                    singel_labels = labels.argmax(dim=1)
+                    for k, v in targets.items():
+                        targets[k] = v.to(self.args.device)
                     if training:
                         self.optimizer.zero_grad()
-                    outputs = self.resnet.forward(inputs)
-                    weights = torch.full(outputs.shape, 1).to(self.args.device)
-                    # for i, label in enumerate(labels):
-                    #     label = label.argmax()
-                    #     weights[i, label] = 1
-                    loss = F.binary_cross_entropy(outputs, labels, weights)
-                    preds = (outputs > 0.5).to(torch.long)
-                    single_preds = outputs.argmax(dim=1)
+                    logits = self.resnet.forward(inputs)
+                    loss = F.cross_entropy(logits[:, 4:], targets['exists'].long()) + F.cross_entropy(logits[:, :4], targets['subtype'])
                     tot_loss += loss.item()
-                    for label, pred in zip(singel_labels, single_preds):
+
+                    outputs = torch.sigmoid(logits)
+                    for exists, subtype, output in zip(targets['exists'], targets['subtype'], outputs):
                         tot += 1
-                        acc += torch.equal(label, pred)
+                        if exists == self.get_exists(output) and (not exists or subtype == self.get_subtype(output)):
+                            acc += 1
+
                     if training:
                         loss.backward()
                         self.optimizer.step()
