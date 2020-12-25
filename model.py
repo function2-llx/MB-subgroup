@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision.models import resnet50 as resnet
+from torchvision.models import resnet18 as resnet
 from tqdm import tqdm
 
 from utils import MriDataset
@@ -12,6 +12,18 @@ __all__ = ['Model']
 
 
 class Model(nn.Module):
+    class OutputLayer(nn.Module):
+        def __init__(self, in_features):
+            super().__init__()
+            self.fc = nn.Linear(in_features, 6)
+
+        def forward(self, inputs):
+            logits = self.fc.forward(inputs)
+            return {
+                'subtype': logits[:, :4],
+                'exists': logits[:, 4:],
+            }
+
     @staticmethod
     def get_exists(output):
         return output[4:6].argmax().item()
@@ -33,6 +45,7 @@ class Model(nn.Module):
         self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 6)
 
         self.optimizer = Adam(self.parameters(), lr=args.lr)
+        self.weight = train_set.get_weight().to(args.device)
         # weight_pos, weight_neg = train_set.get_weight()
         # self.weight_pos = nn.Parameter(weight_pos, requires_grad=False)
         # self.weight_neg = nn.Parameter(weight_neg, requires_grad=False)
@@ -54,13 +67,13 @@ class Model(nn.Module):
                     if training:
                         self.optimizer.zero_grad()
                     logits = self.resnet.forward(inputs)
-                    loss = F.cross_entropy(logits[:, 4:], targets['exists'].long()) + F.cross_entropy(logits[:, :4], targets['subtype'])
+                    loss = F.cross_entropy(logits['exists'], targets['exists'].long()) + F.cross_entropy(logits['subtype'], targets['subtype'], weight=self.weight)
                     tot_loss += loss.item()
 
-                    outputs = torch.sigmoid(logits)
-                    for exists, subtype, output in zip(targets['exists'], targets['subtype'], outputs):
+                    # outputs = torch.sigmoid(logits)
+                    for exists, subtype, logit in zip(targets['exists'].tolist(), targets['subtype'].tolist(), logits):
                         tot += 1
-                        if exists == self.get_exists(output) and (not exists or subtype == self.get_subtype(output)):
+                        if exists == self.get_exists(logit) and (not exists or subtype == self.get_subtype(logit)):
                             acc += 1
 
                     if training:

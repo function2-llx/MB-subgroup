@@ -49,7 +49,7 @@ class MriDataset(VisionDataset):
                 exists = sample['exists']
                 cnt[exists] += 1
                 self.samples.append([os.path.join(root, sample['path']), {
-                    'exists': exists, 'subtype': subtype,
+                    'exists': exists, 'subtype': subtype if exists else -100,
                 }])
         print(ortn, cnt)
         self.loader = torchvision.datasets.folder.default_loader
@@ -68,6 +68,16 @@ class MriDataset(VisionDataset):
         return default_collate(batch)
         # inputs, targets, labels = list(zip(*batch))
         # return default_collate(inputs), default_collate(targets), labels
+
+    def get_weight(self) -> torch.FloatTensor:
+        weight = torch.zeros(4)
+        for _, target in self.samples:
+            if target['exists']:
+                weight[target['subtype']] += 1
+        weight = weight.sum() / weight
+        weight = weight / weight.sum()
+        return torch.ones(4)
+        # return weight
 
     # def get_weight(self) -> (torch.FloatTensor, torch.FloatTensor):
     #     weight_pos = torch.zeros(5)
