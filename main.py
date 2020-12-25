@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 
 import numpy as np
 import torch
-from captum.attr import IntegratedGradients, visualization as viz
+from captum.attr import IntegratedGradients, GuidedGradCam, visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
@@ -16,32 +16,26 @@ from model import Model
 from utils.data import load_data
 from utils.report import ClassificationReporter
 
-parser = ArgumentParser()
-parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--lr', type=float, default=5e-5)
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--test', action='store_true')
-parser.add_argument('--seed', type=int, default=23333)
-parser.add_argument('--ortns', type=str, nargs='*', choices=['back', 'up', 'left'], default=['up'])
-parser.add_argument('--patience', type=int, default=3)
-
-args = parser.parse_args()
-if not args.ortns:
-    args.ortns = ['back', 'up', 'left']
-
-model_name = 'lr={lr},bs={batch_size}'.format(**args.__dict__)
-print(model_name)
-
-device = torch.device(args.device)
-
-
-def map_subtype_idx_list(subtype_idxs):
-    subtypes = ['WNT', 'SHH', 'G3', 'G4']
-    return [subtypes[idx] for idx in subtype_idxs]
-
 
 if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
+    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--test', action='store_true')
+    parser.add_argument('--seed', type=int, default=23333)
+    parser.add_argument('--ortns', type=str, nargs='*', choices=['back', 'up', 'left'], default=['up'])
+    parser.add_argument('--patience', type=int, default=3)
+    parser.add_argument('--visualize', action='store_true')
+    args = parser.parse_args()
+    if not args.ortns:
+        args.ortns = ['back', 'up', 'left']
+
+    model_name = 'lr={lr},bs={batch_size}'.format(**args.__dict__)
+    print(model_name)
+
+    device = torch.device(args.device)
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -53,8 +47,9 @@ if __name__ == '__main__':
         datasets = load_data('data')
         for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
-            model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
             os.makedirs(output_dir, exist_ok=True)
+
+            model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
             writer = SummaryWriter(os.path.join('runs', model_name, ortn))
             best_loss = float("inf")
             patience = 0
@@ -86,6 +81,9 @@ if __name__ == '__main__':
         exists_reporter = ClassificationReporter([False, True])
         for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
+            report_dir = os.path.join('report', model_name, ortn)
+            os.makedirs(report_dir, exist_ok=True)
+
             model = Model(ortn, datasets['train'][ortn], datasets['val'][ortn], args)
             model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
             model.eval()
@@ -94,37 +92,46 @@ if __name__ == '__main__':
             for img, target in tqdm(datasets['val'][ortn], ncols=80, desc='testing'):
                 exists = target['exists']
                 input = normalize(img).to(device).unsqueeze(0)
-                logit = model.forward(input)
+                with torch.no_grad():
+                    logit = model.forward(input)
+                logit = Model.convert_output_to_dict(logit)
                 for k, v in logit.items():
                     logit[k] = v[0]
                 exists_reporter.append(logit['exists'], exists)
                 if exists:
                     subtype_reporter.append(logit['subtype'], target['subtype'])
 
-                    integrated_gradients = IntegratedGradients(model)
-                    attributions_ig = integrated_gradients.attribute(input, target=4, n_steps=200)
-                    default_cmap = LinearSegmentedColormap.from_list(
-                        'custom blue',
-                        [
-                            (0, '#ffffff'),
-                            (0.25, '#000000'),
-                            (1, '#000000')
-                        ],
-                        N=256
-                    )
+                    if args.visualize:
+                        # integrated_gradients = IntegratedGradients(model)
+                        attribution = GuidedGradCam(model, model.resnet.layer4[-1].conv2)
+                        attrs = attribution.attribute(input, target=5)
 
-                    _ = viz.visualize_image_attr_multiple(
-                        np.transpose(
-                            attributions_ig.squeeze().cpu().detach().numpy(),
-                            (1, 2, 0)
-                        ),
-                        np.transpose(
-                            img.detach().numpy(),
-                            (1, 2, 0),
-                        ),
-                        methods=['original_image', 'heat_map'],
-                        signs=['all', 'positive'],
-                        show_colorbar=True,
-                        cmap=default_cmap,
-                        outlier_perc=1,
-                    )
+                        default_cmap = LinearSegmentedColormap.from_list(
+                            'custom blue',
+                            [
+                                (0, '#ffffff'),
+                                (0.25, '#000000'),
+                                (1, '#000000')
+                            ],
+                            N=256
+                        )
+
+                        _ = viz.visualize_image_attr_multiple(
+                            np.transpose(
+                                attrs.squeeze().cpu().detach().numpy(),
+                                (1, 2, 0)
+                            ),
+                            np.transpose(
+                                img.detach().numpy(),
+                                (1, 2, 0),
+                            ),
+                            titles=[exists, logit['exists'].argmax().item()],
+                            methods=['original_image', 'heat_map'],
+                            signs=['all', 'positive'],
+                            show_colorbar=True,
+                            cmap=default_cmap,
+                            outlier_perc=1,
+                        )
+
+            json.dump(exists_reporter.report(), open(os.path.join(report_dir, 'exists.json'), 'w'), indent=4, ensure_ascii=False)
+            json.dump(subtype_reporter.report(), open(os.path.join(report_dir, 'subtype.json'), 'w'), indent=4, ensure_ascii=False)

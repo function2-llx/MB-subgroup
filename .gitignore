@@ -135,4 +135,4 @@ runs/
 *.zip
 output/
 plot/
-reports/
+report/

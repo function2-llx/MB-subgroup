@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision.models import resnet18 as resnet
+from torchvision.models import resnet18
 from tqdm import tqdm
 
 from utils.data import MriDataset
@@ -12,15 +12,26 @@ __all__ = ['Model']
 
 
 class Model(nn.Module):
-    class OutputLayer(nn.Linear):
-        def __init__(self, in_features):
-            super().__init__(in_features, 6)
+    # class OutputLayer(nn.Linear):
+    #     def __init__(self, in_features):
+    #         super().__init__(in_features, 6)
+    #
+    #     def forward(self, inputs):
+    #         logits = super().forward(inputs)
+    #         return logits
+    #
+    #     @staticmethod
+    #     def to_dict(data):
+    #         return {
+    #             'subtype': data[:, :4],
+    #             'exists': data[:, 4:],
+    #         }
 
-        def forward(self, inputs):
-            logits = super().forward(inputs)
-            return {
-                'subtype': logits[:, :4],
-                'exists': logits[:, 4:],
+    @staticmethod
+    def convert_output_to_dict(data):
+        return {
+                'subtype': data[:, :4],
+                'exists': data[:, 4:],
             }
 
     def __init__(self, ortn, train_set: MriDataset, val_set: MriDataset, args):
@@ -32,8 +43,8 @@ class Model(nn.Module):
         }
         self.args = args
 
-        self.resnet = resnet(pretrained=True)
-        self.resnet.fc = Model.OutputLayer(self.resnet.fc.in_features)
+        self.resnet = resnet18(pretrained=True)
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 6)
 
         self.optimizer = Adam(self.parameters(), lr=args.lr)
         self.weight = train_set.get_weight().to(args.device)
@@ -59,7 +70,7 @@ class Model(nn.Module):
                         targets[k] = v.to(self.args.device)
                     if training:
                         self.optimizer.zero_grad()
-                    logits = self.resnet.forward(inputs)
+                    logits = self.forward(inputs)
                     loss = F.cross_entropy(logits['exists'], targets['exists'].long()) + F.cross_entropy(logits['subtype'], targets['subtype'], weight=self.weight)
                     tot_loss += loss.item()
 
