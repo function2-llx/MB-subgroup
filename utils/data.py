@@ -49,7 +49,7 @@ class MriDataset(VisionDataset):
                 exists = sample['exists']
                 cnt[exists] += 1
                 self.samples.append([os.path.join(root, sample['path']), {
-                    'exists': exists, 'subtype': subtype,
+                    'exists': exists, 'subtype': subtype if exists else -100,
                 }])
         print(ortn, cnt)
         self.loader = torchvision.datasets.folder.default_loader
@@ -68,6 +68,16 @@ class MriDataset(VisionDataset):
         return default_collate(batch)
         # inputs, targets, labels = list(zip(*batch))
         # return default_collate(inputs), default_collate(targets), labels
+
+    def get_weight(self) -> torch.FloatTensor:
+        weight = torch.zeros(4)
+        for _, target in self.samples:
+            if target['exists']:
+                weight[target['subtype']] += 1
+        weight = weight.sum() / weight
+        weight = weight / weight.sum()
+        return torch.ones(4)
+        # return weight
 
     # def get_weight(self) -> (torch.FloatTensor, torch.FloatTensor):
     #     weight_pos = torch.zeros(5)
@@ -117,3 +127,44 @@ def load_data(data_dir, norm=True):
         } for split in ['train', 'val']
     }
     return image_datasets
+
+
+from sklearn.metrics import roc_curve, auc, classification_report
+from matplotlib import pyplot as plt
+
+
+class ClassificationReporter:
+    def __init__(self, classes):
+        self.y_true = []
+        self.y_pred = []
+        self.y_score = []
+        self.classes = classes
+
+    def append(self, logit: torch.FloatTensor, label):
+        self.y_true.append(label)
+        self.y_pred.append(logit.argmax().item())
+        output = torch.softmax(logit, dim=0)
+        self.y_score.append(output.cpu().numpy())
+
+    def plot(self):
+        pass
+
+    def report(self):
+        y_true = np.array(self.y_true)
+        y_pred = np.array(self.y_pred)
+        return classification_report(y_true, y_pred, output_dict=True)
+
+    def plot_roc(self):
+        for i in range(self.classes):
+            fpr, tpr, thresholds = roc_curve(subtype_true[:, i], subtype_score[:, i])
+            plt.figure()
+            lw = 2
+            plt.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.2f)' % auc(fpr, tpr))
+            plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title(f'{ortn}, {i + 1}')
+            plt.legend(loc="lower right")
+            plt.show()
