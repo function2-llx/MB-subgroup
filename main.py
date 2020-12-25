@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from captum.attr import IntegratedGradients, visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib import pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
@@ -16,17 +15,16 @@ from tqdm import tqdm
 from model import Model
 from utils.data import load_data
 from utils.report import ClassificationReporter
-from sklearn.metrics import roc_curve, auc, classification_report
 
 parser = ArgumentParser()
 parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--lr', type=float, default=2e-5)
+parser.add_argument('--lr', type=float, default=5e-5)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--seed', type=int, default=23333)
-parser.add_argument('--ortns', type=str, nargs='*', choices=['back', 'up', 'left'], default=['back'])
-parser.add_argument('--patience', type=int, default=5)
+parser.add_argument('--ortns', type=str, nargs='*', choices=['back', 'up', 'left'], default=['up'])
+parser.add_argument('--patience', type=int, default=3)
 
 args = parser.parse_args()
 if not args.ortns:
@@ -36,6 +34,12 @@ model_name = 'lr={lr},bs={batch_size}'.format(**args.__dict__)
 print(model_name)
 
 device = torch.device(args.device)
+
+
+def map_subtype_idx_list(subtype_idxs):
+    subtypes = ['WNT', 'SHH', 'G3', 'G4']
+    return [subtypes[idx] for idx in subtype_idxs]
+
 
 if __name__ == '__main__':
     random.seed(args.seed)
@@ -86,67 +90,41 @@ if __name__ == '__main__':
             model.load_state_dict(torch.load(os.path.join(output_dir, 'checkpoint.pth.tar')))
             model.eval()
             normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            subtype_true = []
-            subtype_pred = []
-            subtype_score = []
 
             for img, target in tqdm(datasets['val'][ortn], ncols=80, desc='testing'):
-                subtype = target['subtype']
                 exists = target['exists']
+                input = normalize(img).to(device).unsqueeze(0)
+                logit = model.forward(input)
+                for k, v in logit.items():
+                    logit[k] = v[0]
+                exists_reporter.append(logit['exists'], exists)
                 if exists:
-                    input = normalize(img).to(device).unsqueeze(0)
-                    logit = model.resnet.forward(input)[0]
+                    subtype_reporter.append(logit['subtype'], target['subtype'])
 
-                    subtype_logit, exists_logit = logit[:4], logit[4:]
-                    output = torch.softmax(subtype_logit, dim=0)
-                    subtype_true.append(subtype)
-                    subtype_pred.append(subtype_logit.argmax().item())
-                    subtype_score.append(output.cpu().numpy())
-            subtype_true = np.array(subtype_true)
-            subtype_pred = np.array(subtype_pred)
-            print(classification_report(subtype_true, subtype_pred))
-            subtype_true = np.eye(4)[np.array(subtype_true)]
-            subtype_score = np.array(subtype_score)
-            for i in range(4):
-                fpr, tpr, thresholds = roc_curve(subtype_true[:, i], subtype_score[:, i])
-                plt.figure()
-                lw = 2
-                plt.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.2f)' % auc(fpr, tpr))
-                plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-                plt.xlim([0.0, 1.0])
-                plt.ylim([0.0, 1.05])
-                plt.xlabel('False Positive Rate')
-                plt.ylabel('True Positive Rate')
-                plt.title(f'{ortn}, {i + 1}')
-                plt.legend(loc="lower right")
-                plt.show()
+                    integrated_gradients = IntegratedGradients(model)
+                    attributions_ig = integrated_gradients.attribute(input, target=4, n_steps=200)
+                    default_cmap = LinearSegmentedColormap.from_list(
+                        'custom blue',
+                        [
+                            (0, '#ffffff'),
+                            (0.25, '#000000'),
+                            (1, '#000000')
+                        ],
+                        N=256
+                    )
 
-                # pred = output.argmax(dim=1)
-                integrated_gradients = IntegratedGradients(model)
-                attributions_ig = integrated_gradients.attribute(input, target=pred, n_steps=200)
-                # default_cmap = LinearSegmentedColormap.from_list(
-                #     'custom blue',
-                #     [
-                #         (0, '#ffffff'),
-                #         (0.25, '#000000'),
-                #         (1, '#000000')
-                #     ],
-                #     N=256
-                # )
-                #
-                # _ = viz.visualize_image_attr_multiple(
-                #     np.transpose(
-                #         attributions_ig.squeeze().cpu().detach().numpy(),
-                #         (1, 2, 0)
-                #     ),
-                #     np.transpose(
-                #         img.detach().numpy(),
-                #         (1, 2, 0),
-                #     ),
-                #     methods=['original_image', 'heat_map'],
-                #     signs=['all', 'positive'],
-                #     show_colorbar=True,
-                #     cmap=default_cmap,
-                #     # outlier_perc=1,
-                # )
-                # a = 1
+                    _ = viz.visualize_image_attr_multiple(
+                        np.transpose(
+                            attributions_ig.squeeze().cpu().detach().numpy(),
+                            (1, 2, 0)
+                        ),
+                        np.transpose(
+                            img.detach().numpy(),
+                            (1, 2, 0),
+                        ),
+                        methods=['original_image', 'heat_map'],
+                        signs=['all', 'positive'],
+                        show_colorbar=True,
+                        cmap=default_cmap,
+                        outlier_perc=1,
+                    )

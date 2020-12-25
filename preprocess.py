@@ -7,7 +7,7 @@ import random
 import pydicom
 from tqdm import trange
 
-from utils import get_ornt
+from utils.data import get_ornt
 
 random.seed(233333)
 
