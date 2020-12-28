@@ -6,19 +6,19 @@ from argparse import ArgumentParser
 
 import numpy as np
 import torch
-from captum.attr import IntegratedGradients, GuidedGradCam, visualization as viz
+from captum.attr import GuidedGradCam, visualization as viz
 from matplotlib.colors import LinearSegmentedColormap
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
+from sklearn.metrics import classification_report
 
 from model import Model
+from parser import parser
 from utils.data import load_data
 from utils.report import ClassificationReporter
 
-
 if __name__ == '__main__':
-    parser = ArgumentParser()
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
     parser.add_argument('--lr', type=float, default=5e-5)
     parser.add_argument('--batch_size', type=int, default=32)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     else:
         datasets = load_data('data', norm=False)
         subtype_reporter = ClassificationReporter(['WNT', 'SHH', 'G3', 'G4'])
-        exists_reporter = ClassificationReporter([False, True])
+        exists_reporter = ClassificationReporter(["no", "yes"])
         for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
             report_dir = os.path.join('report', model_name, ortn)
@@ -92,6 +92,7 @@ if __name__ == '__main__':
             for img, target in tqdm(datasets['val'][ortn], ncols=80, desc='testing'):
                 exists = target['exists']
                 input = normalize(img).to(device).unsqueeze(0)
+                input.requires_grad_()
                 with torch.no_grad():
                     logit = model.forward(input)
                 logit = Model.convert_output_to_dict(logit)
@@ -102,36 +103,49 @@ if __name__ == '__main__':
                     subtype_reporter.append(logit['subtype'], target['subtype'])
 
                     if args.visualize:
+                        # Can work with any model, but it assumes that the model has a
+                        # feature method, and a classifier method,
+                        # as in the VGG models in torchvision.
+                        from utils.gradcam import GradCam, show_cam_on_image
+                        grad_cam = GradCam(model=model.resnet, feature_module=model.resnet.layer4,
+                                           target_layer_names=["1"], use_cuda=True)
+
+                        # If None, returns the map for the highest scoring category.
+                        # Otherwise, targets the requested index.
+                        target_index = None
+                        mask = grad_cam(input, 5)
+
+                        show_cam_on_image(img.permute(1, 2, 0), mask)
                         # integrated_gradients = IntegratedGradients(model)
-                        attribution = GuidedGradCam(model, model.resnet.layer4[-1].conv2)
-                        attrs = attribution.attribute(input, target=5)
+                        # attribution = GuidedGradCam(model, model.resnet.layer4[-1].conv2)
+                        # attrs = attribution.attribute(input, target=5)
+                        #
+                        # default_cmap = LinearSegmentedColormap.from_list(
+                        #     'custom blue',
+                        #     [
+                        #         (0, '#ffffff'),
+                        #         (0.25, '#000000'),
+                        #         (1, '#000000')
+                        #     ],
+                        #     N=256
+                        # )
+                        #
+                        # _ = viz.visualize_image_attr_multiple(
+                        #     np.transpose(
+                        #         attrs.squeeze(0).cpu().detach().numpy(),
+                        #         (1, 2, 0)
+                        #     ),
+                        #     np.transpose(
+                        #         img.detach().numpy(),
+                        #         (1, 2, 0),
+                        #     ),
+                        #     titles=[exists, logit['exists'].argmax().item()],
+                        #     methods=['original_image', 'heat_map'],
+                        #     signs=['all', 'positive'],
+                        #     show_colorbar=True,
+                        #     cmap=default_cmap,
+                        #     outlier_perc=1,
+                        # )
 
-                        default_cmap = LinearSegmentedColormap.from_list(
-                            'custom blue',
-                            [
-                                (0, '#ffffff'),
-                                (0.25, '#000000'),
-                                (1, '#000000')
-                            ],
-                            N=256
-                        )
-
-                        _ = viz.visualize_image_attr_multiple(
-                            np.transpose(
-                                attrs.squeeze().cpu().detach().numpy(),
-                                (1, 2, 0)
-                            ),
-                            np.transpose(
-                                img.detach().numpy(),
-                                (1, 2, 0),
-                            ),
-                            titles=[exists, logit['exists'].argmax().item()],
-                            methods=['original_image', 'heat_map'],
-                            signs=['all', 'positive'],
-                            show_colorbar=True,
-                            cmap=default_cmap,
-                            outlier_perc=1,
-                        )
-
-            json.dump(exists_reporter.report(), open(os.path.join(report_dir, 'exists.json'), 'w'), indent=4, ensure_ascii=False)
-            json.dump(subtype_reporter.report(), open(os.path.join(report_dir, 'subtype.json'), 'w'), indent=4, ensure_ascii=False)
+            exists_reporter.report().to_csv(os.path.join(report_dir, 'exists.csv'), sep='\t')
+            subtype_reporter.report().to_csv(os.path.join(report_dir, 'subtype.csv'), sep='\t')

@@ -1,6 +1,7 @@
 from typing import *
 
 import numpy as np
+import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 from sklearn.metrics import classification_report, roc_curve, auc
@@ -22,7 +23,8 @@ class ClassificationReporter:
     def report(self):
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
-        return classification_report(y_true, y_pred, output_dict=True)
+        report = classification_report(y_true, y_pred, target_names=self.classes, digits=3, output_dict=True)
+        return pd.DataFrame(report).transpose()
 
     def roc(self):
         fig, axs = plt.subplots(1, len(self.classes))
