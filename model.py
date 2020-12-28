@@ -12,25 +12,10 @@ __all__ = ['Model']
 
 
 class Model(nn.Module):
-    # class OutputLayer(nn.Linear):
-    #     def __init__(self, in_features):
-    #         super().__init__(in_features, 6)
-    #
-    #     def forward(self, inputs):
-    #         logits = super().forward(inputs)
-    #         return logits
-    #
-    #     @staticmethod
-    #     def to_dict(data):
-    #         return {
-    #             'subtype': data[:, :4],
-    #             'exists': data[:, 4:],
-    #         }
-
     @staticmethod
     def convert_output_to_dict(data):
         return {
-                'subtype': data[:, :4],
+                'subgroup': data[:, :4],
                 'exists': data[:, 4:],
             }
 
@@ -71,7 +56,8 @@ class Model(nn.Module):
                     if training:
                         self.optimizer.zero_grad()
                     logits = self.forward(inputs)
-                    loss = F.cross_entropy(logits['exists'], targets['exists'].long()) + F.cross_entropy(logits['subtype'], targets['subtype'], weight=self.weight)
+                    logits = Model.convert_output_to_dict(logits)
+                    loss = F.cross_entropy(logits['exists'], targets['exists'].long()) + F.cross_entropy(logits['subgroup'], targets['subgroup'], weight=self.weight)
                     tot_loss += loss.item()
 
                     preds = {
@@ -79,7 +65,7 @@ class Model(nn.Module):
                         for k in logits
                     }
                     tot += batch_size
-                    acc += ((targets['exists'] == preds['exists'].bool()) & (~targets['exists'] | (targets['subtype'] == preds['subtype']))).sum().item()
+                    acc += ((targets['exists'] == preds['exists'].bool()) & (~targets['exists'] | (targets['subgroup'] == preds['subgroup']))).sum().item()
 
                     if training:
                         loss.backward()

@@ -44,12 +44,12 @@ class MriDataset(VisionDataset):
         self.samples = []
         cnt = [0, 0]
         for patient, info in data.items():
-            subtype = info['subtype_idx'] - 1
+            subgroup = info['subgroup_idx'] - 1
             for sample in info[ortn]:
                 exists = sample['exists']
                 cnt[exists] += 1
                 self.samples.append([os.path.join(root, sample['path']), {
-                    'exists': exists, 'subtype': subtype if exists else -100,
+                    'exists': exists, 'subgroup': subgroup if exists else -100,
                 }])
         print(ortn, cnt)
         self.loader = torchvision.datasets.folder.default_loader
@@ -73,7 +73,7 @@ class MriDataset(VisionDataset):
         weight = torch.zeros(4)
         for _, target in self.samples:
             if target['exists']:
-                weight[target['subtype']] += 1
+                weight[target['subgroup']] += 1
         weight = weight.sum() / weight
         weight = weight / weight.sum()
         return torch.ones(4)
