@@ -20,7 +20,7 @@ from utils.report import ClassificationReporter
 
 if __name__ == '__main__':
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--test', action='store_true')
@@ -77,7 +77,7 @@ if __name__ == '__main__':
             )
     else:
         datasets = load_data('data', norm=False)
-        subtype_reporter = ClassificationReporter(['WNT', 'SHH', 'G3', 'G4'])
+        subgroup_reporter = ClassificationReporter(['WNT', 'SHH', 'G3', 'G4'])
         exists_reporter = ClassificationReporter(["no", "yes"])
         for ortn in args.ortns:
             output_dir = os.path.join('output', model_name, ortn)
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                     logit[k] = v[0]
                 exists_reporter.append(logit['exists'], exists)
                 if exists:
-                    subtype_reporter.append(logit['subtype'], target['subtype'])
+                    subgroup_reporter.append(logit['subgroup'], target['subgroup'])
 
                     if args.visualize:
                         # Can work with any model, but it assumes that the model has a
@@ -148,4 +148,4 @@ if __name__ == '__main__':
                         # )
 
             exists_reporter.report().to_csv(os.path.join(report_dir, 'exists.csv'), sep='\t')
-            subtype_reporter.report().to_csv(os.path.join(report_dir, 'subtype.csv'), sep='\t')
+            subgroup_reporter.report().to_csv(os.path.join(report_dir, 'subgroup.csv'), sep='\t')

@@ -76,8 +76,8 @@ class MriDataset(VisionDataset):
                 weight[target['subgroup']] += 1
         weight = weight.sum() / weight
         weight = weight / weight.sum()
-        return torch.ones(4)
-        # return weight
+        return weight
+        # return torch.ones(4)
 
     # def get_weight(self) -> (torch.FloatTensor, torch.FloatTensor):
     #     weight_pos = torch.zeros(5)

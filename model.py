@@ -15,11 +15,11 @@ class Model(nn.Module):
     @staticmethod
     def convert_output_to_dict(data):
         return {
-                'subgroup': data[:, :4],
-                'exists': data[:, 4:],
-            }
+            'subgroup': data[:, :4],
+            'exists': data[:, 4:],
+        }
 
-    def __init__(self, ortn, train_set: MriDataset, val_set: MriDataset, args):
+    def __init__(self, ortn, train_set: MriDataset, val_set: MriDataset, args, target=None):
         super().__init__()
         self.ortn = ortn
         self.data_loaders = {
@@ -33,6 +33,7 @@ class Model(nn.Module):
 
         self.optimizer = Adam(self.parameters(), lr=args.lr)
         self.weight = train_set.get_weight().to(args.device)
+        self.target = target
         # weight_pos, weight_neg = train_set.get_weight()
         # self.weight_pos = nn.Parameter(weight_pos, requires_grad=False)
         # self.weight_neg = nn.Parameter(weight_neg, requires_grad=False)
