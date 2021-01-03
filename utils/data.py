@@ -1,12 +1,18 @@
-import os
 import json
+import os
+from typing import *
 
 import numpy as np
-import png
 import torch
 import torchvision
 from torchvision import transforms
-from torchvision.datasets import VisionDataset, DatasetFolder
+from torchvision.datasets import VisionDataset
+
+targets = {
+    'exists': ['no', 'yes'],
+    'subgroup': ['WNT', 'SHH', 'G3', 'G4'],
+    'subgroup2': ['WNT-SHH', 'G3-G4']
+}
 
 
 def get_ornt(ds) -> (str, int):
@@ -24,28 +30,29 @@ def get_ornt(ds) -> (str, int):
 
 def make_datasets(root, ortn, transform, data):
     samples = {
-        k: []
-        for k in ['exists', 'subgroup']
+        target: []
+        for target in targets.keys()
     }
     for patient, info in data.items():
         subgroup = info['subgroup_idx'] - 1
+        subgroup2 = int(subgroup >= 2)
         for sample in info[ortn]:
             path = os.path.join(root, sample['path'])
             exists = sample['exists']
-            samples['exists'].append((path, int(exists)))
+            samples['exists'].append((patient, path, int(exists)))
             if exists:
-                samples['subgroup'].append((path, subgroup))
-
+                samples['subgroup'].append((patient, path, subgroup))
+                samples['subgroup2'].append((patient, path, subgroup2))
     return {
-        k: ImageRecognitionDataset(root, transform, samples[k], num_classes)
-        for k, num_classes in [('exists', 2), ('subgroup', 4)]
+        target: ImageRecognitionDataset(root, transform, samples[target], len(target_names))
+        for target, target_names in targets.items()
     }
 
 
 class ImageRecognitionDataset(VisionDataset):
     normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 
-    def __init__(self, root, transform, samples, num_classes):
+    def __init__(self, root, transform, samples: List[Tuple[str, str, int]], num_classes):
         super().__init__(root, transform=transform)
         self.samples = samples
         self.loader = torchvision.datasets.folder.default_loader
@@ -55,10 +62,10 @@ class ImageRecognitionDataset(VisionDataset):
         return len(self.samples)
 
     def __getitem__(self, index):
-        path, target = self.samples[index]
+        patient, path, target = self.samples[index]
         sample = self.loader(path)
         sample = self.transform(sample)
-        return sample, target
+        return patient, sample, target
 
     def collate_fn(self, batch):
         from torch.utils.data._utils.collate import default_collate
@@ -68,9 +75,9 @@ class ImageRecognitionDataset(VisionDataset):
 
     def get_weight(self) -> torch.FloatTensor:
         weight = torch.zeros(self.num_classes)
-        for _, target in self.samples:
+        for _, _, target in self.samples:
             weight[target] += 1
-        weight.sqrt_()
+        # weight.sqrt_()
         weight = weight.sum() / weight
         weight = weight / weight.sum()
         return weight

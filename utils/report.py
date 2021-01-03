@@ -16,18 +16,32 @@ class ClassificationReporter:
         self.y_true = []
         self.y_pred = []
         self.y_score = []
+        self.patients = {}
 
-    def append(self, logit: torch.FloatTensor, label: int):
+    def append(self, patient: str, logit: torch.FloatTensor, label: int):
         self.y_true.append(label)
-        self.y_pred.append(logit.argmax().item())
+        pred = logit.argmax().item()
+        self.y_pred.append(pred)
         output = torch.softmax(logit, dim=0)
         self.y_score.append(output.detach().cpu().numpy())
+        self.patients.setdefault(patient, {
+            'label': label,
+            'cnt': np.zeros(4, dtype=np.int)
+        })['cnt'][pred] += 1
 
     def report(self):
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
-        report = classification_report(y_true, y_pred, target_names=self.target_names, digits=3, output_dict=True)
-        return pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.tsv'), sep='\t')
+        report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
+        pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.tsv'), sep='\t')
+
+        patient_true = []
+        patient_pred = []
+        for patient, info in self.patients.items():
+            patient_true.append(info['label'])
+            patient_pred.append(info['cnt'].argmax())
+        report = classification_report(patient_true, patient_pred, target_names=self.target_names, output_dict=True)
+        pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'patient.tsv'), sep='\t')
 
     def plot_roc(self):
         y_true = np.eye(len(self.target_names))[self.y_true]
