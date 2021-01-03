@@ -22,37 +22,34 @@ def get_ornt(ds) -> (str, int):
         raise ValueError('cannot determine orientation')
 
 
-def to_gray_scale(pixel_array: np.ndarray) -> np.ndarray:
-    image_2d = pixel_array.astype(float)
-    # Rescaling grey scale between 0-255
-    image_2d_scaled = (np.maximum(image_2d, 0) / image_2d.max()) * 255.0
-    # Convert to uint
-    image_2d_scaled = np.uint8(image_2d_scaled)
-    return image_2d_scaled
+def make_datasets(root, ortn, transform, data):
+    samples = {
+        k: []
+        for k in ['exists', 'subgroup']
+    }
+    for patient, info in data.items():
+        subgroup = info['subgroup_idx'] - 1
+        for sample in info[ortn]:
+            path = os.path.join(root, sample['path'])
+            exists = sample['exists']
+            samples['exists'].append((path, int(exists)))
+            if exists:
+                samples['subgroup'].append((path, subgroup))
+
+    return {
+        k: ImageRecognitionDataset(root, transform, samples[k], num_classes)
+        for k, num_classes in [('exists', 2), ('subgroup', 4)]
+    }
 
 
-def write_gray_scale(pixel_array: np.ndarray, path: str):
-    shape = pixel_array.shape
-    with open(path, 'wb') as png_file:
-        w = png.Writer(shape[1], shape[0], greyscale=True)
-        w.write(png_file, pixel_array)
+class ImageRecognitionDataset(VisionDataset):
+    normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 
-
-class MriDataset(VisionDataset):
-    def __init__(self, root, ortn, transform, data):
+    def __init__(self, root, transform, samples, num_classes):
         super().__init__(root, transform=transform)
-        self.samples = []
-        cnt = [0, 0]
-        for patient, info in data.items():
-            subgroup = info['subgroup_idx'] - 1
-            for sample in info[ortn]:
-                exists = sample['exists']
-                cnt[exists] += 1
-                self.samples.append([os.path.join(root, sample['path']), {
-                    'exists': exists, 'subgroup': subgroup if exists else -100,
-                }])
-        print(ortn, cnt)
+        self.samples = samples
         self.loader = torchvision.datasets.folder.default_loader
+        self.num_classes = num_classes
 
     def __len__(self):
         return len(self.samples)
@@ -70,10 +67,10 @@ class MriDataset(VisionDataset):
         # return default_collate(inputs), default_collate(targets), labels
 
     def get_weight(self) -> torch.FloatTensor:
-        weight = torch.zeros(4)
+        weight = torch.zeros(self.num_classes)
         for _, target in self.samples:
-            if target['exists']:
-                weight[target['subgroup']] += 1
+            weight[target] += 1
+        weight.sqrt_()
         weight = weight.sum() / weight
         weight = weight / weight.sum()
         return weight
@@ -113,16 +110,17 @@ def load_data(data_dir, norm=True):
     }
     if norm:
         for v in data_transforms.values():
-            v.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
+            v.append(ImageRecognitionDataset.normalize)
     for k, v in data_transforms.items():
         data_transforms[k] = transforms.Compose(v)
+
     data_info = {
         split: json.load(open(os.path.join(data_dir, f'{split}.json')))
         for split in ['train', 'val']
     }
     image_datasets = {
         split: {
-            ortn: MriDataset(data_dir, ortn, data_transforms[split], data_info[split])
+            ortn: make_datasets(data_dir, ortn, data_transforms[split], data_info[split])
             for ortn in ['back', 'up', 'left']
         } for split in ['train', 'val']
     }

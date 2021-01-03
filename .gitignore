@@ -136,3 +136,7 @@ runs/
 output/
 plot/
 report/
+test.py
+test.dcm
+examples/
+cam.jpg

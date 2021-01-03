@@ -1,3 +1,4 @@
+import os
 from typing import *
 
 import numpy as np
@@ -8,11 +9,13 @@ from sklearn.metrics import classification_report, roc_curve, auc
 
 
 class ClassificationReporter:
-    def __init__(self, classes: List):
+    def __init__(self, report_dir, target_names: List[str]):
+        self.report_dir = report_dir
+        self.target_names = target_names
+
         self.y_true = []
         self.y_pred = []
         self.y_score = []
-        self.classes = classes
 
     def append(self, logit: torch.FloatTensor, label: int):
         self.y_true.append(label)
@@ -23,21 +26,24 @@ class ClassificationReporter:
     def report(self):
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
-        report = classification_report(y_true, y_pred, target_names=self.classes, digits=3, output_dict=True)
-        return pd.DataFrame(report).transpose()
+        report = classification_report(y_true, y_pred, target_names=self.target_names, digits=3, output_dict=True)
+        return pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.tsv'), sep='\t')
 
-    def roc(self):
-        fig, axs = plt.subplots(1, len(self.classes))
-        for i, cls, ax in enumerate(zip(self.classes, axs)):
-            cls = str(cls)
-            fpr, tpr, thresholds = roc_curve(self.y_true[:, i], self.y_score[:, i])
-            lw = 2
-            ax.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.2f)' % auc(fpr, tpr))
-            ax.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-            ax.xlim([0.0, 1.0])
-            ax.ylim([0.0, 1.05])
-            ax.xlabel('False Positive Rate')
-            ax.ylabel('True Positive Rate')
-            ax.title(cls)
-            ax.legend(loc="lower right")
-        return fig
+    def plot_roc(self):
+        y_true = np.eye(len(self.target_names))[self.y_true]
+        y_score = np.array(self.y_score)
+        plt.figure()
+        lw = 2
+        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        for i, name in enumerate(self.target_names):
+            fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
+            plt.plot(fpr, tpr, lw=lw, label=f'{name}, AUC = %0.2f' % auc(fpr, tpr))
+            plt.xlim(0.0, 1.0)
+            plt.ylim(0.0, 1.05)
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title('ROC curves')
+            plt.legend(loc="lower right")
+        plt.savefig(os.path.join(self.report_dir, 'roc.pdf'))
+        plt.savefig(os.path.join(self.report_dir, 'roc.png'))
+        plt.show()
