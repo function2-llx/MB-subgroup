@@ -1,6 +1,7 @@
 import json
 import os
 from typing import *
+from .enums import Plane, Protocol
 
 import numpy as np
 import torch
@@ -26,6 +27,26 @@ def get_ornt(ds) -> (str, int):
         return 'back', 1
     else:
         raise ValueError('cannot determine orientation')
+
+
+def get_plane(ds) -> Optional[Plane]:
+    try:
+        ornt = np.array(ds.ImageOrientationPatient)
+    except AttributeError:
+        return None
+    p = sorted(np.argpartition(-abs(ornt), 2)[:2])
+    if p == [0, 4]:
+        return Plane.Axial
+    elif p == [1, 5]:
+        return Plane.Sagittal
+    elif p == [0, 5]:
+        return Plane.Axial
+    else:
+        return None
+
+def get_protocol(ds) -> Protocol:
+    desc = ds.SeriesDescription
+
 
 
 def make_datasets(root, ortn, transform, data):

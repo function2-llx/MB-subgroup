@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet101
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 

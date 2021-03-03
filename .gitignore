@@ -130,7 +130,9 @@ dmypy.json
 
 .vscode/
 .idea/
-*data*/
+data/
+data-dicom/
+data-nifti/
 runs/
 *.zip
 output/
