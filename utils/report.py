@@ -30,9 +30,15 @@ class ClassificationReporter:
         })['cnt'][pred] += 1
 
     def report(self):
+        from sklearn.metrics import confusion_matrix
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
         report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
+        all_auc = self.get_auc()
+        for i, target_name in enumerate(self.target_names):
+            report[target_name]['auc'] = all_auc[i]
+
+        report['weighted avg']['accuracy'] = report.pop('accuracy')
         pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.tsv'), sep='\t')
 
         patient_true = []
@@ -41,7 +47,17 @@ class ClassificationReporter:
             patient_true.append(info['label'])
             patient_pred.append(info['cnt'].argmax())
         report = classification_report(patient_true, patient_pred, target_names=self.target_names, output_dict=True)
+        report['weighted avg']['accuracy'] = report.pop('accuracy')
         pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'patient.tsv'), sep='\t')
+
+    def get_auc(self):
+        y_true = np.eye(len(self.target_names))[self.y_true]
+        y_score = np.array(self.y_score)
+        ret = []
+        for i in range(len(self.target_names)):
+            fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
+            ret.append(auc(fpr, tpr))
+        return ret
 
     def plot_roc(self):
         y_true = np.eye(len(self.target_names))[self.y_true]
