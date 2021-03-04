@@ -1,14 +1,12 @@
 import json
 import os
-from typing import Tuple, Optional, List
+from typing import Tuple, List
 
 import numpy as np
 import torch
 import torchvision
 from torchvision import transforms
 from torchvision.datasets import VisionDataset
-
-from .dicom import Plane
 
 targets = {
     'exists': ['no', 'yes'],

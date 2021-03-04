@@ -1,5 +1,7 @@
 from enum import unique, Enum
-from typing import Tuple, Optional
+from typing import Optional
+
+import numpy as np
 
 
 @unique
@@ -14,8 +16,14 @@ class ScanProtocol(Enum):
     T1c = 1
     T2 = 2
 
+def get_plane(ds) -> Optional[Plane]:
+    try:
+        ortn = np.array(ds.ImageOrientationPatient)
+    except AttributeError:
+        return None
+    return Plane(np.abs(np.cross(ortn[:3], ortn[3:])).argmax())
 
-def parse_series_desc(desc: str) -> Tuple[Optional[Plane], Optional[ScanProtocol]]:
+def parse_series_desc(desc: str) -> Optional[ScanProtocol]:
     desc = desc.lower()
     if 't1' in desc:
         protocol = ScanProtocol.T1c if '+c' in desc else ScanProtocol.T1
@@ -24,13 +32,4 @@ def parse_series_desc(desc: str) -> Tuple[Optional[Plane], Optional[ScanProtocol
     else:
         protocol = None
 
-    if 'tra_' in desc or 'ax' in desc:
-        plane = Plane.Axial
-    elif 'sag' in desc:
-        plane = Plane.Sagittal
-    elif 'cor' in desc:
-        plane = Plane.Coronal
-    else:
-        plane = None
-
-    return plane, protocol
+    return protocol

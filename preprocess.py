@@ -5,6 +5,8 @@ import random
 from collections import Counter
 from glob import glob, iglob
 from random import sample
+from typing import Optional
+import sys
 
 import itk
 import numpy as np
@@ -15,7 +17,7 @@ from monai.transforms import LoadImage
 from tqdm import tqdm
 from tqdm import trange
 
-from utils.dicom import parse_series_desc, Plane
+from utils.dicom import parse_series_desc, Plane, get_plane
 
 random.seed(233333)
 
@@ -34,7 +36,7 @@ patient_info = []
 descs = set()
 scan_info = []
 
-def process_patient(patient, patient_dir, loader):
+def process_patient(patient, patient_dir):
     try:
         sample_slice_path = next(iglob(os.path.join(patient_dir, '**/*.dcm'), recursive=True))
     except StopIteration:
@@ -49,32 +51,21 @@ def process_patient(patient, patient_dir, loader):
     weight = float(sample_ds.PatientWeight)
     patient_info.append((patient, sex, age, weight, subgroup_dict[patient]))
 
-    save_dir = os.path.join(output_dir, patient)
+    patient_output_dir = os.path.join(output_dir, patient)
     os.makedirs(os.path.join(output_dir, patient), exist_ok=True)
-    counter = Counter()
-    arrays = {}
 
     def process_scan(scan_dir):
         slices = glob(os.path.join(scan_dir, '*.dcm'))
         if len(slices) <= 6:
             return
         sample_ds = pydicom.dcmread(slices[0])
-        plane, protocol = parse_series_desc(sample_ds.SeriesDescription)
-        if plane is None or protocol is None:
-            return
-        if plane == Plane.Axial:
-            data, meta = loader(scan_dir)
-            data = np.asarray(data)
-            data = itk.image_view_from_array(data)
-            save_name = f'{plane.name}-{protocol.name}-{counter[plane, protocol]}'
-            itk.imwrite(data, os.path.join(save_dir, f'{save_name}.nii.gz'))
-            arrays[save_name] = data
-            counter[plane, protocol] += 1
+        plane = get_plane(sample_ds)
+        if plane is not None and plane == Plane.Axial:
+            # requires dcm2niix(https://github.com/rordenlab/dcm2niix) to be installed
+            os.system(f'dcm2niix -z y -f %s -o {patient_output_dir} {scan_dir}')
+
     for scan in os.listdir(patient_dir):
         process_scan(os.path.join(patient_dir, scan))
-
-    np.savez_compressed(os.path.join(save_dir, 'arrays.npz'), **arrays)
-
 
 def process_2d():
     subgroup_table = dict(csv.reader(open(os.path.join(data_dir, 'tag.csv'))))
@@ -154,7 +145,7 @@ if __name__ == '__main__':
             continue
         # patient directory only contains one folder, which contains all the scans
         patient_dir = os.path.join(patient_dir, os.listdir(patient_dir)[0])
-        process_patient(patient, patient_dir, loader)
+        process_patient(patient, patient_dir)
         # pd.DataFrame(scan_info, columns=('dir', 'desc', 'n')).to_csv('descs.csv', index=False)
 
     pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
