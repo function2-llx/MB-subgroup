@@ -1,13 +1,14 @@
 import json
 import os
-from typing import *
-from .enums import Plane, Protocol
+from typing import Tuple, Optional, List
 
 import numpy as np
 import torch
 import torchvision
 from torchvision import transforms
 from torchvision.datasets import VisionDataset
+
+from .dicom import Plane
 
 targets = {
     'exists': ['no', 'yes'],
@@ -43,11 +44,6 @@ def get_plane(ds) -> Optional[Plane]:
         return Plane.Axial
     else:
         return None
-
-def get_protocol(ds) -> Protocol:
-    desc = ds.SeriesDescription
-
-
 
 def make_datasets(root, ortn, transform, data):
     samples = {

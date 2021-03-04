@@ -2,90 +2,79 @@ import csv
 import json
 import os
 import random
+from collections import Counter
 from random import sample
+from glob import glob, iglob
 
-import itk
+import pandas as pd
 import numpy as np
 import pydicom
-from tqdm import trange
+from monai.data import ITKReader
 from monai.transforms import LoadImage
+from tqdm import tqdm
+from tqdm import trange
+import itk
 
 from utils.data import get_plane
-from utils.enums import Plane
+from utils.dicom import parse_series_desc, Plane
 
 random.seed(233333)
 
 data_dir = 'data-dicom'
-subgroups = {
-    1: 'WNT',
-    2: 'SHH',
-    3: 'G3',
-    4: 'G4',
-}
+output_dir = 'processed_3d'
+subgroup_dict = dict(pd.read_csv('subgroup.csv').values)
+patient_info = []
+
+# subgroups = {
+#     1: 'WNT',
+#     2: 'SHH',
+#     3: 'G3',
+#     4: 'G4',
+# }
 
 descs = set()
-
-def process_scan(scan_dir: str, loader: LoadImage):
-    # print(scan_dir)
-    try:
-        data, meta = loader(scan_dir)
-    except:
-        return
-
-    # get plane of the whole scan
-    slices = list(filter(lambda x: x.endswith('.dcm'),  os.listdir(scan_dir)))
-    if len(slices) > 0:
-        
-    for slice in os.listdir(scan_dir):
-        if not slice.endswith('.dcm'):
-            continue
-        ds = pydicom.dcmread(os.path.join(scan_dir, slice))
-        print(ds.ManufacturerModelName)
-        # exit(1)
-        descs.add(ds.SeriesDescription)
-        # print(ds.SeriesDescription)
-        plane = get_plane(ds)
-        break
-
-    # print(plane)
-    if plane is None or plane != Plane.Axial:
-        return
-    print(ds.SeriesDescription)
-
-
-    # data = np.asarray(data)
-    # # data = data.transpose(1, 2, 0)
-    # print(data.shape)
-    # data = itk.image_view_from_array(data)
-    # save_name = f'{os.path.split(scan_dir)[1]}.nii.gz'
-    # print(save_name)
-    # itk.imwrite(data, save_name)
+scan_info = []
 
 def process_patient(patient, patient_dir, loader):
-    # patient directory only contains one folder, which contains all the scans
-    patient_dir = os.path.join(patient_dir, os.listdir(patient_dir)[0])
+    try:
+        sample_slice_path = next(iglob(os.path.join(patient_dir, '**/*.dcm'), recursive=True))
+    except StopIteration:
+        return
+
+    sample_ds = pydicom.dcmread(sample_slice_path)
+    sex = {
+        'M': 'male',
+        'F': 'female'
+    }[sample_ds.PatientSex]
+    age = int(sample_ds.PatientAge[:3])
+    weight = float(sample_ds.PatientWeight)
+    patient_info.append((patient, sex, age, weight, subgroup_dict[patient]))
+
+    save_dir = os.path.join(output_dir, patient)
+    os.makedirs(os.path.join(output_dir, patient), exist_ok=True)
+    counter = Counter()
+    arrays = {}
+
+    def process_scan(scan_dir):
+        slices = glob(os.path.join(scan_dir, '*.dcm'))
+        if len(slices) <= 6:
+            return
+        sample_ds = pydicom.dcmread(slices[0])
+        plane, protocol = parse_series_desc(sample_ds.SeriesDescription)
+        if plane is None or protocol is None:
+            return
+        if plane == Plane.Axial:
+            data, meta = loader(scan_dir)
+            data = np.asarray(data)
+            data = itk.image_view_from_array(data)
+            save_name = f'{plane.name}-{protocol.name}-{counter[plane, protocol]}'
+            itk.imwrite(data, os.path.join(save_dir, f'{save_name}.nii.gz'))
+            arrays[save_name] = data
+            counter[plane, protocol] += 1
     for scan in os.listdir(patient_dir):
-        scan_dir = os.path.join(patient_dir, scan)
-        # get patient sex, age
-        for slice in os.listdir(scan_dir):
-            if not slice.endswith('.dcm'):
-                continue
-            ds = pydicom.dcmread(os.path.join(scan_dir, slice))
-            sex = ds.PatientSex
-            age = ds.PatientAge
-            weight = ds.PatientWeight
+        process_scan(os.path.join(patient_dir, scan))
 
-        process_scan(scan_dir, loader)
-
-def process_3d():
-    from monai.data import ITKReader
-    loader = LoadImage(ITKReader())
-
-    for patient in os.listdir(data_dir):
-        patient_dir = os.path.join(data_dir, patient)
-        if not os.path.isdir(patient_dir):
-            continue
-        process_patient(patient, patient_dir, loader)
+    np.savez_compressed(os.path.join(save_dir, 'arrays.npz'), **arrays)
 
 
 def process_2d():
@@ -156,6 +145,18 @@ def process_2d():
     for split, data in splits.items():
         json.dump(data, open(os.path.join(data_dir, f'{split}.json'), 'w'), ensure_ascii=False, indent=4)
 
-
 if __name__ == '__main__':
-    process_3d()
+    os.makedirs(output_dir, exist_ok=True)
+    loader = LoadImage(ITKReader())
+
+    for patient in tqdm(os.listdir(data_dir), ncols=80):
+        patient_dir = os.path.join(data_dir, patient)
+        if not os.path.isdir(patient_dir):
+            continue
+        # patient directory only contains one folder, which contains all the scans
+        patient_dir = os.path.join(patient_dir, os.listdir(patient_dir)[0])
+        process_patient(patient, patient_dir, loader)
+        # pd.DataFrame(scan_info, columns=('dir', 'desc', 'n')).to_csv('descs.csv', index=False)
+
+    pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
+        .to_csv(os.path.join(output_dir, 'patient_info.csv'), index=False)
