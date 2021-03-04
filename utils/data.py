@@ -29,22 +29,6 @@ def get_ornt(ds) -> (str, int):
     else:
         raise ValueError('cannot determine orientation')
 
-
-def get_plane(ds) -> Optional[Plane]:
-    try:
-        ornt = np.array(ds.ImageOrientationPatient)
-    except AttributeError:
-        return None
-    p = sorted(np.argpartition(-abs(ornt), 2)[:2])
-    if p == [0, 4]:
-        return Plane.Axial
-    elif p == [1, 5]:
-        return Plane.Sagittal
-    elif p == [0, 5]:
-        return Plane.Axial
-    else:
-        return None
-
 def make_datasets(root, ortn, transform, data):
     samples = {
         target: []

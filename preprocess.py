@@ -3,19 +3,18 @@ import json
 import os
 import random
 from collections import Counter
-from random import sample
 from glob import glob, iglob
+from random import sample
 
-import pandas as pd
+import itk
 import numpy as np
+import pandas as pd
 import pydicom
 from monai.data import ITKReader
 from monai.transforms import LoadImage
 from tqdm import tqdm
 from tqdm import trange
-import itk
 
-from utils.data import get_plane
 from utils.dicom import parse_series_desc, Plane
 
 random.seed(233333)
