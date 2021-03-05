@@ -2,10 +2,10 @@ import itertools
 from typing import List, Tuple
 
 import torch
-from monai.data import CacheDataset
+from monai.data import CacheDataset, Dataset
 from monai.transforms import LoadImage, ScaleIntensity, AddChannel, Resize, RandRotate90, ToTensor, Compose, Transform
 
-class MultimodalDataset(CacheDataset):
+class MultimodalDataset(Dataset):
     def __init__(self, imgs: List[List[str]], labels: List[int], transform: Transform):
         super().__init__(imgs, transform)
         self.labels = labels
@@ -25,7 +25,7 @@ def prepare_data_3d(folds, val_id, args):
         Resize((args.sample_size, args.sample_size, args.sample_slices)),
         RandRotate90(),
         ToTensor(),
-    ])
+    ]).set_random_state(args.seed)
     val_transforms = Compose([
         LoadImage(image_only=True),
         ScaleIntensity(),

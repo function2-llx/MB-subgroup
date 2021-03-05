@@ -143,3 +143,8 @@ test.dcm
 examples/
 cam.jpg
 processed_3d/
+output_3d/
+subgroup.csv
+patient_info.csv
+folds.json
+reports/

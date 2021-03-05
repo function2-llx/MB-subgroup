@@ -22,24 +22,35 @@ def load_pretrained_resnet(pretrained_name, log=True):
         n_classes=config['n_pretrain_classes'],
         n_input_channels=3,
     )
-    load_pretrained_model(model, pretrained_root / pretrained_name, 'resnet', 4, log)
+    load_pretrained_model(model, pretrained_root / f'{pretrained_name}.pth', 'resnet', 4, log)
     return model
 
 def get_args():
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-    parser.add_argument('--lr', type=float, default=2e-5)
+    parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--seed', type=int, default=2333)
     parser.add_argument('--patience', type=int, default=5)
     parser.add_argument('--output_root', type=Path, default='output_3d')
-    parser.add_argument('--pretrained_name',
-                        default=None,
-                        type=str,
-                        help='Pretrained model name (.pth).')
+    parser.add_argument(
+        '--pretrained_name',
+        default=None,
+        choices=[
+            'r3d18_K_200ep',
+            'r3d18_KM_200ep',
+            'r3d34_K_200ep',
+            'r3d34_KM_200ep',
+            'r3d50_KMS_200ep',
+            'r2p1d18_K_200ep',
+            'r2p1d34_K_200ep',
+        ],
+        type=str,
+        help='Pretrained model name'
+    )
     parser.add_argument('--sample_size',
                         default=112,
                         type=int,
@@ -47,7 +58,7 @@ def get_args():
     parser.add_argument('--sample_slices',
                         default=16,
                         type=int,
-                        help='slices of inputs, temporal size in terms of video input')
+                        help='slices of inputs, temporal size in terms of videos')
     args = parser.parse_args()
     print('device:', args.device)
     return args
@@ -61,7 +72,7 @@ def fix_state(seed):
     torch.backends.cudnn.benchmark = False
 
 def run_train_val(datasets: Dict[str, Dataset], output_dir: Path, args) -> Tuple[float, List[float]]:
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     if args.train:
         model = load_pretrained_resnet(args.pretrained_name)
         if args.device == 'cuda' and torch.cuda.device_count() > 1:
@@ -75,7 +86,7 @@ def run_train_val(datasets: Dict[str, Dataset], output_dir: Path, args) -> Tuple
         patience = 0
         for epoch in range(1, args.epochs + 1):
             model.train()
-            for inputs, labels in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
+            for inputs, labels in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80, disable=True):
                 inputs = inputs.to(args.device)
                 labels = labels.to(args.device)
                 logits = model.forward(inputs)
@@ -83,6 +94,12 @@ def run_train_val(datasets: Dict[str, Dataset], output_dir: Path, args) -> Tuple
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                torch.save(
+                    model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
+                    'b.pth.tar',
+                )
+                exit(1)
+
 
             val_loss, aucs = run_eval(model, datasets['val'])
             print('current val loss:', val_loss)
@@ -104,9 +121,11 @@ def run_train_val(datasets: Dict[str, Dataset], output_dir: Path, args) -> Tuple
                 print(f'patience {patience}/{args.patience}')
                 if patience == args.patience:
                     print('run out of patience')
+                    break
 
     model = load_pretrained_resnet(args.pretrained_name, log=False)
     model.load_state_dict(torch.load(output_dir / 'checkpoint.pth.tar'))
+    model = model.to(args.device)
     return run_eval(model, datasets['val'])
 
 def run_eval(model, eval_dataset) -> Tuple[float, List[float]]:
@@ -161,5 +180,8 @@ if __name__ == '__main__':
             args,
         )
         folds_aucs.append(aucs)
+        print('fold loss:', val_loss)
+        print('fold AUCs:', *aucs)
+        print('fold average AUC:', np.mean(aucs))
     avg_aucs = np.array(folds_aucs).mean(axis=1)
     print(*avg_aucs.tolist())
