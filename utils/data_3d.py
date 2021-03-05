@@ -1,10 +1,7 @@
-import json
 import itertools
-from pathlib import Path
 from typing import List, Tuple
 
-import torch
-from monai.data import Dataset, CacheDataset, SmartCacheDataset
+from monai.data import CacheDataset
 from monai.transforms import LoadImage, ScaleIntensity, AddChannel, Resize, RandRotate90, ToTensor, Compose, Transform
 
 class MultimodalDataset(CacheDataset):

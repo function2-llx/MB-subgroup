@@ -1,19 +1,19 @@
 import json
 import random
 from pathlib import Path
+from typing import Dict, Tuple, List
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F, DataParallel
-from monai.data import DataLoader
+from monai.data import DataLoader, Dataset
 from torch.optim import Adam
 from tqdm import tqdm
 
 from utils.data_3d import prepare_data_3d
 
-
-def load_pretrained_resnet(pretrained_name):
+def load_pretrained_resnet(pretrained_name, log=True):
     from resnet_3d.model import load_pretrained_model, pretrained_root
     config = json.load(open(pretrained_root / 'config.json'))[pretrained_name]
     from resnet_3d.models import resnet
@@ -22,7 +22,7 @@ def load_pretrained_resnet(pretrained_name):
         n_classes=config['n_pretrain_classes'],
         n_input_channels=3,
     )
-    load_pretrained_model(model, pretrained_root / pretrained_name, 'resnet', 4)
+    load_pretrained_model(model, pretrained_root / pretrained_name, 'resnet', 4, log)
     return model
 
 def get_args():
@@ -35,6 +35,7 @@ def get_args():
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--seed', type=int, default=2333)
     parser.add_argument('--patience', type=int, default=5)
+    parser.add_argument('--output_root', type=Path, default='output_3d')
     parser.add_argument('--pretrained_name',
                         default=None,
                         type=str,
@@ -59,9 +60,8 @@ def fix_state(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def run_train_val(datasets, args):
-    model_dir = Path('{pretrained_name}_lr{lr}_{sample_size}_{sample_slices}'.format(**args.__dict__))
-    model_dir.mkdir(exist_ok=True)
+def run_train_val(datasets: Dict[str, Dataset], output_dir: Path, args) -> Tuple[float, List[float]]:
+    output_dir.mkdir(exist_ok=True)
     if args.train:
         model = load_pretrained_resnet(args.pretrained_name)
         if args.device == 'cuda' and torch.cuda.device_count() > 1:
@@ -72,6 +72,7 @@ def run_train_val(datasets, args):
         train_loader = DataLoader(datasets['train'], batch_size=args.batch_size, shuffle=True)
         optimizer = Adam(model.parameters(), lr=args.lr)
         best_loss = float('inf')
+        patience = 0
         for epoch in range(1, args.epochs + 1):
             model.train()
             for inputs, labels in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
@@ -84,17 +85,31 @@ def run_train_val(datasets, args):
                 optimizer.step()
 
             val_loss, aucs = run_eval(model, datasets['val'])
+            print('current val loss:', val_loss)
+            print('best val loss:   ', best_loss)
+            print('AUCs:', *aucs)
+            print('average AUC:', np.mean(aucs))
+
             if val_loss < best_loss:
                 best_loss = val_loss
+                save_path = output_dir / 'checkpoint.pth.tar'
                 torch.save(
                     model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
-
+                    save_path,
                 )
+                print(f'model updated, saved to {save_path}')
                 patience = 0
-            print(val_loss)
-            print(aucs, np.mean(aucs))
+            else:
+                patience += 1
+                print(f'patience {patience}/{args.patience}')
+                if patience == args.patience:
+                    print('run out of patience')
 
-def run_eval(model, eval_dataset):
+    model = load_pretrained_resnet(args.pretrained_name, log=False)
+    model.load_state_dict(torch.load(output_dir / 'checkpoint.pth.tar'))
+    return run_eval(model, datasets['val'])
+
+def run_eval(model, eval_dataset) -> Tuple[float, List[float]]:
     from sklearn.metrics import roc_curve, auc
     model.eval()
     y_true = []
@@ -137,6 +152,14 @@ if __name__ == '__main__':
     fix_state(args.seed)
 
     folds = get_folds()
+    folds_aucs = []
     for val_id in range(len(folds)):
         datasets = prepare_data_3d(folds, val_id, args)
-        run_train_val(datasets, args)
+        val_loss, aucs = run_train_val(
+            datasets,
+            args.output_root / '{pretrained_name}_lr{lr}_{sample_size}_{sample_slices}'.format(**args.__dict__) / str(val_id),
+            args,
+        )
+        folds_aucs.append(aucs)
+    avg_aucs = np.array(folds_aucs).mean(axis=1)
+    print(*avg_aucs.tolist())
