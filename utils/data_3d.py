@@ -1,6 +1,7 @@
 import itertools
 from typing import List, Tuple
 
+import torch
 from monai.data import CacheDataset
 from monai.transforms import LoadImage, ScaleIntensity, AddChannel, Resize, RandRotate90, ToTensor, Compose, Transform
 
