@@ -138,8 +138,6 @@ runs/
 output/
 plot/
 report/
-test.py
-test.dcm
 examples/
 cam.jpg
 processed_3d/
