@@ -2,14 +2,10 @@ import csv
 import json
 import os
 import random
-from collections import Counter
 from glob import glob, iglob
 from random import sample
-from typing import Optional
-import sys
+from pathlib import Path
 
-import itk
-import numpy as np
 import pandas as pd
 import pydicom
 from monai.data import ITKReader
@@ -17,12 +13,12 @@ from monai.transforms import LoadImage
 from tqdm import tqdm
 from tqdm import trange
 
-from utils.dicom import parse_series_desc, Plane, get_plane
+from utils.dicom import Plane, get_plane
 
 random.seed(233333)
 
 data_dir = 'data-dicom'
-output_dir = 'processed_3d'
+output_dir = Path('processed_3d')
 subgroup_dict = dict(pd.read_csv('subgroup.csv').values)
 patient_info = []
 

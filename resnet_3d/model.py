@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from models import resnet, resnet2p1d, pre_act_resnet, wide_resnet, resnext, densenet
+from .models import resnet, resnet2p1d, pre_act_resnet, wide_resnet, resnext, densenet
 
 
 def get_module_name(name):
@@ -93,6 +93,8 @@ def generate_model(opt):
 
     return model
 
+from pathlib import Path
+pretrained_root = Path(__file__).resolve().parent / 'pretrained'
 
 def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes):
     if pretrain_path:

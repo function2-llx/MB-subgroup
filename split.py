@@ -1,28 +1,34 @@
 # split patients into some folds
 
-import os
-import random
 import json
-from glob import glob
+import random
 
+import nibabel as nib
 import pandas as pd
+from tqdm import tqdm
 
-processed_dir = 'processed_3d'
+from preprocess import output_dir as processed_dir
+
 patients = {}
 n_folds = 4
 folds = [[] for _ in range(n_folds)]
 random.seed(233)
 
-n_scans = []
-for _, (patient, subgroup) in pd.read_csv('subgroup.csv').iterrows():
-    filenames = glob(os.path.join(processed_dir, patient, '*.nii.gz'))
-    num = len(filenames)
-    assert num
-    if num < 3:
+patient_info = pd.read_csv('patient_info.csv')
+
+for _, (patient, sex, age, weight, subgroup) in tqdm(patient_info.iterrows(), ncols=80, total=patient_info.shape[0]):
+    scans = list(filter(lambda scan: nib.load(scan).get_fdata().ndim == 3, (processed_dir / patient).glob('*.nii.gz')))
+    if len(scans) < 3:
         print(patient)
         continue
-    n_scans.append(num)
-    patients.setdefault(subgroup, []).append(patient)
+    patients.setdefault(subgroup, []).append({
+        'patient': patient,
+        'subgroup': subgroup,
+        'sex': sex,
+        'age': age,
+        'weight': weight,
+        'scans': list(map(str, scans)),
+    })
 
 for subgroup_patients in patients.values():
     q, r = divmod(len(subgroup_patients), n_folds)
