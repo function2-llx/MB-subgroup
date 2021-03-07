@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from typing import Optional
 
 import torch
 from torch import nn
@@ -95,13 +97,14 @@ def generate_model(opt):
 
     return model
 
-from pathlib import Path
 pretrained_root = Path(__file__).resolve().parent / 'pretrained'
 
-def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes, log=True):
+
+def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes,
+                          logger: Optional[logging.Logger] = None):
     if pretrain_path:
-        if log:
-            logging.info('loading pretrained model {}\n'.format(pretrain_path))
+        if logger is not None:
+            logger.info('loading pretrained model {}\n'.format(pretrain_path))
         pretrain = torch.load(pretrain_path, map_location='cpu')
 
         model.load_state_dict(pretrain['state_dict'])

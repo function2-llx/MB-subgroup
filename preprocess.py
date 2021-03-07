@@ -131,7 +131,7 @@ def process_2d():
     for split, data in splits.items():
         json.dump(data, open(os.path.join(data_dir, f'{split}.json'), 'w'), ensure_ascii=False, indent=4)
 
-if __name__ == '__main__':
+def process_dcm():
     os.makedirs(output_dir, exist_ok=True)
     loader = LoadImage(ITKReader())
 
@@ -146,3 +146,6 @@ if __name__ == '__main__':
 
     pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
         .to_csv(os.path.join(output_dir, 'patient_info.csv'), index=False)
+
+if __name__ == '__main__':
+    pass
