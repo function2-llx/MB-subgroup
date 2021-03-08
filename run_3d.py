@@ -31,8 +31,8 @@ def get_args():
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-    parser.add_argument('--lr', type=float, default=3e-5)
-    parser.add_argument('--batch_size', type=int, default=3)
+    parser.add_argument('--lr', type=float, default=2e-5)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=100)
     # parser.add_argument('--train', action='store_true')
     parser.add_argument('--force_retrain', action='store_true')
@@ -60,9 +60,10 @@ def get_args():
                         type=int,
                         help='Height and width of inputs')
     parser.add_argument('--sample_slices',
-                        default=20,
+                        default=16,
                         type=int,
                         help='slices of inputs, temporal size in terms of videos')
+    parser.add_argument('--aug', choices=['no', 'weak', 'strong'])
     args = parser.parse_args()
     return args
 
@@ -79,6 +80,7 @@ def run_train_val(datasets: Dict[str, MultimodalDataset], output_path: Path, arg
     loss_fn = CrossEntropyLoss(weight=datasets['train'].get_weight(args.weight_strategy).to(args.device))
     optimizer = Adam(model.parameters(), lr=args.lr)
     best_loss = float('inf')
+    # best_auc = 0
     patience = 0
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -91,15 +93,15 @@ def run_train_val(datasets: Dict[str, MultimodalDataset], output_path: Path, arg
             loss.backward()
             optimizer.step()
 
-        val_loss, aucs = run_eval(model, datasets['val'], train_logger, args)
-        train_logger.info(f'epoch {epoch}')
-        train_logger.info(f'current val loss: {val_loss}')
-        train_logger.info(f'best val loss:    {best_loss}', )
-        train_logger.info(f'AUCs: {" ".join(map(str, aucs))}')
-        train_logger.info(f'average AUC: {np.mean(aucs)}', )
+        val_loss, aucs = run_eval(model, datasets['val'], args, train_logger)
+        # mean_auc = np.mean(aucs)
+        # train_logger.info(f'best auc: {best_auc}')
+        train_logger.info(f'best loss: {best_loss}')
 
         if val_loss < best_loss:
+        # if mean_auc > best_auc:
             best_loss = val_loss
+            # best_auc = mean_auc
             torch.save(
                 model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
                 output_path,
@@ -116,10 +118,10 @@ def run_train_val(datasets: Dict[str, MultimodalDataset], output_path: Path, arg
     model = load_pretrained_resnet(args.pretrained_name)
     model.load_state_dict(torch.load(output_path))
     model = model.to(args.device)
-    val_loss, aucs = run_eval(model, datasets['val'], val_logger, args)
+    val_loss, aucs = run_eval(model, datasets['val'], args, val_logger)
     return aucs
 
-def run_eval(model, eval_dataset, logger: logging.Logger, args) -> Tuple[float, List[float]]:
+def run_eval(model, eval_dataset, args, logger: Optional[logging.Logger] = None) -> Tuple[float, List[float]]:
     from sklearn.metrics import roc_curve, auc
     model.eval()
     y_true = []
@@ -140,19 +142,18 @@ def run_eval(model, eval_dataset, logger: logging.Logger, args) -> Tuple[float, 
     for i in range(4):
         fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
         aucs.append(auc(fpr, tpr))
-    logger.info(f'loss: {eval_loss}')
-    logger.info(f"AUCs: {' '.join(map(str, aucs))}")
-    logger.info(f'average AUC: {np.mean(aucs)}\n')
+    if logger is not None:
+        logger.info(f"AUCs: {' '.join(map(str, aucs))}")
+        logger.info(f'average AUC: {np.mean(aucs)}')
+        logger.info(f'loss: {eval_loss}')
     return eval_loss, aucs
 
-def try_skip(model_output_root: Path):
+def can_skip(model_output_root: Path):
     log_path = model_output_root / 'train.log'
     if not log_path.exists():
         return
     lines = log_path.open().readlines()
-    if len(lines) >= 2 and 'average AUCs of all classes' in lines[-2]:
-        print('skip')
-        exit()
+    return len(lines) >= 2 and 'average AUCs of all classes' in lines[-2]
 
 def set_logging(model_output_root: Path):
     import logging
@@ -160,21 +161,28 @@ def set_logging(model_output_root: Path):
     formatter = Formatter('%(asctime)s [%(levelname)s] %(message)s', Formatter.default_time_format)
     for split in ['train', 'val']:
         logger = logging.getLogger(split)
+        logger.parent = None
         logger.handlers.clear()
         logger.setLevel(logging.INFO)
-        for handler in [logging.StreamHandler(), logging.FileHandler(model_output_root / f'{split}.log', 'w')]:
+        logger.addHandler(logging.FileHandler(model_output_root / f'{split}.log', 'w'))
+        if split == 'train':
+            logger.addHandler(logging.StreamHandler())
+        for handler in logger.handlers:
             handler.setFormatter(formatter)
-            logger.addHandler(handler)
 
 def set_determinism(seed: int, logger: logging.Logger):
     monai.utils.set_determinism(seed)
     logger.info(f'set random seed of {seed}\n')
 
 def main(args):
-    model_output_root: Path = args.output_root / f'{args.pretrained_name}' / '{batch_size}_lr{lr}_{weight_strategy}_{sample_size}_{sample_slices}'.format(
-        **args.__dict__)
+    model_output_root: Path = args.output_root \
+        / f'{args.aug}_aug' \
+        / f'{args.pretrained_name}' \
+        / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
     if not args.force_retrain:
-        try_skip(model_output_root)
+        if can_skip(model_output_root):
+            print('skip')
+            return
 
     model_output_root.mkdir(parents=True, exist_ok=True)
     set_logging(model_output_root)
@@ -187,7 +195,7 @@ def main(args):
     folds = get_folds()
     folds_aucs = []
     for val_id in range(len(folds)):
-        train_logger.info(f'run cross validation on fold {val_id}')
+        val_logger.info(f'\nrun cross validation on fold {val_id}')
         datasets = prepare_data_3d(folds, val_id, args)
         aucs = run_train_val(datasets, model_output_root / f'checkpoint-{val_id}.pth.tar', args)
         folds_aucs.append(aucs)
