@@ -38,10 +38,10 @@ def make_datasets(root, ortn, transform, data):
         for sample in info[ortn]:
             path = os.path.join(root, sample['path'])
             exists = sample['exists']
-            samples['exists'].append((patient, path, int(exists)))
+            samples['exists'].append_slice((patient, path, int(exists)))
             if exists:
-                samples['subgroup'].append((patient, path, subgroup))
-                samples['subgroup2'].append((patient, path, subgroup2))
+                samples['subgroup'].append_slice((patient, path, subgroup))
+                samples['subgroup2'].append_slice((patient, path, subgroup2))
     return {
         target: ImageRecognitionDataset(root, transform, samples[target], len(target_names))
         for target, target_names in targets.items()

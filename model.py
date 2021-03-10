@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import shutil
 from typing import *
 
@@ -8,14 +8,12 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision.models import resnet18, resnet101
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.models import resnet18
 from tqdm import tqdm
-import monai
-
 
 from utils.data import ImageRecognitionDataset, targets
-from utils.report import ClassificationReporter
+from utils.report import Reported2d
 
 __all__ = ['ImageRecognitionModel']
 
@@ -111,7 +109,7 @@ class ImageRecognitionModel(nn.Module):
         return results
 
     def run_test(self, test_set: ImageRecognitionDataset):
-        reporter = ClassificationReporter(self.output_dir, self.target_names)
+        reporter = Reported2d(self.output_dir, self.target_names)
         test_loader = DataLoader(test_set, batch_size=self.args.batch_size, collate_fn=test_set.collate_fn)
         self.eval()
         with torch.no_grad():
@@ -119,7 +117,7 @@ class ImageRecognitionModel(nn.Module):
                 inputs = inputs.to(self.args.device)
                 logits = self.forward(inputs)
                 for patient, logit, label in zip(patients, logits, labels):
-                    reporter.append(patient, logit, label.item())
+                    reporter.append_slice(patient, logit, label.item())
 
         reporter.report()
         reporter.plot_roc()

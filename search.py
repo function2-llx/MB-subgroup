@@ -1,4 +1,4 @@
-from run_3d import main, get_args
+from run_3d import Runner, get_args
 
 if __name__ == '__main__':
     args = get_args()
@@ -12,4 +12,4 @@ if __name__ == '__main__':
                     args.sample_size = sample_size
                     for sample_slices in [16, 18, 20]:
                         args.sample_slices = sample_slices
-                        main(args)
+                        Runner(args).run()

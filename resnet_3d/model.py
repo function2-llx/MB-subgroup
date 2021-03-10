@@ -100,12 +100,10 @@ def generate_model(opt):
 pretrained_root = Path(__file__).resolve().parent / 'pretrained'
 
 
-def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes,
-                          logger: Optional[logging.Logger] = None):
+def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes):
     if pretrain_path:
-        if logger is not None:
-            logger.info('loading pretrained model {}\n'.format(pretrain_path))
         pretrain = torch.load(pretrain_path, map_location='cpu')
+        logging.info('loaded pretrained model from {}\n'.format(pretrain_path))
 
         model.load_state_dict(pretrain['state_dict'])
         tmp_model = model

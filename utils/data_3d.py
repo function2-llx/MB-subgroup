@@ -1,7 +1,6 @@
-import itertools
 import json
 from pathlib import Path
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
@@ -32,6 +31,14 @@ class MultimodalDataset(CacheDataset):
             weight = weight.sum() / weight
             weight = weight / weight.sum()
             return weight
+        elif strategy == 'inv':
+            weight = torch.zeros(self.num_classes)
+            for label in self.labels:
+                weight[label] += 1
+            # weight.sqrt_()
+            weight = weight.sum() / weight
+            weight = weight / weight.sum()
+            return weight
         else:
             raise ValueError(f'unsupported weight strategy of {strategy}')
 
@@ -49,38 +56,11 @@ class ToTensorDevice(ToTensor):
         """
         return super().__call__(img).to(self.device)
 
-def prepare_data_3d(folds, val_id, args):
-    train_folds = list(itertools.chain(*[fold for id, fold in enumerate(folds) if id != val_id]))
-    val_fold = folds[val_id]
+_folds = None
 
-    train_transforms: List[Transform] = []
-    if args.aug == 'weak':
-        train_transforms = [
-            RandFlip(prob=0.2, spatial_axis=0),
-            RandRotate90(prob=0.2),
-        ]
-    elif args.aug == 'strong':
-        raise NotImplementedError
-
-    train_transforms: Transform = Compose(train_transforms + [
-        Resize((args.sample_size, args.sample_size, args.sample_slices)),
-        ToTensorDevice(args.device)
-    ])
-    val_transforms = Compose([
-        Resize(spatial_size=(args.sample_size, args.sample_size, args.sample_slices), mode='area'),
-        ToTensorDevice(args.device),
-    ])
-
-    return {
-        'train': MultimodalDataset(*zip(*train_folds), train_transforms, 4),
-        'val': MultimodalDataset(*zip(*val_fold), val_transforms, 4)
-    }
-
-folds = None
-
-def get_folds():
-    global folds
-    if folds is None:
+def get_folds(args):
+    global _folds
+    if _folds is None:
         img_keys = 'img',
         transforms = Compose([
             LoadImaged(img_keys),
@@ -91,33 +71,35 @@ def get_folds():
             Orientationd(img_keys, axcodes='PLI'),
         ])
         folds_raw = json.load(open('folds.json'))
-        folds = []
+        _folds = []
         with tqdm(total=sum(len(fold) for fold in folds_raw), ncols=80, desc='loading and normalizing data') as bar:
             for fold_raw in folds_raw:
                 fold = []
                 for info in fold_raw:
+                    if info['subgroup'] not in args.target_dict:
+                        bar.update()
+                        continue
+                    label = args.target_dict[info['subgroup']]
                     # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
                     scans = sorted(info['scans'],
                                    key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
-                    label = {
-                        'WNT': 0,
-                        'SHH': 1,
-                        'G3': 2,
-                        'G4': 3,
-                    }[info['subgroup']]
                     imgs = []
                     for scan in scans[:3]:
                         img = transforms({'img': scan})['img']
+                        if args.crop:
+                            img = img[img.shape[0] // 3:, :, img.shape[2] // 3:]
                         imgs.append(img)
                     fold.append((
                         imgs,
                         label,
                     ))
                     bar.update()
-                folds.append(fold)
+                _folds.append(fold)
 
-    return folds
+    return _folds
 
 
 if __name__ == '__main__':
-    get_folds()
+    from run_3d import get_args
+    args = get_args()
+    get_folds(args)
