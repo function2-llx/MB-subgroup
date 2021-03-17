@@ -99,23 +99,22 @@ def generate_model(opt):
 
 pretrained_root = Path(__file__).resolve().parent / 'pretrained'
 
+def setup_finetune(model, model_name, n_finetune_classes):
+    tmp_model = model
+    if model_name == 'densenet':
+        tmp_model.classifier = nn.Linear(tmp_model.classifier.in_features, n_finetune_classes)
+    else:
+        tmp_model.fc = nn.Linear(tmp_model.fc.in_features, n_finetune_classes)
 
-def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes):
+def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes: Optional[int] = None):
     if pretrain_path:
         pretrain = torch.load(pretrain_path, map_location='cpu')
         logging.info('loaded pretrained model from {}\n'.format(pretrain_path))
-
         model.load_state_dict(pretrain['state_dict'])
-        tmp_model = model
-        if model_name == 'densenet':
-            tmp_model.classifier = nn.Linear(tmp_model.classifier.in_features,
-                                             n_finetune_classes)
-        else:
-            tmp_model.fc = nn.Linear(tmp_model.fc.in_features,
-                                     n_finetune_classes)
 
+        if n_finetune_classes:
+            setup_finetune(model, model_name, n_finetune_classes)
     return model
-
 
 def make_data_parallel(model, is_distributed, device):
     if is_distributed:

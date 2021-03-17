@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.models import resnet18
 from tqdm import tqdm
 
-from utils.data import ImageRecognitionDataset, targets
+from utils.data_legacy import ImageRecognitionDataset, targets
 from utils.report import Reported2d
 
 __all__ = ['ImageRecognitionModel']

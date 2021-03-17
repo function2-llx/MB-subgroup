@@ -1,7 +1,7 @@
 import itertools
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
 import monai
 import torch
@@ -9,31 +9,14 @@ import torch_optimizer as optim
 from monai.data import DataLoader
 from monai.transforms import *
 from torch import nn
-from torch.nn import CrossEntropyLoss, DataParallel, functional as F
+from torch.nn import DataParallel, MSELoss
 from tqdm import tqdm
 
-import siamese
-from resnet_3d.utils import get_pretrain_config
+from siamese import generate_model, load_pretrained_model, PairDataset, Siamese
 from utils.data_3d import load_folds, MultimodalDataset, ToTensorDeviced
 from utils.dicom_utils import ScanProtocol
 from utils.report import Reporter
 
-
-def generate_model(pretrained_name: str, n_output: Optional[int] = None) -> nn.Module:
-    from resnet_3d import model
-    config = get_pretrain_config(pretrained_name)
-
-    model = getattr(model, config['type']).generate_model(
-        config['model_depth'],
-        n_classes=config['n_pretrain_classes'] if n_output is None else n_output,
-        n_input_channels=3,
-    )
-    return model
-
-def load_pretrained_model(pretrained_name: str, n_output: int):
-    from resnet_3d.model import load_pretrained_model, pretrained_root
-    model = generate_model(pretrained_name)
-    return load_pretrained_model(model, pretrained_root / f'{pretrained_name}.pth', 'resnet', n_output)
 
 def get_args():
     from argparse import ArgumentParser
@@ -47,7 +30,7 @@ def get_args():
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='equal')
     parser.add_argument('--seed', type=int, default=2333)
     parser.add_argument('--patience', type=int, default=5)
-    parser.add_argument('--output_root', type=Path, default='output_3d')
+    parser.add_argument('--output_root', type=Path, default='output_siamese')
     parser.add_argument('--crop', action='store_true')
     parser.add_argument('--targets', choices=['all', 'G3G4'], default='all')
     parser.add_argument(
@@ -73,7 +56,7 @@ def get_args():
                         default=16,
                         type=int,
                         help='slices of inputs, temporal size in terms of videos')
-    parser.add_argument('--aug', choices=['no', 'weak', 'strong'], default='no')
+    parser.add_argument('--aug', choices=['no', 'weak', 'strong'], default='weak')
     args = parser.parse_args()
     args.target_names = {
         'all': ['WNT', 'SHH', 'G3', 'G4'],
@@ -91,7 +74,7 @@ class Runner:
             / f'{args.pretrained_name}' \
             / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
         self.model_output_root.mkdir(parents=True, exist_ok=True)
-        self.reporters = {
+        self.reporters: Dict[str, Reporter] = {
             test_name: Reporter(self.model_output_root / test_name, self.args.target_names)
             for test_name in ['cross-val']
         }
@@ -142,8 +125,8 @@ class Runner:
         modalities = list(ScanProtocol)
         if self.args.aug == 'weak':
             aug = [
-                RandFlipd('img', prob=0.5, spatial_axis=0),
-                RandRotate90d('img', prob=0.5),
+                RandFlipd(modalities, prob=0.5, spatial_axis=0),
+                RandRotate90d(modalities, prob=0.5),
             ]
         elif self.args.aug == 'strong':
             raise NotImplementedError
@@ -160,7 +143,7 @@ class Runner:
         return train_set, self.prepare_val_fold(val_id)
 
     def get_grouped_parameters(self, model: nn.Module):
-        params = model.parameters()
+        params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
         no_decay = ['fc']
         grouped_parameters = [
             {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
@@ -172,36 +155,38 @@ class Runner:
 
     def run_fold(self, val_id: int):
         output_path = self.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        train_set, val_set = self.prepare_fold(val_id)
         if self.args.train:
             logging.info(f'run cross validation on fold {val_id}')
-            model = load_pretrained_model(self.args.pretrained_name, len(self.args.target_names))
-            train_set, val_set = self.prepare_fold(val_id)
+            model = load_pretrained_model(self.args.pretrained_name)
+            model.setup_fc()
             if self.args.device == 'cuda' and torch.cuda.device_count() > 1:
                 logging.info(f'''using {torch.cuda.device_count()} GPUs\n''')
                 model = nn.DataParallel(model)
             model = model.to(self.args.device)
-            train_loader = DataLoader(train_set, batch_size=self.args.batch_size, shuffle=True)
-            loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.args.weight_strategy).to(self.args.device))
+            train_loader = DataLoader(PairDataset(train_set), batch_size=self.args.batch_size, shuffle=True)
+            loss_fn = MSELoss()
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
-            best_loss = float('inf')
+            best_acc = 0
             patience = 0
             for epoch in range(1, self.args.epochs + 1):
                 model.train()
-                for inputs, labels in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
-                    # inputs = inputs.to(self.args.device)
-                    labels = labels.to(self.args.device)
-                    logits = model.forward(inputs)
-                    loss = loss_fn(logits, labels)
+                for x, y, r in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
+                    x = x.to(self.args.device)
+                    y = y.to(self.args.device)
+                    r = r.float().to(self.args.device)
+                    r_ = model.forward(x, y)
+                    loss = loss_fn(r_, r)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
 
-                val_loss = self.run_eval(model, val_set)
-                logging.info(f'cur loss:  {val_loss}')
-                logging.info(f'best loss: {best_loss}')
+                val_acc = self.run_eval(model.module if isinstance(model, DataParallel) else model, train_set, val_set)
+                logging.info(f'cur acc:  {val_acc}')
+                logging.info(f'best acc: {best_acc}')
 
-                if val_loss < best_loss:
-                    best_loss = val_loss
+                if val_acc > best_acc:
+                    best_acc = val_acc
                     torch.save(
                         model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
                         output_path,
@@ -214,27 +199,38 @@ class Runner:
                     if patience == self.args.patience:
                         logging.info('run out of patience\n')
                         break
-        else:
-            val_set = self.prepare_val_fold(val_id)
 
         model = generate_model(self.args.pretrained_name, len(self.args.target_names)).to(self.args.device)
-        model.load_state_dict(torch.load(output_path))
-        self.run_eval(model, val_set, 'cross-val')
+        model.setup_fc()
+        # model.load_state_dict(torch.load(output_path))
+        model = model.to(self.args.device)
 
-    def run_eval(self, model: nn.Module, eval_dataset: MultimodalDataset, test_name: Optional[str] = None) -> float:
+        self.run_eval(model, train_set, val_set, 'cross-val')
+
+    def run_eval(self, model: Siamese, ref_set: MultimodalDataset, eval_set: MultimodalDataset, test_name: Optional[str] = None) -> float:
         model.eval()
-        eval_loss = 0
-        with torch.no_grad():
-            for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
-                img = data['img'].to(self.args.device)
-                label = data['label'].to(self.args.device)
-                logit = model.forward(img)
-                if test_name:
-                    self.reporters[test_name].append(logit[0], label.item())
 
-                loss = F.cross_entropy(logit, label)
-                eval_loss += loss.item()
-        return eval_loss
+        with torch.no_grad():
+            ref = []
+            labels = []
+            for data in DataLoader(ref_set, batch_size=1, shuffle=False):
+                ref.append(model.feature(data['img']))
+                labels.append(data['label'])
+            ref = torch.cat(ref).to(self.args.device)
+
+            acc = 0
+            for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
+                img = data['img'].to(self.args.device)
+                label = data['label'].item()
+                x = model.feature(img)
+                x = x.repeat(len(ref_set), 1)
+                r = model.relation(ref, x).view(-1)
+                pred = labels[r.argmax().item()]
+                acc += pred == label
+                if test_name:
+                    self.reporters[test_name].append_pred(pred, label)
+
+        return acc / len(eval_set)
 
 if __name__ == '__main__':
     runner = Runner(get_args())

@@ -95,3 +95,24 @@ def partialclass(cls, *args, **kwargs):
         __init__ = partialmethod(cls.__init__, *args, **kwargs)
 
     return PartialClass
+
+
+def get_pretrain_config(pretrained_name: str):
+    # r3d18_K_200ep
+    d, datasets, _ = pretrained_name.split('_')
+    type, d = d.split('d')
+    d = int(d)
+    n_pre = sum(map(lambda x: {
+        'K': 700,
+        'M': 339,
+        'S': 100
+    }[x], datasets))
+
+    return {
+        'type': {
+            'r2p1': 'resnet2p1d',
+            'r3': 'resnet',
+        }[type],
+        'model_depth': d,
+        'n_pretrain_classes': n_pre
+    }

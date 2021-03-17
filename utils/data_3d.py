@@ -1,24 +1,24 @@
 import json
+from copy import deepcopy
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict, Mapping, Hashable
 
 import numpy as np
 import torch
+from monai.config import KeysCollection
 from monai.data import CacheDataset
 from monai.transforms import *
 from monai.transforms.utility.array import PILImageImage
 from tqdm import tqdm
 
+from utils.dicom_utils import ScanProtocol
+
 
 class MultimodalDataset(CacheDataset):
-    def __init__(self, imgs: List[List[np.ndarray]], labels: List[int], transform: Transform, num_classes: int):
-        super().__init__(imgs, transform)
-        self.labels = labels
+    def __init__(self, data: List[Dict], transform: Transform, num_classes: int):
+        super().__init__(data, transform)
         self.num_classes = num_classes
-
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
-        imgs: List[torch.Tensor] = super().__getitem__(index)
-        return torch.cat(imgs), self.labels[index]
+        self.labels = [data['label'] for data in self.data]
 
     def get_weight(self, strategy) -> torch.Tensor:
         if strategy == 'equal':
@@ -56,50 +56,60 @@ class ToTensorDevice(ToTensor):
         """
         return super().__call__(img).to(self.device)
 
-_folds = None
+class ToTensorDeviced(ToTensord):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.ToTensor`.
+    """
 
-def get_folds(args):
+    def __init__(self, keys: KeysCollection, device: torch.device = 'cuda', allow_missing_keys: bool = False) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+        """
+        super().__init__(keys, allow_missing_keys)
+        self.converter = ToTensorDevice(device)
+
+_folds = None
+_args = None
+
+def load_folds(args):
     global _folds
     if _folds is None:
-        img_keys = 'img',
-        transforms = Compose([
-            LoadImaged(img_keys),
-            NormalizeIntensityd(img_keys, nonzero=False),
-            AddChanneld(img_keys),
-            # ScaleIntensityd(img_keys),
-            # Spacingd(img_keys, pixdim=(1, 1, 1), mode='bilinear'),
-            Orientationd(img_keys, axcodes='PLI'),
+        _args = deepcopy(args)
+        modalities = list(ScanProtocol)
+        loader = Compose([
+            LoadImaged(modalities),
+            NormalizeIntensityd(modalities, nonzero=False),
+            AddChanneld(modalities),
+            Orientationd(modalities, axcodes='PLI'),
         ])
         folds_raw = json.load(open('folds.json'))
         _folds = []
-        with tqdm(total=sum(len(fold) for fold in folds_raw), ncols=80, desc='loading and normalizing data') as bar:
+
+        with tqdm(total=sum(len(fold) for fold in folds_raw), ncols=80, desc='loading folds') as bar:
             for fold_raw in folds_raw:
                 fold = []
                 for info in fold_raw:
-                    if info['subgroup'] not in args.target_dict:
-                        bar.update()
-                        continue
-                    label = args.target_dict[info['subgroup']]
-                    # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
-                    scans = sorted(info['scans'],
-                                   key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
-                    imgs = []
-                    for scan in scans[:3]:
-                        img = transforms({'img': scan})['img']
-                        if args.crop:
-                            img = img[img.shape[0] // 3:, :, img.shape[2] // 3:]
-                        imgs.append(img)
-                    fold.append((
-                        imgs,
-                        label,
-                    ))
+                    label = args.target_dict.get(info['subgroup'], None)
+                    if label is not None:
+                        # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
+                        scans = sorted(info['scans'], key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
+                        assert len(scans) >= 3
+                        scans = {
+                            protocol: scans[i]
+                            for i, protocol in enumerate(ScanProtocol)
+                        }
+                        data = loader(scans)
+                        data['label'] = label
+                        fold.append(data)
                     bar.update()
                 _folds.append(fold)
 
-    return _folds
-
+    return deepcopy(_folds)
 
 if __name__ == '__main__':
     from run_3d import get_args
     args = get_args()
-    get_folds(args)
+    load_folds(args)

@@ -1,15 +1,13 @@
-import os
 import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from model import ImageRecognitionModel
+from utils import data_legacy
+from model.model_legacy import ImageRecognitionModel
 from parser import parser
-from utils.data import load_data, ImageRecognitionDataset, targets
-
+from utils.data_legacy import targets, ImageRecognitionDataset, load_data
 
 if __name__ == '__main__':
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
@@ -59,14 +57,14 @@ if __name__ == '__main__':
         else:
             datasets = load_data('data')
             if args.train:
-                for target in args.targets:
+                for target in data_legacy.targets:
                     model = ImageRecognitionModel(ortn, args, target)
                     model.run_train({
                         split: datasets[split][ortn][target]
                         for split in ['train', 'val']
                     })
             if args.test:
-                for target in args.targets:
+                for target in data_legacy.targets:
                     model = ImageRecognitionModel(ortn, args, target, load_weights=True)
                     test_set = datasets['val'][ortn][target]
                     model.run_test(test_set)

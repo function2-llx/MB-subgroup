@@ -66,6 +66,11 @@ class Reporter:
         output = torch.softmax(logit, dim=0)
         self.y_score.append(output.detach().cpu().numpy())
 
+    def append_pred(self, pred: int, label: int):
+        self.y_true.append(label)
+        self.y_pred.append(pred)
+        self.y_score.append(np.eye(len(self.target_names))[pred])
+
 class Reported2d(Reporter):
     def __init__(self, report_dir, target_names: List[str]):
         super().__init__(self, report_dir, target_names)
