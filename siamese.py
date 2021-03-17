@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 
 import torch
 from torch import nn
@@ -34,7 +34,11 @@ class Siamese(ResNet):
             nn.Sigmoid(),
         )
 
-    def feature(self, x) -> torch.Tensor:
+    # a trick make DataParallel have multiple methods, not sure if this will work fine
+    def forward(self, impl: Callable[..., torch.Tensor], *args) -> torch.Tensor:
+        return impl(*args)
+
+    def feature(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -52,13 +56,8 @@ class Siamese(ResNet):
         return x
 
     def relation(self, x, y) -> torch.Tensor:
-        r = self.fc.forward(torch.cat([x, y], dim=1))
-        return r.view(-1)
-
-    def forward(self, x, y):
-        x = self.feature(x)
-        y = self.feature(y)
-        return self.relation(x, y)
+        r = self.fc.forward(torch.cat([x, y], dim=-1))
+        return r.squeeze(-1)
 
     @classmethod
     def from_base(cls, base: ResNet):

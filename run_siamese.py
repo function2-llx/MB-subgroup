@@ -1,15 +1,20 @@
 import itertools
 import logging
+import os
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Union
 
 import monai
 import torch
 import torch_optimizer as optim
+import torch.multiprocessing as mp
+import torch.distributed as dist
 from monai.data import DataLoader
 from monai.transforms import *
 from torch import nn
 from torch.nn import DataParallel, MSELoss
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data import DistributedSampler
 from tqdm import tqdm
 
 from siamese import generate_model, load_pretrained_model, PairDataset, Siamese
@@ -26,11 +31,15 @@ def get_args():
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--train', action='store_true')
+    parser.add_argument('--val_steps', type=int, default=0)
     parser.add_argument('--force_retrain', action='store_true')
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='equal')
     parser.add_argument('--seed', type=int, default=2333)
     parser.add_argument('--patience', type=int, default=5)
     parser.add_argument('--output_root', type=Path, default='output_siamese')
+    parser.add_argument('--world_size', type=int, default=2)
+    parser.add_argument('--start_rank', type=int, default=0, help='start rank of current node')
+    parser.add_argument('--n_gpu', type=int, default=2)
     parser.add_argument('--crop', action='store_true')
     parser.add_argument('--targets', choices=['all', 'G3G4'], default='all')
     parser.add_argument(
@@ -153,6 +162,12 @@ class Runner:
         ]
         return grouped_parameters
 
+    def create_r(self, labels: torch.Tensor):
+        batch_size = labels.shape[0]
+        x = labels[:, None].repeat(1, batch_size)
+        y = labels[None, :].repeat(batch_size, 1)
+        return (x == y).float()
+
     def run_fold(self, val_id: int):
         output_path = self.model_output_root / f'checkpoint-{val_id}.pth.tar'
         train_set, val_set = self.prepare_fold(val_id)
@@ -160,49 +175,56 @@ class Runner:
             logging.info(f'run cross validation on fold {val_id}')
             model = load_pretrained_model(self.args.pretrained_name)
             model.setup_fc()
-            if self.args.device == 'cuda' and torch.cuda.device_count() > 1:
-                logging.info(f'''using {torch.cuda.device_count()} GPUs\n''')
-                model = nn.DataParallel(model)
             model = model.to(self.args.device)
-            train_loader = DataLoader(PairDataset(train_set), batch_size=self.args.batch_size, shuffle=True)
+            model = DistributedDataParallel(model, [self.args.device])
+            # train_loader = DataLoader(PairDataset(train_set), batch_size=self.args.batch_size, shuffle=True)
+            # train_loader = DataLoader(train_set, batch_size=self.args.batch_size, shuffle=True)
+            sampler = DistributedSampler(train_set, num_replicas=self.args.world_size, rank=self.args.rank, shuffle=True)
+            train_loader = DataLoader(train_set, batch_size=self.args.batch_size, sampler=sampler, shuffle=False)
+            val_steps = self.args.val_steps
+            if val_steps == 0:
+                val_steps = len(train_loader)
             loss_fn = MSELoss()
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
             best_acc = 0
             patience = 0
+            step = 0
             for epoch in range(1, self.args.epochs + 1):
                 model.train()
-                for x, y, r in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
-                    x = x.to(self.args.device)
-                    y = y.to(self.args.device)
-                    r = r.float().to(self.args.device)
-                    r_ = model.forward(x, y)
-                    loss = loss_fn(r_, r)
+                for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
+                    cur_features = model.forward(model.module.feature, data['imgs'])
+                    all_features = [torch.empty(cur_features.shape) for _ in range(self.args.world_size)]
+                    dist.all_gather(all_features, cur_features)
+                    all_features = torch.cat(all_features)
+                    x = cur_features[:, None, :].repeat(1, all_features.shape[0], 1)
+                    y = all_features[None, :, :].repeat(cur_features.shape[0], 1, 1)
+                    r_pred = model.forward(model.module.relation, x, y)
+                    r_true = self.create_r(data['labels'])
+                    loss = loss_fn(r_pred, r_true)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
+                    step += 1
+                    if self.args.rank == 0 and step % val_steps == 0:
+                        val_acc = self.run_eval(model.module, train_set, val_set)
+                        logging.info(f'cur acc:  {val_acc}')
+                        logging.info(f'best acc: {best_acc}')
 
-                val_acc = self.run_eval(model.module if isinstance(model, DataParallel) else model, train_set, val_set)
-                logging.info(f'cur acc:  {val_acc}')
-                logging.info(f'best acc: {best_acc}')
-
-                if val_acc > best_acc:
-                    best_acc = val_acc
-                    torch.save(
-                        model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
-                        output_path,
-                    )
-                    logging.info(f'model updated, saved to {output_path}\n')
-                    patience = 0
-                else:
-                    patience += 1
-                    logging.info(f'patience {patience}/{self.args.patience}\n')
-                    if patience == self.args.patience:
-                        logging.info('run out of patience\n')
-                        break
+                        if val_acc > best_acc:
+                            best_acc = val_acc
+                            torch.save(model.module.state_dict(), output_path)
+                            logging.info(f'model updated, saved to {output_path}\n')
+                            patience = 0
+                        else:
+                            patience += 1
+                            logging.info(f'patience {patience}/{self.args.patience}\n')
+                            if patience == self.args.patience:
+                                logging.info('run out of patience\n')
+                                break
 
         model = generate_model(self.args.pretrained_name, len(self.args.target_names)).to(self.args.device)
         model.setup_fc()
-        # model.load_state_dict(torch.load(output_path))
+        model.load_state_dict(torch.load(output_path))
         model = model.to(self.args.device)
 
         self.run_eval(model, train_set, val_set, 'cross-val')
@@ -213,7 +235,7 @@ class Runner:
         with torch.no_grad():
             ref = []
             labels = []
-            for data in DataLoader(ref_set, batch_size=1, shuffle=False):
+            for data in tqdm(DataLoader(ref_set, batch_size=1, shuffle=False), ncols=80, desc='calculating ref'):
                 ref.append(model.feature(data['img']))
                 labels.append(data['label'])
             ref = torch.cat(ref).to(self.args.device)
@@ -232,6 +254,13 @@ class Runner:
 
         return acc / len(eval_set)
 
-if __name__ == '__main__':
-    runner = Runner(get_args())
+def main(gpu_id, args):
+    args.device = gpu_id
+    args.rank = args.start_rank + gpu_id
+    dist.init_process_group("gloo", rank=args.rank, world_size=args.world_size)
+    runner = Runner(args)
     runner.run()
+
+if __name__ == '__main__':
+    args = get_args()
+    mp.spawn(main, (args,), nprocs=args.n_gpu, join=True)
