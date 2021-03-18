@@ -13,7 +13,7 @@ from monai.transforms import LoadImage
 from tqdm import tqdm
 from tqdm import trange
 
-from utils.dicom import Plane, get_plane
+from utils.dicom_utils import Plane, get_plane
 
 random.seed(233333)
 

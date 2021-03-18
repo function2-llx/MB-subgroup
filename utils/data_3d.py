@@ -16,7 +16,7 @@ from utils.dicom_utils import ScanProtocol
 
 class MultimodalDataset(CacheDataset):
     def __init__(self, data: List[Dict], transform: Transform, num_classes: int):
-        super().__init__(data, transform)
+        super().__init__(data, transform, progress=False)
         self.num_classes = num_classes
         self.labels = [data['label'] for data in self.data]
 
@@ -86,6 +86,8 @@ def load_folds(args):
             Orientationd(modalities, axcodes='PLI'),
         ])
         folds_raw = json.load(open('folds.json'))
+        if args.debug:
+            folds_raw = [fold[:5] for fold in folds_raw]
         _folds = []
 
         with tqdm(total=sum(len(fold) for fold in folds_raw), ncols=80, desc='loading folds') as bar:

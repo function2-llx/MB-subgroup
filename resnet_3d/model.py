@@ -106,10 +106,13 @@ def setup_finetune(model, model_name, n_finetune_classes):
     else:
         tmp_model.fc = nn.Linear(tmp_model.fc.in_features, n_finetune_classes)
 
+
 def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes: Optional[int] = None):
     if pretrain_path:
         pretrain = torch.load(pretrain_path, map_location='cpu')
-        logging.info('loaded pretrained model from {}\n'.format(pretrain_path))
+        import torch.distributed as dist
+        if dist.get_rank() == 0:
+            logging.info('loaded pretrained model from {}\n'.format(pretrain_path))
         model.load_state_dict(pretrain['state_dict'])
 
         if n_finetune_classes:
