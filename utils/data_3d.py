@@ -10,6 +10,7 @@ from monai.data import CacheDataset
 from monai.transforms import *
 from monai.transforms.utility.array import PILImageImage
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
 
@@ -73,41 +74,44 @@ class ToTensorDeviced(ToTensord):
 
 _folds = None
 _args = None
+modalities = list(ScanProtocol)
+loader = Compose([
+    LoadImaged(modalities),
+    NormalizeIntensityd(modalities, nonzero=False),
+    AddChanneld(modalities),
+    Orientationd(modalities, axcodes='PLI'),
+])
+
+def load_info(info):
+    fold_id, info = info
+    label = _args.target_dict.get(info['subgroup'], None)
+    if label is None:
+        return None
+    # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
+    scans = sorted(info['scans'], key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
+    assert len(scans) >= 3
+    scans = {
+        protocol: scans[i]
+        for i, protocol in enumerate(ScanProtocol)
+    }
+    data = loader(scans)
+    data['label'] = label
+    return fold_id, data
 
 def load_folds(args):
-    global _folds
+    global _folds, _args
     if _folds is None:
         _args = deepcopy(args)
-        modalities = list(ScanProtocol)
-        loader = Compose([
-            LoadImaged(modalities),
-            NormalizeIntensityd(modalities, nonzero=False),
-            AddChanneld(modalities),
-            Orientationd(modalities, axcodes='PLI'),
-        ])
         folds_raw = json.load(open('folds.json'))
         if args.debug:
             folds_raw = [fold[:5] for fold in folds_raw]
-        _folds = []
 
-        with tqdm(total=sum(len(fold) for fold in folds_raw), ncols=80, desc='loading folds') as bar:
-            for fold_raw in folds_raw:
-                fold = []
-                for info in fold_raw:
-                    label = args.target_dict.get(info['subgroup'], None)
-                    if label is not None:
-                        # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
-                        scans = sorted(info['scans'], key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
-                        assert len(scans) >= 3
-                        scans = {
-                            protocol: scans[i]
-                            for i, protocol in enumerate(ScanProtocol)
-                        }
-                        data = loader(scans)
-                        data['label'] = label
-                        fold.append(data)
-                    bar.update()
-                _folds.append(fold)
+        folds_flattened = [(fold_id, info) for fold_id, fold_raw in enumerate(folds_raw) for info in fold_raw]
+        folds_flattened = process_map(load_info, folds_flattened, ncols=80, desc='loading data', chunksize=1, max_workers=5)
+        folds_flattened = filter(lambda x: x is not None, folds_flattened)
+        _folds = [[] for _ in range(len(args.target_names))]
+        for fold_id, data in folds_flattened:
+            _folds[fold_id].append(data)
 
     return deepcopy(_folds)
 

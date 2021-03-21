@@ -87,6 +87,7 @@ class Runner:
         if self.args.train:
             self.set_determinism()
         self.folds = folds
+        self.loss_fn = MSELoss()
 
     def run(self):
         for val_id in range(len(self.folds)):
@@ -147,7 +148,7 @@ class Runner:
             {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
              'lr': self.args.lr},
             {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': self.args.lr},
+             'lr': self.args.lr * 10},
         ]
         return grouped_parameters
 
@@ -167,9 +168,8 @@ class Runner:
             val_steps = self.args.val_steps
             if val_steps == 0:
                 val_steps = len(train_loader)
-            loss_fn = MSELoss()
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
-            best_acc = 0
+            best_loss = float('inf')
             # use a list for dist.broadcast_object_list
             patience = [0]
             step = 0
@@ -190,18 +190,18 @@ class Runner:
                         cur_labels[:, None].repeat(1, all_labels.shape[0]),
                         all_labels[None, :].repeat(cur_labels.shape[0], 1)
                     ).float()
-                    loss = loss_fn(r_pred, r_true)
+                    loss = self.loss_fn(r_pred, r_true)
                     loss.backward()
                     optimizer.step()
                     step += 1
                     if step % val_steps == 0:
                         if dist.get_rank() == 0:
-                            val_acc = self.run_eval(model.module, train_set, val_set)
-                            logging.info(f'cur acc:  {val_acc}')
-                            logging.info(f'best acc: {best_acc}')
+                            val_loss = self.run_eval(model.module, train_set, val_set)
+                            logging.info(f'cur loss:  {val_loss}')
+                            logging.info(f'best loss: {best_loss}')
 
-                            if val_acc > best_acc:
-                                best_acc = val_acc
+                            if val_loss < best_loss:
+                                best_loss = val_loss
                                 torch.save(model.module.state_dict(), output_path)
                                 logging.info(f'model updated, saved to {output_path}\n')
                                 patience[0] = 0
@@ -232,7 +232,7 @@ class Runner:
 
     def run_eval(self, model: Siamese, ref_set: MultimodalDataset, eval_set: MultimodalDataset, test_name: Optional[str] = None) -> float:
         model.eval()
-
+        eval_loss = 0
         with torch.no_grad():
             ref = []
             labels = []
@@ -240,6 +240,7 @@ class Runner:
                 ref.append(model.feature(data['img']))
                 labels.append(data['label'].item())
             ref = torch.cat(ref).to(self.args.device)
+            labels = torch.tensor(labels).to(self.args.device)
 
             acc = 0
             for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
@@ -247,13 +248,15 @@ class Runner:
                 label = data['label'].item()
                 x = model.feature(img)
                 x = x.repeat(len(ref_set), 1)
-                r = model.relation(ref, x).view(-1)
-                pred = labels[r.argmax().item()]
+                r_pred = model.relation(ref, x).view(-1)
+                r_true = torch.eq(labels, label).float()
+                eval_loss += self.loss_fn(r_pred, r_true)
+                pred = labels[r_pred.argmax().item()].item()
                 acc += pred == label
                 if test_name:
                     self.reporters[test_name].append_pred(pred, label)
-
-        return acc / len(eval_set)
+        return eval_loss
+        # return acc / len(eval_set)
 
 def main(gpu_id, args, folds):
     args.device = gpu_id
