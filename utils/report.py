@@ -55,9 +55,9 @@ class Reporter:
             report[target_name]['auc'] = all_auc[i]
 
         report['weighted avg']['accuracy'] = report.pop('accuracy')
-        pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.tsv'), sep='\t')
+        pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.csv'))
         pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names)\
-            .to_csv(self.report_dir / 'cm.tsv', sep='\t')
+            .to_csv(self.report_dir / 'cm.csv')
 
     def append(self, logit: torch.FloatTensor, label: int):
         self.y_true.append(label)

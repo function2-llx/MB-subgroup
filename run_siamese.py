@@ -1,25 +1,21 @@
-import itertools
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import Optional
 
-import monai
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch_optimizer as optim
 from monai.data import DataLoader
-from monai.transforms import *
-from torch import nn
 from torch.nn import MSELoss
+from torch.nn import functional as F
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 from tqdm import tqdm
 
+from runner_base import RunnerBase
 from siamese import generate_model, load_pretrained_model, Siamese
-from utils.data_3d import load_folds, MultimodalDataset, ToTensorDeviced
-from utils.dicom_utils import ScanProtocol
-from utils.report import Reporter
+from utils.data_3d import load_folds, MultimodalDataset
 
 
 def get_args():
@@ -65,6 +61,7 @@ def get_args():
                         type=int,
                         help='slices of inputs, temporal size in terms of videos')
     parser.add_argument('--aug', choices=['no', 'weak', 'strong'], default='weak')
+    parser.add_argument('--feature_size', type=int, default=128)
     args = parser.parse_args()
     args.target_names = {
         'all': ['WNT', 'SHH', 'G3', 'G4'],
@@ -73,94 +70,40 @@ def get_args():
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
     return args
 
-class Runner:
+class Runner(RunnerBase):
     def __init__(self, args, folds):
-        self.args = args
-        self.model_output_root: Path = args.model_output_root
-        self.model_output_root.mkdir(parents=True, exist_ok=True)
-
-        if dist.get_rank() == 0:
-            self.reporters: Dict[str, Reporter] = {
-                test_name: Reporter(self.model_output_root / test_name, self.args.target_names)
-                for test_name in ['cross-val']
-            }
-        if self.args.train:
-            self.set_determinism()
-        self.folds = folds
+        super().__init__(args, folds)
         self.loss_fn = MSELoss()
 
-    def run(self):
-        for val_id in range(len(self.folds)):
-            self.run_fold(val_id)
-
-        if dist.get_rank() == 0:
-            for reporter in self.reporters.values():
-                reporter.report()
-
-    def set_determinism(self):
-        seed = self.args.seed
-        monai.utils.set_determinism(seed)
-        if dist.get_rank() == 0:
-            logging.info(f'set random seed of {seed}\n')
-
-    def prepare_val_fold(self, val_id: int) -> MultimodalDataset:
-        modalities = list(ScanProtocol)
-        val_fold = self.folds[val_id]
-        val_transforms = Compose([
-            Resized(
-                modalities,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+    # return loss and predictions
+    def forward(self, features, ref_features, labels, ref_labels, reg=True):
+        mse = torch.mean(
+            F.mse_loss(
+                features[:, None, :].repeat(1, ref_features.shape[0], 1),
+                ref_features[None, :, :].repeat(features.shape[0], 1, 1),
+                reduction='none'
             ),
-            ConcatItemsd(modalities, 'img'),
-            SelectItemsd(['img', 'label']),
-            ToTensorDeviced('img', self.args.device),
-        ])
-        val_set = MultimodalDataset(val_fold, val_transforms, len(self.args.target_names))
-        return val_set
-
-    def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
-        train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
-        aug: List[Transform] = []
-        modalities = list(ScanProtocol)
-        if self.args.aug == 'weak':
-            aug = [
-                RandFlipd(modalities, prob=0.5, spatial_axis=0),
-                RandRotate90d(modalities, prob=0.5),
-            ]
-        elif self.args.aug == 'strong':
-            raise NotImplementedError
-        train_transforms = Compose(aug + [
-            Resized(
-                modalities,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-            ),
-            ConcatItemsd(modalities, 'img'),
-            SelectItemsd(['img', 'label']),
-            ToTensorDeviced('img', self.args.device),
-        ])
-        train_set = MultimodalDataset(train_folds, train_transforms, len(self.args.target_names))
-        return train_set, self.prepare_val_fold(val_id)
-
-    def get_grouped_parameters(self, model: nn.Module):
-        params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
-        no_decay = ['fc']
-        grouped_parameters = [
-            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
-             'lr': self.args.lr},
-            {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': self.args.lr * 10},
-        ]
-        return grouped_parameters
+            dim=-1,
+        )
+        pos_mask = torch.eq(
+            labels[:, None].repeat(1, ref_labels.shape[0]),
+            ref_labels[None, :].repeat(labels.shape[0], 1),
+        )
+        loss = (mse[pos_mask].sum() - mse[~pos_mask].sum()) / mse.numel()
+        if reg:
+            loss += (features ** 4).mean()
+        preds = ref_labels[mse.argmin(dim=1)]
+        return loss, preds
 
     def run_fold(self, val_id: int):
-        output_path = self.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         train_set, val_set = self.prepare_fold(val_id)
         torch.autograd.set_detect_anomaly(True)
         if self.args.train:
             if dist.get_rank() == 0:
                 logging.info(f'run cross validation on fold {val_id}')
             model = load_pretrained_model(self.args.pretrained_name)
-            model.setup_fc()
+            model.setup_fc(self.args.feature_size)
             model = model.to(self.args.device)
             model = DistributedDataParallel(model, [self.args.device], broadcast_buffers=False)
             sampler = DistributedSampler(train_set, num_replicas=self.args.world_size, rank=dist.get_rank(), shuffle=True)
@@ -179,18 +122,9 @@ class Runner:
                     optimizer.zero_grad()
                     cur_features = model.forward(model.module.feature, data['img'])
                     all_features = self.all_gather(cur_features)
-                    r_pred = model.forward(
-                        model.module.relation,
-                        cur_features[:, None, :].repeat(1, all_features.shape[0], 1),
-                        all_features[None, :, :].repeat(cur_features.shape[0], 1, 1)
-                    )
                     cur_labels = data['label'].to(self.args.device)
                     all_labels = self.all_gather(cur_labels)
-                    r_true = torch.eq(
-                        cur_labels[:, None].repeat(1, all_labels.shape[0]),
-                        all_labels[None, :].repeat(cur_labels.shape[0], 1)
-                    ).float()
-                    loss = self.loss_fn(r_pred, r_true)
+                    loss, _ = self.forward(cur_features, all_features, cur_labels, all_labels, reg=True)
                     loss.backward()
                     optimizer.step()
                     step += 1
@@ -218,7 +152,7 @@ class Runner:
                 break
 
         model = generate_model(self.args.pretrained_name, len(self.args.target_names)).to(self.args.device)
-        model.setup_fc()
+        model.setup_fc(self.args.feature_size)
         model.load_state_dict(torch.load(output_path))
         model = model.to(self.args.device)
 
@@ -234,24 +168,31 @@ class Runner:
         model.eval()
         eval_loss = 0
         with torch.no_grad():
-            ref = []
-            labels = []
+            ref_features = []
+            ref_labels = []
             for data in tqdm(DataLoader(ref_set, batch_size=1, shuffle=False), ncols=80, desc='calculating ref'):
-                ref.append(model.feature(data['img']))
-                labels.append(data['label'].item())
-            ref = torch.cat(ref).to(self.args.device)
-            labels = torch.tensor(labels).to(self.args.device)
+                ref_features.append(model.feature(data['img']))
+                ref_labels.append(data['label'].item())
+            ref_features = torch.cat(ref_features).to(self.args.device)
+            ref_labels = torch.tensor(ref_labels).to(self.args.device)
 
             acc = 0
             for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
                 img = data['img'].to(self.args.device)
-                label = data['label'].item()
-                x = model.feature(img)
-                x = x.repeat(len(ref_set), 1)
-                r_pred = model.relation(ref, x).view(-1)
-                r_true = torch.eq(labels, label).float()
-                eval_loss += self.loss_fn(r_pred, r_true)
-                pred = labels[r_pred.argmax().item()].item()
+                label = data['label'].to(self.args.device)
+                feature = model.feature(img)
+                loss, pred = self.forward(feature, ref_features, label, ref_labels, reg=False)
+                label = label.item()
+                pred = pred.item()
+                # x = x.repeat(len(ref_set), 1)
+                # r_pred: torch.Tensor = model.relation(ref, x).view(-1)
+                # r_true = torch.eq(labels, label).float()
+                eval_loss += loss
+                # target_rank = [[] for _ in range(len(self.args.target_names))]
+                # for rank, ref_label in zip(r_pred.argsort(), labels):
+                #     target_rank[ref_label.item()].append(rank.item())
+                # pred = np.argmax(list(map(np.mean, target_rank)))
+                # pred = ref_labels[r_pred.argmax().item()].item()
                 acc += pred == label
                 if test_name:
                     self.reporters[test_name].append_pred(pred, label)
@@ -265,18 +206,20 @@ def main(gpu_id, args, folds):
         / f'{args.targets}' \
         / f'{args.aug}_aug' \
         / f'{args.pretrained_name}' \
-        / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
+        / 'bs{batch_size},lr{lr},{sample_size},{sample_slices},f{feature_size}'.format(**args.__dict__)
     if rank == 0:
+        handlers = [logging.StreamHandler()]
+        if args.train:
+            args.model_output_root.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(args.model_output_root / 'train.log', 'w'))
         logging.basicConfig(
             format='%(asctime)s [%(levelname)s] %(message)s',
             datefmt=logging.Formatter.default_time_format,
             level=logging.INFO,
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(args.model_output_root / 'train.log', 'w'),
-            ],
+            handlers=handlers
         )
     else:
+        # other processes print to screen
         logging.basicConfig(
             format='%(asctime)s [%(levelname)s] %(message)s',
             datefmt=logging.Formatter.default_time_format,

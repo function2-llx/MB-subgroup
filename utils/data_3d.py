@@ -1,15 +1,12 @@
 import json
+from argparse import Namespace
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Tuple, Union, Dict, Mapping, Hashable
+from typing import List, Dict, Optional
 
-import numpy as np
 import torch
-from monai.config import KeysCollection
 from monai.data import CacheDataset
 from monai.transforms import *
-from monai.transforms.utility.array import PILImageImage
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
@@ -43,37 +40,8 @@ class MultimodalDataset(CacheDataset):
         else:
             raise ValueError(f'unsupported weight strategy of {strategy}')
 
-class ToTensorDevice(ToTensor):
-    """
-    Converts the input image to a tensor without applying any other transformations and to device.
-    """
-
-    def __init__(self, device: torch.device = 'cuda'):
-        self.device = device
-
-    def __call__(self, img: Union[np.ndarray, torch.Tensor, PILImageImage]) -> torch.Tensor:
-        """
-        Apply the transform to `img` and make it contiguous and on device.
-        """
-        return super().__call__(img).to(self.device)
-
-class ToTensorDeviced(ToTensord):
-    """
-    Dictionary-based wrapper of :py:class:`monai.transforms.ToTensor`.
-    """
-
-    def __init__(self, keys: KeysCollection, device: torch.device = 'cuda', allow_missing_keys: bool = False) -> None:
-        """
-        Args:
-            keys: keys of the corresponding items to be transformed.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            allow_missing_keys: don't raise exception if key is missing.
-        """
-        super().__init__(keys, allow_missing_keys)
-        self.converter = ToTensorDevice(device)
-
 _folds = None
-_args = None
+_args: Optional[Namespace] = None
 modalities = list(ScanProtocol)
 loader = Compose([
     LoadImaged(modalities),

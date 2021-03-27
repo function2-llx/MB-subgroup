@@ -46,7 +46,7 @@ if __name__ == '__main__':
                 if exists:
                     input = ImageRecognitionDataset.normalize(img).to(device).unsqueeze(0)
                     input.requires_grad_()
-                    logit = model.forward(input)[0]
+                    logit = model.forward_calc(input)[0]
                     if logit.argmax().item():
                         from utils.gradcam import GradCam, show_cam_on_image
                         grad_cam = GradCam(model=model.resnet, feature_module=model.resnet.layer4, target_layer_names=['1'], use_cuda=True)

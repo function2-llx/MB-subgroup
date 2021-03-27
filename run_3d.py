@@ -1,22 +1,17 @@
-import itertools
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Optional
 
-import monai
 import torch
 import torch_optimizer as optim
 from monai.data import DataLoader
-from monai.transforms import *
 from torch import nn
 from torch.nn import CrossEntropyLoss, DataParallel, functional as F
 from tqdm import tqdm
 
-import siamese
 from resnet_3d.utils import get_pretrain_config
-from utils.data_3d import load_folds, MultimodalDataset, ToTensorDeviced
-from utils.dicom_utils import ScanProtocol
-from utils.report import Reporter
+from runner_base import RunnerBase
+from utils.data_3d import MultimodalDataset, load_folds
 
 
 def generate_model(pretrained_name: str, n_output: Optional[int] = None) -> nn.Module:
@@ -80,98 +75,17 @@ def get_args():
         'G3G4': ['G3', 'G4'],
     }[args.targets]
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
+    args.model_output_root = args.output_root \
+        / f'{args.targets}' \
+        / f'{args.aug}_aug' \
+        / f'{args.pretrained_name}' \
+        / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
+
     return args
 
-class Runner:
-    def __init__(self, args):
-        self.args = args
-        self.model_output_root: Path = args.output_root \
-            / f'{args.targets}' \
-            / f'{args.aug}_aug' \
-            / f'{args.pretrained_name}' \
-            / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
-        self.model_output_root.mkdir(parents=True, exist_ok=True)
-        self.reporters = {
-            test_name: Reporter(self.model_output_root / test_name, self.args.target_names)
-            for test_name in ['cross-val']
-        }
-
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            datefmt=logging.Formatter.default_time_format,
-            level=logging.INFO,
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(self.model_output_root / 'train.log', 'w'),
-            ],
-        )
-        if self.args.train:
-            self.set_determinism()
-        self.folds = load_folds(self.args)
-
-    def run(self):
-        for val_id in range(len(self.folds)):
-            self.run_fold(val_id)
-
-        for reporter in self.reporters.values():
-            reporter.report()
-
-    def set_determinism(self):
-        seed = self.args.seed
-        monai.utils.set_determinism(seed)
-        logging.info(f'set random seed of {seed}\n')
-
-    def prepare_val_fold(self, val_id: int) -> MultimodalDataset:
-        modalities = list(ScanProtocol)
-        val_fold = self.folds[val_id]
-        val_transforms = Compose([
-            Resized(
-                modalities,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-            ),
-            ConcatItemsd(modalities, 'img'),
-            SelectItemsd(['img', 'label']),
-            ToTensorDeviced('img', self.args.device),
-        ])
-        val_set = MultimodalDataset(val_fold, val_transforms, len(self.args.target_names))
-        return val_set
-
-    def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
-        train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
-        aug: List[Transform] = []
-        modalities = list(ScanProtocol)
-        if self.args.aug == 'weak':
-            aug = [
-                RandFlipd('img', prob=0.5, spatial_axis=0),
-                RandRotate90d('img', prob=0.5),
-            ]
-        elif self.args.aug == 'strong':
-            raise NotImplementedError
-        train_transforms = Compose(aug + [
-            Resized(
-                modalities,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-            ),
-            ConcatItemsd(modalities, 'img'),
-            SelectItemsd(['img', 'label']),
-            ToTensorDeviced('img', self.args.device),
-        ])
-        train_set = MultimodalDataset(train_folds, train_transforms, len(self.args.target_names))
-        return train_set, self.prepare_val_fold(val_id)
-
-    def get_grouped_parameters(self, model: nn.Module):
-        params = model.parameters()
-        no_decay = ['fc']
-        grouped_parameters = [
-            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
-             'lr': self.args.lr},
-            {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': self.args.lr},
-        ]
-        return grouped_parameters
-
+class Runner(RunnerBase):
     def run_fold(self, val_id: int):
-        output_path = self.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         if self.args.train:
             logging.info(f'run cross validation on fold {val_id}')
             model = load_pretrained_model(self.args.pretrained_name, len(self.args.target_names))
@@ -237,5 +151,6 @@ class Runner:
         return eval_loss
 
 if __name__ == '__main__':
-    runner = Runner(get_args())
+    args = get_args()
+    runner = Runner(get_args(), load_folds(args))
     runner.run()
