@@ -3,10 +3,11 @@ from typing import Optional, Tuple, Callable
 import torch
 from torch import nn
 from torch.utils.data import Dataset
+from torch.utils.data.dataset import T_co
 
 from resnet_3d.models.resnet import ResNet
 from resnet_3d.utils import get_pretrain_config
-from utils.data_3d import MultimodalDataset
+from utils.data import MultimodalDataset
 
 
 class PairDataset(Dataset):
@@ -22,16 +23,15 @@ class PairDataset(Dataset):
         return len(self.dataset) ** 2
 
 class Siamese(ResNet):
-    def setup_fc(self, n_output):
+    def setup_fc(self):
         from math import sqrt
-        in_features = self.fc.in_features
-        n_hidden = int(sqrt(in_features * n_output))
+        in_features = self.fc.in_features * 2
+        n_hidden = int(sqrt(in_features))
         self.fc = nn.Sequential(
-            nn.Dropout(0.2),
             nn.Linear(in_features, n_hidden),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(n_hidden, n_output),
+            nn.Linear(n_hidden, 1),
+            nn.Sigmoid(),
         )
 
     # a trick make DataParallel have multiple methods, not sure if this will work fine
@@ -53,12 +53,11 @@ class Siamese(ResNet):
         x = self.avgpool(x)
 
         x = x.view(x.size(0), -1)
-        x = self.fc(x)
         return x
 
-    # def relation(self, x, y) -> torch.Tensor:
-    #     r = self.fc.forward(torch.cat([x, y], dim=-1))
-    #     return r.squeeze(-1)
+    def relation(self, x, y) -> torch.Tensor:
+        r = self.fc.forward(torch.cat([x, y], dim=-1))
+        return r.squeeze(-1)
 
     @classmethod
     def from_base(cls, base: ResNet):

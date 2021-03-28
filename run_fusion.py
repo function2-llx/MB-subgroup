@@ -14,8 +14,8 @@ from torch_optimizer import AdaBelief
 from tqdm import tqdm
 
 from models.fusion import FusionNetwork
-from utils.data import load_folds
-from utils.data_3d import MultimodalDataset
+from utils.data2d import load_folds
+from utils.data import MultimodalDataset
 from utils.dicom_utils import ScanProtocol
 from utils.report import Reporter
 
