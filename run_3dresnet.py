@@ -8,19 +8,17 @@ from monai.data import DataLoader
 from torch import nn
 from torch.nn import CrossEntropyLoss, DataParallel, functional as F
 from tqdm import tqdm
+from torchvision.models import resnet18
 
 from medical_net.model import generate_model
 from medical_net.models.resnet import ResNet
 from runner_base import RunnerBase
-from utils.data import MultimodalDataset, load_folds
-
+from utils.data import MultimodalDataset, load_folds, BalancedSampler
 
 def get_args():
     from args import parser, parse_args
-    parser.add_argument('--output_root', type=Path, default='output_classify')
-    parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
-    parser.add_argument('--crop', action='store_true')
-    parser.add_argument('--targets', choices=['all', 'G3G4'], default='all')
+    parser.add_argument('--output_root', type=Path, default='output_mednet')
+    parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='equal')
     parser.add_argument('--sample_size',
                         default=448,
                         type=int,
@@ -33,7 +31,7 @@ def get_args():
     args.model_output_root = args.output_root \
         / f'{args.targets}' \
         / f'{args.aug}_aug' \
-        / f'd{args.model_depth}' \
+        / (f'd{args.model_depth}' + ('-8' if args.use8 else '')) \
         / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
     args.resnet_shortcut = {
         10: 'B',
@@ -41,11 +39,7 @@ def get_args():
         34: 'A',
         50: 'B',
     }[args.model_depth]
-    args.pretrain_path = Path(f'medical_net/pretrain/resnet_{args.model_depth}_23dataset.pth')
-    args.target_names = {
-        'all': ['WNT', 'SHH', 'G3', 'G4'],
-        'G3G4': ['G3', 'G4'],
-    }[args.targets]
+    args.pretrain_path = Path(f'medical_net/pretrain/resnet_{args.model_depth}{"" if args.use8 else "_23dataset"}.pth')
     args.rank = 0
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
     return args
@@ -73,7 +67,11 @@ class Runner(RunnerBase):
             train_set, val_set = self.prepare_fold(val_id)
             logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
             model = nn.DataParallel(model)
-            train_loader = DataLoader(train_set, batch_size=self.args.batch_size, shuffle=True)
+            train_loader = DataLoader(
+                train_set,
+                batch_size=self.args.batch_size,
+                sampler=BalancedSampler(train_set, total=self.args.val_steps),
+            )
             loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.args.weight_strategy).to(self.args.device))
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
             best_loss = float('inf')

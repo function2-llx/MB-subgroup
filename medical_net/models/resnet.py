@@ -197,6 +197,8 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def encode(self, x):
+        batch_size = x.shape[0]
+        x = x.view(-1, 1, *x.shape[2:])
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -205,13 +207,18 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-
+        x = x.view(batch_size, -1, *x.shape[1:]).mean(dim=1)
         return x
 
     def classify(self, x):
-        x = self.encode(x)
-        x = self.avg_pool(x).view(x.shape[0], -1)
+        x = self.feature(x)
         x = self.fc(x)
+        return x
+
+    def feature(self, x):
+        x = self.encode(x)
+        x = self.avg_pool(x)
+        x = x.view(x.shape[0], -1)
         return x
 
     def seg(self, x):

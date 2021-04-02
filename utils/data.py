@@ -1,15 +1,21 @@
+import itertools
 import json
+import random
+from argparse import Namespace
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Iterator, Optional, Tuple
 
+import numpy as np
 import torch
 from monai.data import CacheDataset
 from monai.transforms import *
+from torch.utils.data import Sampler
+from torch.utils.data.sampler import T_co
 from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
-
+from utils.to_tensor import ToTensorDeviced
 
 class MultimodalDataset(CacheDataset):
     def __init__(self, data: List[Dict], transform: Transform, num_classes: int):
@@ -39,8 +45,36 @@ class MultimodalDataset(CacheDataset):
         else:
             raise ValueError(f'unsupported weight strategy of {strategy}')
 
+class BalancedSampler(Sampler):
+    def __init__(self, dataset: MultimodalDataset, total: Optional[int] = None):
+        super().__init__(dataset)
+        self.indexes = {}
+        for i, data in enumerate(dataset):
+            self.indexes.setdefault(data['label'], []).append(i)
+        self.labels = list(self.indexes.keys())
+
+        if total is None:
+            self.total = len(self.labels) * max([len(v) for v in self.indexes.values()])
+        else:
+            self.total = total
+
+    def __iter__(self) -> Iterator[T_co]:
+        pointers = {label: len(indexes) - 1 for label, indexes in self.indexes.items()}
+        label_id = 0
+        for _ in range(self.total):
+            label = self.labels[label_id]
+            pointers[label] += 1
+            if pointers[label] == len(self.indexes[label]):
+                pointers[label] = 0
+                random.shuffle(self.indexes[label])
+            yield self.indexes[label][pointers[label]]
+            label_id = (label_id + 1) % len(self.labels)
+
+    def __len__(self):
+        return self.total
+
 _folds = None
-_args = None
+_args: Optional[Namespace] = None
 modalities = list(ScanProtocol)
 loader = Compose([
     LoadImaged(modalities),
@@ -76,13 +110,13 @@ def load_folds(args):
         folds_flattened = [(fold_id, info) for fold_id, fold_raw in enumerate(folds_raw) for info in fold_raw]
         folds_flattened = process_map(load_info, folds_flattened, ncols=80, desc='loading data', chunksize=1, max_workers=5)
         folds_flattened = filter(lambda x: x is not None, folds_flattened)
-        _folds = [[] for _ in range(len(args.target_names))]
+        _folds = [[] for _ in range(len(folds_raw))]
         for fold_id, data in folds_flattened:
             _folds[fold_id].append(data)
 
     return deepcopy(_folds)
 
 if __name__ == '__main__':
-    from run_classify import get_args
+    from run_3dresnet import get_args
     args = get_args()
     load_folds(args)

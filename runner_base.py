@@ -78,6 +78,8 @@ class RunnerBase(ABC):
         if self.args.train:
             self.set_determinism()
 
+
+
     def setup_logging(self):
         args = self.args
         handlers = [logging.StreamHandler()]
@@ -113,18 +115,33 @@ class RunnerBase(ABC):
             aug = [
                 RandFlipd(self.args.protocols, prob=0.5, spatial_axis=0),
                 RandRotate90d(self.args.protocols, prob=0.5),
-            ]
+                Resized(
+                    self.args.protocols,
+                    spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                ),
+                ConcatItemsd(self.args.protocols, 'img'),
+                SelectItemsd(['img', 'label']),
+                ToTensorDeviced('img', self.args.device),
+            ])
         elif self.args.aug == 'strong':
-            raise NotImplementedError
-        train_transforms = Compose(aug + [
-            Resized(
-                self.args.protocols,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-            ),
-            ConcatItemsd(self.args.protocols, 'img'),
-            SelectItemsd(['img', 'label']),
-            ToTensorDeviced('img', self.args.device),
-        ])
+            train_transforms = Compose([
+                RandAffined(
+                    keys=self.args.protocols,
+                    mode="bilinear",
+                    prob=0.8,
+                    spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                    translate_range=(40, 40, 2),
+                    rotate_range=(np.pi / 36, np.pi / 36, np.pi),
+                    scale_range=(0.15, 0.15, 0.15),
+                    padding_mode="border",
+                ),
+                ConcatItemsd(self.args.protocols, 'img'),
+                SelectItemsd(['img', 'label']),
+                ToTensorDeviced('img', self.args.device),
+            ])
+        else:
+            raise ValueError()
+
         train_set = MultimodalDataset(train_folds, train_transforms, len(self.args.target_names))
         return train_set, self.prepare_val_fold(val_id)
 

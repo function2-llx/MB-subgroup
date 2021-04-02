@@ -7,6 +7,7 @@ from args import parser
 from .models.resnet import ResNet
 
 parser.add_argument('--model_depth', type=int, choices=[10, 18, 34, 50])
+parser.add_argument('--use8', action='store_true', help='use model pre-trained on 8 datasets')
 parser.add_argument(
     '--n_seg_classes',
     default=2,

@@ -6,22 +6,24 @@ import torch
 import torch_optimizer as optim
 from monai.data import DataLoader
 from torch import nn
-from torch.nn import MSELoss, DataParallel
-from torch.nn import functional as F
+from torch.nn import CrossEntropyLoss, DataParallel, functional as F
 from tqdm import tqdm
 
-from medical_net.model import generate_model
-from medical_net.models.resnet import ResNet
+# from medical_net.model import generate_model
+# from medical_net.models.resnet import ResNet
+from resnet_3d.model import generate_model
 from runner_base import RunnerBase
-from utils.data import load_folds, MultimodalDataset, BalancedSampler
+from utils.data import MultimodalDataset, load_folds, BalancedSampler
 
 
 def get_args():
     from args import parser, parse_args
-    # parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='equal')
-    parser.add_argument('--output_root', type=Path, default='output_siamese')
+    parser.add_argument('--output_root', type=Path, default='output_classify')
+    parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
+    parser.add_argument('--crop', action='store_true')
+    parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
     parser.add_argument('--sample_size',
-                        default=224,
+                        default=448,
                         type=int,
                         help='Height and width of inputs')
     parser.add_argument('--sample_slices',
@@ -29,12 +31,11 @@ def get_args():
                         type=int,
                         help='slices of inputs, temporal size in terms of videos')
     args = parse_args()
-    args.rank = 0
     args.model_output_root = args.output_root \
         / f'{args.targets}' \
         / f'{args.aug}_aug' \
         / f'd{args.model_depth}' \
-        / 'bs{batch_size},lr{lr},{sample_size},{sample_slices}'.format(**args.__dict__)
+        / 'bs{batch_size},lr{lr},{weight_strategy},{sample_size},{sample_slices}'.format(**args.__dict__)
     args.resnet_shortcut = {
         10: 'B',
         18: 'A',
@@ -42,12 +43,18 @@ def get_args():
         50: 'B',
     }[args.model_depth]
     args.pretrain_path = Path(f'medical_net/pretrain/resnet_{args.model_depth}_23dataset.pth')
+    args.target_names = {
+        'all': ['WNT', 'SHH', 'G3', 'G4'],
+        'WS': ['WNT', 'SHH'],
+        'G3G4': ['G3', 'G4'],
+    }[args.targets]
+    args.rank = 0
+    args.target_dict = {name: i for i, name in enumerate(args.target_names)}
     return args
 
 class Runner(RunnerBase):
     def __init__(self, args, folds):
         super().__init__(args, folds)
-        self.loss_fn = MSELoss()
 
     def get_grouped_parameters(self, model: nn.Module):
         params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
@@ -56,62 +63,48 @@ class Runner(RunnerBase):
             {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
              'lr': self.args.lr},
             {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': self.args.lr * 5},
+             'lr': self.args.lr * 10},
         ]
         return grouped_parameters
 
-    def forward(self, features, ref_features, labels, ref_labels, reg=False):
-        dis = torch.mean(
-            F.mse_loss(
-                features[:, None, :].repeat(1, ref_features.shape[0], 1),
-                ref_features[None, :, :].repeat(features.shape[0], 1, 1),
-                reduction='none',
-            ),
-            dim=-1,
-        )
-        pos_mask = torch.eq(
-            labels[:, None].repeat(1, ref_labels.shape[0]),
-            ref_labels[None, :].repeat(labels.shape[0], 1)
-        ).bool()
-        loss = (dis[pos_mask].sum() - dis[~pos_mask].sum()) / dis.numel()
-        if reg:
-            loss += (features ** 2).mean()
-
-        pred = ref_labels[dis.argmin(dim=1)]
-        return loss, pred
-
     def run_fold(self, val_id: int):
         output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
-        train_set, val_set = self.prepare_fold(val_id)
         if self.args.train:
             logging.info(f'run cross validation on fold {val_id}')
-            # model = load_pretrained_model(self.args.pretrained_name)
-            model = generate_model(args, pretrain=True)
-            model = model.to(self.args.device)
-            model = DataParallel(model)
+            model = generate_model(self.args, pretrain=True)
+            train_set, val_set = self.prepare_fold(val_id)
+            logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
+            model = nn.DataParallel(model)
             train_loader = DataLoader(
                 train_set,
                 batch_size=self.args.batch_size,
                 sampler=BalancedSampler(train_set, total=self.args.val_steps),
             )
+            loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.args.weight_strategy).to(self.args.device))
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
             best_loss = float('inf')
             patience = 0
             for epoch in range(1, self.args.epochs + 1):
                 model.train()
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
+                    imgs = data['img'].to(self.args.device)
+                    labels = data['label'].to(self.args.device)
+                    logits = model.forward(type(model.module).classify, imgs)
+                    loss = loss_fn(logits, labels)
                     optimizer.zero_grad()
-                    features = model.forward(type(model.module).feature, data['img'].to(self.args.device))
-                    loss, _ = self.forward(features, features, data['label'], data['label'], reg=True)
                     loss.backward()
                     optimizer.step()
-                val_loss = self.run_eval(model.module, train_set, val_set)
+
+                val_loss = self.run_eval(model.module, val_set)
                 logging.info(f'cur loss:  {val_loss}')
                 logging.info(f'best loss: {best_loss}')
 
                 if val_loss < best_loss:
                     best_loss = val_loss
-                    torch.save(model.module.state_dict(), output_path)
+                    torch.save(
+                        model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict(),
+                        output_path,
+                    )
                     logging.info(f'model updated, saved to {output_path}\n')
                     patience = 0
                 else:
@@ -120,40 +113,30 @@ class Runner(RunnerBase):
                     if patience == self.args.patience:
                         logging.info('run out of patience\n')
                         break
+        else:
+            val_set = self.prepare_val_fold(val_id)
 
         model = generate_model(self.args, pretrain=False)
         model.load_state_dict(torch.load(output_path))
-        model = model.to(self.args.device)
+        self.run_eval(model, val_set, 'cross-val')
 
-        self.run_eval(model, train_set, val_set, 'cross-val')
-
-    def run_eval(self, model: ResNet, ref_set: MultimodalDataset, eval_set: MultimodalDataset, test_name: Optional[str] = None) -> float:
+    def run_eval(self, model: ResNet, eval_dataset: MultimodalDataset, test_name: Optional[str] = None) -> float:
         model.eval()
         eval_loss = 0
         with torch.no_grad():
-            ref_features = []
-            ref_labels = []
-            for data in tqdm(DataLoader(ref_set, batch_size=1, shuffle=False), ncols=80, desc='calculating ref'):
-                ref_features.append(model.feature(data['img']))
-                ref_labels.append(data['label'].item())
-            ref_features = torch.cat(ref_features).to(self.args.device)
-            ref_labels = torch.tensor(ref_labels).to(self.args.device)
-
-            acc = 0
-            for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
-                feature = model.feature(data['img'].to(self.args.device))
+            for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
+                img = data['img'].to(self.args.device)
                 label = data['label'].to(self.args.device)
-                loss, pred = self.forward(feature, ref_features, label, ref_labels, reg=False)
-                eval_loss += loss.item()
-                pred = ref_labels[pred.item()].item()
-                label = label.item()
-                acc += pred == label
+                logit = model.classify(img)
                 if test_name:
-                    self.reporters[test_name].append_pred(pred, label)
+                    self.reporters[test_name].append(logit[0], label.item())
+
+                loss = F.cross_entropy(logit, label)
+                eval_loss += loss.item()
         return eval_loss
+
 
 if __name__ == '__main__':
     args = get_args()
-    folds = load_folds(args)
-    runner = Runner(args, folds)
+    runner = Runner(args, load_folds(args))
     runner.run()

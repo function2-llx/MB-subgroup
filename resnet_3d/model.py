@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+
+import click
 
 import torch
 from torch import nn
@@ -35,10 +37,19 @@ def get_fine_tuning_parameters(model, ft_begin_module):
 
     return parameters
 
+options = [
+    click.option(
+        '--model',
+        type=click.Choice(['resnet', 'resnet2p1d', 'preresnet', 'wideresnet', 'resnext', 'densenet', 'medicalnet']),
+    ),
+    click.option('--model_depth', type=click.Choice([10, 18, 34, 50, 101])),
+    click.option('--n_input_channels', type=int),
 
-def generate_model(opt):
+]
+
+def generate_model(opt, pretrain: bool = True):
     assert opt.model in [
-        'resnet', 'resnet2p1d', 'preresnet', 'wideresnet', 'resnext', 'densenet'
+        'resnet', 'resnet2p1d', 'preresnet', 'wideresnet', 'resnext', 'densenet', 'medicalnet'
     ]
 
     if opt.model == 'resnet':
