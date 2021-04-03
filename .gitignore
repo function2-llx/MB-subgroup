@@ -145,5 +145,9 @@ output*/
 subgroup.csv
 patient_info.csv
 folds.json
+data-pre/
 reports/
-finetune
+finetune/
+pretrained/
+
+**/*.npy
