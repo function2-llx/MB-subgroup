@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .backbone import Backbone
 
 def get_inplanes():
     return [64, 128, 256, 512]
@@ -98,20 +99,20 @@ class Bottleneck(nn.Module):
 
         return out
 
-
-class ResNet(nn.Module):
-
-    def __init__(self,
-                 block,
-                 layers,
-                 block_inplanes,
-                 n_input_channels=3,
-                 conv1_t_size=7,
-                 conv1_t_stride=1,
-                 no_max_pool=False,
-                 shortcut_type='B',
-                 widen_factor=1.0,
-                 n_classes=400):
+class ResNet(Backbone):
+    def __init__(
+        self,
+        block,
+        layers,
+        block_inplanes,
+        n_input_channels=3,
+        conv1_t_size=7,
+        conv1_t_stride=1,
+        no_max_pool=False,
+        shortcut_type='B',
+        widen_factor=1.0,
+        n_classes=None,
+    ):
         super().__init__()
 
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
@@ -193,25 +194,27 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x) -> torch.Tensor:
+    def forward(self, x):
+        outputs = {}
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         if not self.no_max_pool:
             x = self.maxpool(x)
-
+        outputs['c1'] = x
         x = self.layer1(x)
+        outputs['c2'] = x
         x = self.layer2(x)
+        outputs['c3'] = x
         x = self.layer3(x)
+        outputs['c4'] = x
         x = self.layer4(x)
-
+        outputs['c5'] = x
         x = self.avgpool(x)
-
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-
-        return x
-
+        outputs['linear'] = x
+        return outputs
 
 def generate_model(model_depth, **kwargs):
     assert model_depth in [10, 18, 34, 50, 101, 152, 200]

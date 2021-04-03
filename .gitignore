@@ -146,3 +146,4 @@ subgroup.csv
 patient_info.csv
 folds.json
 reports/
+finetune

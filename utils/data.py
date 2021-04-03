@@ -1,21 +1,23 @@
-import itertools
 import json
 import random
 from argparse import Namespace
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Dict, Iterator, Optional, Tuple
+from typing import List, Dict, Iterator, Optional
+import itertools
 
-import numpy as np
 import torch
 from monai.data import CacheDataset
 from monai.transforms import *
+import numpy as np
 from torch.utils.data import Sampler
 from torch.utils.data.sampler import T_co
+from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
-from utils.to_tensor import ToTensorDeviced
+from utils.transforms import ConcatItemsAllowSingled, ToTensorDeviced
+
 
 class MultimodalDataset(CacheDataset):
     def __init__(self, data: List[Dict], transform: Transform, num_classes: int):
@@ -75,13 +77,7 @@ class BalancedSampler(Sampler):
 
 _folds = None
 _args: Optional[Namespace] = None
-modalities = list(ScanProtocol)
-loader = Compose([
-    LoadImaged(modalities),
-    NormalizeIntensityd(modalities, nonzero=False),
-    AddChanneld(modalities),
-    Orientationd(modalities, axcodes='PLI'),
-])
+_loader: Optional[Compose] = None
 
 def load_info(info):
     fold_id, info = info
@@ -89,19 +85,46 @@ def load_info(info):
     if label is None:
         return None
     # T1's time of echo is less than T2's, see [ref](https://radiopaedia.org/articles/t1-weighted-image)
-    scans = sorted(info['scans'], key=lambda scan: json.load(open(Path(scan.replace('.nii.gz', '.json'))))['EchoTime'])
-    assert len(scans) >= 3
+    scans = info['scans']
+    assert len(scans) == 3
     scans = {
         protocol: scans[i]
         for i, protocol in enumerate(ScanProtocol)
     }
-    data = loader(scans)
+    data = _loader(scans)
     data['label'] = label
     return fold_id, data
 
-def load_folds(args):
-    global _folds, _args
+def load_folds(args, loader=None):
+    global _folds, _args, _loader
     if _folds is None:
+        if loader is None:
+            # keep the last some slices (default 16, discard slices of cerebrum part)
+            def crop(x: np.ndarray):
+                assert x.shape[2] >= args.sample_slices
+                x = x[:, :, -args.sample_slices:]
+                assert (x > 0).sum() > 0
+                return x
+
+            def test_clamp(x):
+                assert (x > 0).sum() > 0
+                assert (x < 0).sum() == 0
+                return x
+
+            loader = Compose([
+                LoadImaged(args.protocols),
+                Lambdad(args.protocols, crop),
+                AddChanneld(args.protocols),
+                Orientationd(args.protocols, axcodes='PLI'),
+                Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
+                ThresholdIntensityd(args.protocols, threshold=0),
+                Lambdad(args.protocols, test_clamp),
+                # *[CropForegroundd(args.protocols, key) for key in args.protocols],
+                NormalizeIntensityd(args.protocols, nonzero=False),
+                ConcatItemsAllowSingled(args.protocols, 'img'),
+                SelectItemsd('img'),
+            ])
+        _loader = loader
         _args = deepcopy(args)
         folds_raw = json.load(open('folds.json'))
         if args.debug:
@@ -116,7 +139,25 @@ def load_folds(args):
 
     return deepcopy(_folds)
 
+def shape_stat():
+    shapes_path = Path('shapes.npy')
+    if shapes_path.exists():
+        shapes = np.load(shapes_path)
+    else:
+        folds = load_folds(
+            Namespace(target_dict={name: i for i, name in enumerate(['WNT', 'SHH', 'G3', 'G4'])}, debug=False),
+            loader=LoadImaged(ScanProtocol),
+        )
+        shapes = []
+        for data in tqdm(list(itertools.chain(*folds)), ncols=80):
+            for key in ScanProtocol:
+                img = data[key]
+                shapes.append(img.shape[:2])
+        shapes = np.array(shapes)
+        np.save(shapes_path, shapes)
+    print('shape mean: ', shapes.mean(axis=0))
+    print('shape std', shapes.std(axis=0))
+    print('shape median', np.median(shapes, axis=0))
+
 if __name__ == '__main__':
-    from run_3dresnet import get_args
-    args = get_args()
-    load_folds(args)
+    shape_stat()
