@@ -22,7 +22,7 @@ class Runner(RunnerBase):
 
     def run_fold(self, val_id: int):
         output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
-        if self.args.train:
+        if self.args.train and (self.args.force_retrain or not output_path.exists()):
             if self.args.rank == 0:
                 writer = SummaryWriter(log_dir=Path(f'runs/fold{val_id}') / self.args.model_output_root)
             logging.info(f'run cross validation on fold {val_id}')
@@ -71,6 +71,8 @@ class Runner(RunnerBase):
                         logging.info('run out of patience\n')
                         break
         else:
+            if self.args.train:
+                print('skip train')
             val_set = self.prepare_val_fold(val_id)
 
         model = generate_model(self.args, pretrain=False)
@@ -116,7 +118,7 @@ def parse_args():
 
     return args
 
-def main(args):
+def main(args, folds):
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args.model_output_root = args.output_root \
         / args.targets \
@@ -125,8 +127,9 @@ def main(args):
     print('output root:', args.model_output_root)
     args.n_classes = len(args.target_names)
     args.rank = 0
-    runner = Runner(args, load_folds(args))
+    runner = Runner(args, folds)
     runner.run()
 
 if __name__ == '__main__':
-    main(parse_args())
+    args = parse_args()
+    main(args, load_folds(args))
