@@ -40,21 +40,14 @@ def load_folds(args, loader=None):
             assert (x > 0).sum() > 0
             return x
 
-        def test_clamp(x):
-            assert (x > 0).sum() > 0
-            assert (x < 0).sum() == 0
-            return x
-
         loader = Compose([
             LoadImaged(args.protocols),
             Lambdad(args.protocols, crop),
             AddChanneld(args.protocols),
             Orientationd(args.protocols, axcodes='PLI'),
-            Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
             ThresholdIntensityd(args.protocols, threshold=0),
-            Lambdad(args.protocols, test_clamp),
-            # *[CropForegroundd(args.protocols, key) for key in args.protocols],
-            NormalizeIntensityd(args.protocols, nonzero=False),
+            Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
+            NormalizeIntensityd(args.protocols, nonzero=True),
             ConcatItemsAllowSingled(args.protocols, 'img'),
             SelectItemsd('img'),
         ])

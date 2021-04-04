@@ -13,18 +13,20 @@ from utils.report import Reporter
 from utils.transforms import ToTensorDeviced
 
 class RunnerBase(ABC):
-    def __init__(self, args, folds):
+    def __init__(self, args):
         self.args = args
-        self.folds = folds
         self.setup_logging()
-        if args.rank == 0:
-            self.reporters = {
-                test_name: Reporter(args.model_output_root / test_name, self.args.target_names)
-                for test_name in ['cross-val']
-            }
-
         if self.args.train:
             self.set_determinism()
+
+    def set_determinism(self):
+        seed = self.args.seed
+        monai.utils.set_determinism(seed)
+        if self.args.rank == 0:
+            logging.info(f'set random seed of {seed}\n')
+
+    def is_world_master(self) -> bool:
+        return self.args.rank == 0
 
     def setup_logging(self):
         args = self.args
@@ -39,6 +41,16 @@ class RunnerBase(ABC):
                 handlers=handlers,
                 force=True,
             )
+
+class FinetunerBase(RunnerBase):
+    def __init__(self, args, folds):
+        super().__init__(args)
+        self.folds = folds
+        if args.rank == 0:
+            self.reporters = {
+                test_name: Reporter(args.model_output_root / test_name, self.args.target_names)
+                for test_name in ['cross-val']
+            }
 
     def prepare_val_fold(self, val_id: int) -> MultimodalDataset:
         val_fold = self.folds[val_id]
@@ -86,13 +98,6 @@ class RunnerBase(ABC):
             if self.args.rank == 0:
                 for reporter in self.reporters.values():
                     reporter.report()
-            logging.root.handlers[-1].flush()
-
-    def set_determinism(self):
-        seed = self.args.seed
-        monai.utils.set_determinism(seed)
-        if self.args.rank == 0:
-            logging.info(f'set random seed of {seed}\n')
 
     @abstractmethod
     def run_fold(self, val_id):

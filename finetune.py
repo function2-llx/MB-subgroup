@@ -11,12 +11,12 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from resnet_3d.model import generate_model
-from runner_base import RunnerBase
+from runner_base import FinetunerBase
 from utils.data import MultimodalDataset
 from utils.data.datasets.tiantan.load import load_folds
 from utils.dicom_utils import ScanProtocol
 
-class Runner(RunnerBase):
+class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
         output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
@@ -112,6 +112,8 @@ def parse_args():
         'G3G4': ['G3', 'G4'],
     }[args.targets]
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
+    if args.weight_decay == 0.0:
+        args.weight_decay = 0
 
     args.protocols = list(map(ScanProtocol.__getitem__, args.protocols))
 
@@ -126,7 +128,7 @@ def main(args, folds):
     print('output root:', args.model_output_root)
     args.n_classes = len(args.target_names)
     args.rank = 0
-    runner = Runner(args, folds)
+    runner = Finetuner(args, folds)
     runner.run()
 
 if __name__ == '__main__':

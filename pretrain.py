@@ -1,17 +1,18 @@
-import logging
+from argparse import Namespace
 from pathlib import Path
+from typing import Callable
 
-from monai.transforms import *
-from monai.networks.nets import UNet
-from monai.losses import DiceLoss, DiceCELoss
-from monai.metrics import DiceMetric
-from torch import nn
+import torch
+from monai.data import DataLoader
+from monai.losses import DiceLoss
+from torch.optim import AdamW
+from torch.utils.data import ConcatDataset
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
-from resnet_3d.model import generate_model
-from resnet_3d.models.backbone import Backbone
+from models.unet import UNet
+from runner_base import RunnerBase
 from utils.data import MultimodalDataset
-from utils.transforms import ToTensorDeviced
-
 
 def parse_args():
     from argparse import ArgumentParser
@@ -20,59 +21,72 @@ def parse_args():
 
     parser = ArgumentParser(parents=[utils.args.parser, resnet_3d.model.parser])
     parser.add_argument('--output_root', type=Path, default='pretrained')
+    parser.add_argument('--save_epoch', type=int, default=10)
     parser.add_argument('--datasets', choices=['brats20'], default=['brats20'])
-
     args = parser.parse_args()
-
+    args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args.model_output_root = args.output_root \
         / '+'.join(args.datasets) \
         / 'ep{epochs},lr{lr},wd{weight_decay}'.format(**args.__dict__)
+    args.rank = 0
 
     return args
 
-class PretrainModel(nn.Module):
-    def __init__(self, backbone: Backbone):
-        super().__init__()
-        self.backbone = backbone
-        pass
+class Pretrainer(RunnerBase):
+    def __init__(self, args, dataset: ConcatDataset):
+        super().__init__(args)
+        self.dataset = dataset
 
-    def setup_logging(self):
-        args = self.args
-        handlers = [logging.StreamHandler()]
-        args.model_output_root.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(args.model_output_root / 'train.log', mode='a'))
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            datefmt=logging.Formatter.default_time_format,
-            level=logging.INFO,
-            handlers=handlers
-        )
-
-    def forward(self, x):
-        features = self.backbone.forward(x)
-
-
-class Trainer:
-    def __init__(self, args, dataset):
-        self.args = args
-        backbone = generate_model(args, pretrain=False)
-        self.model = PretrainModel(backbone)
-
-    def is_world_master(self) -> bool:
-        return self.args.rank == 0
+        self.model = UNet(
+            dimensions=3,
+            in_channels=3,
+            out_channels=3,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        ).to(self.args.device)
 
     def train(self):
-        pass
+        self.args.model_output_root.mkdir(exist_ok=True, parents=True)
+        loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
+        optimizer = AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-5, amsgrad=True)
+        loader = DataLoader(self.dataset, batch_size=self.args.batch_size, shuffle=True)
+        if self.is_world_master():
+            writer = SummaryWriter(log_dir='runs-pretrain')
+
+        for epoch in range(1, self.args.epochs + 1):
+            epoch_loss = 0
+            for data in tqdm(loader, ncols=80, desc=f'epoch{epoch}'):
+                hidden, seg = self.model.forward(data['img'].to(self.args.device))
+                loss = loss_fn(seg, data['seg'].to(self.args.device))
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+
+            if self.is_world_master():
+                writer.add_scalar('loss', epoch_loss, epoch)
+                if epoch % self.args.save_epoch == 0:
+                    save_states = {
+                        'state_dict': self.model.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        # 'scheduler': scheduler.state_dict()
+                    }
+                    torch.save(self.args.model_output_root / f'checkpoint-epoch{epoch}.pth.tar')
+                    
+def get_loader(dataset) -> Callable[[Namespace], MultimodalDataset]:
+    import utils.data.datasets as datasets
+    loader = {
+        'brats20': datasets.brats20.load_all
+    }[dataset]
+    return loader
 
 if __name__ == '__main__':
     args = parse_args()
-    data = []
+    datasets = []
     for dataset in args.datasets:
-        import utils.data.datasets as datasets
-        loader = {
-            'brats20': datasets.brats20.load_all
-        }[dataset]
-        data.extend(loader(args))
-        dataset = MultimodalDataset(data, Compose([
-            ToTensorDeviced(('imgs'))
-        ]))
+        loader = get_loader(dataset)
+        datasets.append(loader(args))
+
+    trainer = Pretrainer(args, ConcatDataset(datasets))
+    trainer.train()

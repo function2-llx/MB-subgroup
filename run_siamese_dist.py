@@ -12,7 +12,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 from tqdm import tqdm
 
-from runner_base import RunnerBase
+from runner_base import FinetunerBase
 from siamese import generate_model, load_pretrained_model, Siamese
 from utils.data import load_folds, MultimodalDataset, BalancedSampler
 
@@ -66,7 +66,7 @@ def get_args():
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
     return args
 
-class Runner(RunnerBase):
+class Runner(FinetunerBase):
     def __init__(self, args, folds):
         super().__init__(args, folds)
         self.loss_fn = MSELoss()

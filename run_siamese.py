@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from medical_net.model import generate_model
 from medical_net.models.resnet import ResNet
-from runner_base import RunnerBase
+from runner_base import FinetunerBase
 from utils.data import load_folds, MultimodalDataset, BalancedSampler
 
 
@@ -44,7 +44,7 @@ def get_args():
     args.pretrain_path = Path(f'medical_net/pretrain/resnet_{args.model_depth}_23dataset.pth')
     return args
 
-class Runner(RunnerBase):
+class Runner(FinetunerBase):
     def __init__(self, args, folds):
         super().__init__(args, folds)
         self.loss_fn = MSELoss()
