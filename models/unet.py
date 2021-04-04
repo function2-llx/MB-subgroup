@@ -78,6 +78,7 @@ class UNet(nn.Module):
         act=Act.PRELU,
         norm=Norm.INSTANCE,
         dropout=0.0,
+        n_classes=None,
     ) -> None:
         """
         Enhanced version of UNet which has residual units implemented with the ResidualUnit class.
@@ -111,8 +112,23 @@ class UNet(nn.Module):
         self.act = act
         self.norm = norm
         self.dropout = dropout
+        self.n_classes = n_classes
 
-        self.model = self._create_block(in_channels, out_channels, self.channels, self.strides, True)
+        self.u_net = self._create_block(in_channels, out_channels, self.channels, self.strides, True)
+        if n_classes is not None:
+            self.avg_pool = nn.AdaptiveAvgPool3d(1)
+            self.fc = nn.Linear(channels[-1], n_classes)
+
+    def finetune_parameters(self, args):
+        params = [(n, p) for n, p in self.named_parameters() if p.requires_grad]
+        no_decay = ['bias', 'Norm.weight']
+        grouped_parameters = [
+            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay,
+             'lr': args.lr},
+            {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
+             'lr': args.lr},
+        ]
+        return grouped_parameters
 
     def _create_block(
         self, inc: int, outc: int, channels: Sequence[int], strides: Sequence[int], is_top: bool
@@ -226,6 +242,11 @@ class UNet(nn.Module):
 
         return conv
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        hidden, x = self.model(x)
-        return hidden, x
+    def forward(self, x: torch.Tensor):
+        hidden, seg = self.u_net(x)
+        outputs = {'seg': seg}
+        if self.n_classes is not None:
+            hidden = self.avg_pool(hidden).view(hidden.shape[0], -1)
+            outputs['linear'] = self.fc(hidden)
+
+        return outputs

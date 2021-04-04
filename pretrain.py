@@ -10,6 +10,7 @@ from torch.utils.data import ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+import models
 from models.unet import UNet
 from runner_base import RunnerBase
 from utils.data import MultimodalDataset
@@ -17,9 +18,9 @@ from utils.data import MultimodalDataset
 def parse_args():
     from argparse import ArgumentParser
     import utils.args
-    import resnet_3d.model
+    import models
 
-    parser = ArgumentParser(parents=[utils.args.parser, resnet_3d.model.parser])
+    parser = ArgumentParser(parents=[utils.args.parser, models.parser])
     parser.add_argument('--output_root', type=Path, default='pretrained')
     parser.add_argument('--save_epoch', type=int, default=10)
     parser.add_argument('--datasets', choices=['brats20'], default=['brats20'])
@@ -28,6 +29,7 @@ def parse_args():
     args.model_output_root = args.output_root \
         / '+'.join(args.datasets) \
         / 'ep{epochs},lr{lr},wd{weight_decay}'.format(**args.__dict__)
+    print('output root:', args.model_output_root)
     args.rank = 0
 
     return args

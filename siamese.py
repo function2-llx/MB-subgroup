@@ -3,12 +3,11 @@ from typing import Optional, Tuple, Callable
 import torch
 from torch import nn
 from torch.utils.data import Dataset
-from torch.utils.data.dataset import T_co
 
-from resnet_3d.models.resnet import ResNet
+import models
+from models.resnet import ResNet
 from resnet_3d.utils import get_pretrain_config
 from utils.data import MultimodalDataset
-
 
 class PairDataset(Dataset):
     def __init__(self, dataset: MultimodalDataset):
@@ -68,10 +67,10 @@ class Siamese(ResNet):
 
 
 def generate_model(pretrained_name: str, n_output: Optional[int] = None) -> Siamese:
-    from resnet_3d import model
+    import model
     config = get_pretrain_config(pretrained_name)
 
-    model = getattr(model, config['type']).generate_model(
+    model = models.generate_model(
         config['model_depth'],
         n_classes=config['n_pretrain_classes'] if n_output is None else n_output,
         n_input_channels=3,
@@ -80,6 +79,7 @@ def generate_model(pretrained_name: str, n_output: Optional[int] = None) -> Siam
 
 
 def load_pretrained_model(pretrained_name: str, n_output: Optional[int] = None) -> Siamese:
-    from resnet_3d.model import load_pretrained_model, pretrained_root
+    from model import pretrained_root
+    from models import load_pretrained_model
     model = generate_model(pretrained_name, n_output)
     return load_pretrained_model(model, pretrained_root / f'{pretrained_name}.pth', 'resnet')

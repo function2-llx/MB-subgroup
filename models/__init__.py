@@ -1,27 +1,25 @@
 import logging
+from argparse import ArgumentParser
 from pathlib import Path
-from typing import Optional, OrderedDict
+from typing import OrderedDict, Optional
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
-from .models import resnet, resnet2p1d, pre_act_resnet, wide_resnet, resnext, densenet
-
-from argparse import ArgumentParser
-
-from .models.backbone import Backbone
+from . import resnet, resnet2p1d, wide_resnet, resnext, pre_act_resnet, densenet
+from .backbone import Backbone
+from .unet import UNet
 
 parser = ArgumentParser(add_help=False)
-
 parser.add_argument(
     '--model',
     default='resnet',
-    choices=['resnet', 'resnet2p1d', 'preresnet', 'wideresnet', 'resnext', 'densenet', 'medicalnet'],
+    choices=['unet', 'resnet', 'resnet2p1d', 'preresnet', 'wideresnet', 'resnext', 'densenet', 'medicalnet'],
 )
 parser.add_argument('--model_depth', type=int, choices=[10, 18, 34, 50, 101], default=18)
 parser.add_argument('--resnet_shortcut', default='B', choices=['A', 'B'], help='Shortcut type of resnet')
 parser.add_argument('--n_input_channels', type=int, default=3)
-parser.add_argument('--sample_size', default=448, type=int, help='Height and width of inputs')
+parser.add_argument('--sample_size', default=224, type=int, help='Height and width of inputs')
 parser.add_argument('--sample_slices', default=16, type=int, help='slices of inputs, temporal size in terms of videos')
 parser.add_argument('--pretrain_root', default='pretrained', type=Path, help='root directory for pretrained models')
 parser.add_argument('--pretrain_name', default=None, type=Path, help='Pretrained model name, also save path related to pretrain_root')
@@ -48,7 +46,6 @@ def get_module_name(name):
 
     return name[i]
 
-
 def get_fine_tuning_parameters(model, ft_begin_module):
     if not ft_begin_module:
         return model.parameters()
@@ -65,7 +62,17 @@ def get_fine_tuning_parameters(model, ft_begin_module):
     return parameters
 
 def generate_model(opt, pretrain: bool = True) -> Backbone:
-    if opt.model == 'resnet':
+    if opt.model == 'unet':
+        model = UNet(
+            dimensions=3,
+            in_channels=3,
+            out_channels=3,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+            n_classes=opt.n_classes,
+        )
+    elif opt.model == 'resnet':
         model = resnet.generate_model(
             model_depth=opt.model_depth,
             n_classes=opt.n_classes,
@@ -155,7 +162,6 @@ def setup_finetune(model, model_name, n_finetune_classes):
         tmp_model.fc = nn.Linear(tmp_model.fc.in_features, n_finetune_classes)
     else:
         tmp_model.fc = nn.Linear(tmp_model.fc.in_features, n_finetune_classes)
-
 
 def load_pretrained_model(model, pretrain_path, model_name, n_finetune_classes: Optional[int] = None):
     if pretrain_path:

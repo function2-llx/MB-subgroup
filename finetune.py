@@ -10,11 +10,12 @@ from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from resnet_3d.model import generate_model
+from models import generate_model
 from runner_base import FinetunerBase
 from utils.data import MultimodalDataset
 from utils.data.datasets.tiantan.load import load_folds
 from utils.dicom_utils import ScanProtocol
+
 
 class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
@@ -96,9 +97,9 @@ class Finetuner(FinetunerBase):
 def parse_args():
     from argparse import ArgumentParser
     import utils.args
-    import resnet_3d.model
+    import models
 
-    parser = ArgumentParser(parents=[utils.args.parser, resnet_3d.model.parser])
+    parser = ArgumentParser(parents=[utils.args.parser, models.parser])
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
     protocol_names = [value.name for value in ScanProtocol]
