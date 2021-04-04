@@ -4,14 +4,13 @@ import json
 import random
 import re
 from collections import Counter
-from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from preprocess import output_dir as processed_dir
+from .preprocess import output_dir as processed_dir
 
 patients = {}
 n_folds = 4

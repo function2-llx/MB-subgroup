@@ -1,5 +1,5 @@
-from finetune import main, parse_args, Runner
-from utils.data import load_folds
+from finetune import main, parse_args
+from utils.data.datasets.tiantan import load_folds
 
 if __name__ == '__main__':
     args = parse_args()

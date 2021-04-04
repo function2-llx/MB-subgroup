@@ -11,7 +11,6 @@ from monai.transforms import Compose, LoadImaged, Lambdad, AddChanneld, Orientat
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from utils.data import MultimodalDataset
 from utils.dicom_utils import ScanProtocol
 from utils.transforms import ConcatItemsAllowSingled
 
