@@ -39,7 +39,7 @@ class Backbone(nn.Module, metaclass=ABCMeta):
 
     def finetune_parameters(self, args):
         params = [(n, p) for n, p in self.named_parameters() if p.requires_grad]
-        no_decay = ['fc']
+        no_decay = ['bias', 'LayerNorm.weight']
         grouped_parameters = [
             {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay,
              'lr': args.lr},

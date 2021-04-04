@@ -1,1 +1,1 @@
-from ...dataset import MultimodalDataset
+from .load import load_all

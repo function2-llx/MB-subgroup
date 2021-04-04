@@ -31,14 +31,14 @@ class RunnerBase(ABC):
         handlers = [logging.StreamHandler()]
         if args.train:
             args.model_output_root.mkdir(parents=True, exist_ok=True)
-            mode = 'w' if args.rank == 0 else 'a'
-            handlers.append(logging.FileHandler(args.model_output_root / 'train.log', mode))
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            datefmt=logging.Formatter.default_time_format,
-            level=logging.INFO,
-            handlers=handlers
-        )
+            handlers.append(logging.FileHandler(args.model_output_root / 'train.log', mode='a'))
+            logging.basicConfig(
+                format='%(asctime)s [%(levelname)s] %(message)s',
+                datefmt=logging.Formatter.default_time_format,
+                level=logging.INFO,
+                handlers=handlers,
+                force=True,
+            )
 
     def prepare_val_fold(self, val_id: int) -> MultimodalDataset:
         val_fold = self.folds[val_id]
@@ -86,6 +86,7 @@ class RunnerBase(ABC):
             if self.args.rank == 0:
                 for reporter in self.reporters.values():
                     reporter.report()
+            logging.root.handlers[-1].flush()
 
     def set_determinism(self):
         seed = self.args.seed

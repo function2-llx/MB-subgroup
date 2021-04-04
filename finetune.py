@@ -13,16 +13,14 @@ from tqdm import tqdm
 from resnet_3d.model import generate_model
 from runner_base import RunnerBase
 from utils.data import MultimodalDataset
-from utils.data.datasets.tiantan import load_folds
+from utils.data.datasets.tiantan.load import load_folds
 from utils.dicom_utils import ScanProtocol
 
 class Runner(RunnerBase):
-    def __init__(self, args, folds):
-        super().__init__(args, folds)
-
     def run_fold(self, val_id: int):
         output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
+            tmp_output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
             if self.args.rank == 0:
                 writer = SummaryWriter(log_dir=Path(f'runs/fold{val_id}') / self.args.model_output_root)
             logging.info(f'run cross validation on fold {val_id}')
@@ -61,8 +59,8 @@ class Runner(RunnerBase):
 
                 if val_loss < best_loss:
                     best_loss = val_loss
-                    torch.save(model.module.state_dict(), output_path)
-                    logging.info(f'model updated, saved to {output_path}\n')
+                    torch.save(model.module.state_dict(), tmp_output_path)
+                    logging.info(f'model updated, saved to {tmp_output_path}\n')
                     patience = 0
                 else:
                     patience += 1
@@ -70,6 +68,7 @@ class Runner(RunnerBase):
                     if patience == self.args.patience:
                         logging.info('run out of patience\n')
                         break
+            tmp_output_path.rename(output_path)
         else:
             if self.args.train:
                 print('skip train')

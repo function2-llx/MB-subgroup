@@ -10,14 +10,14 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from .preprocess import output_dir as processed_dir
+from utils.data.datasets.tiantan.preprocess import output_dir as processed_dir
 
 patients = {}
 n_folds = 4
 folds = [[] for _ in range(n_folds)]
 random.seed(233)
 
-patient_info = pd.read_csv('patient_info.csv')
+patient_info = pd.read_csv(processed_dir / 'patient_info.csv')
 desc_reject_list = [
     'Apparent Diffusion Coefficient (mm2/s)',
     'Ax DWI 1000b',
