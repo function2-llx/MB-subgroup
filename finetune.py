@@ -12,9 +12,9 @@ from tqdm import tqdm
 
 from resnet_3d.model import generate_model
 from runner_base import RunnerBase
-from utils.data import MultimodalDataset, load_folds
+from utils.data import MultimodalDataset
+from utils.data.datasets.tiantan import load_folds
 from utils.dicom_utils import ScanProtocol
-
 
 class Runner(RunnerBase):
     def __init__(self, args, folds):

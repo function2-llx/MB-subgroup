@@ -130,9 +130,6 @@ dmypy.json
 
 .vscode/
 .idea/
-data/
-data-dicom/
-data-nifti/
 runs/
 *.zip
 output/
@@ -145,7 +142,7 @@ output*/
 subgroup.csv
 patient_info.csv
 folds.json
-data-pre/
+data-*/
 reports/
 finetune/
 pretrained/
