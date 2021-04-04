@@ -146,5 +146,8 @@ data-*/
 reports/
 finetune/
 pretrained/
+processed_3d
+
+*-legacy
 
 **/*.npy
