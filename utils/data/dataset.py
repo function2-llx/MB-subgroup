@@ -1,12 +1,15 @@
 from typing import List, Dict, Optional
 
 import torch
-from monai.data import CacheDataset
+from monai.data import CacheDataset, Dataset
 from monai.transforms import Transform
 
-class MultimodalDataset(CacheDataset):
-    def __init__(self, data: List[Dict], transform: Transform, num_classes: Optional[int] = None):
-        super().__init__(data, transform, progress=False)
+class MultimodalDataset(Dataset):
+    def __init__(self, data: List[Dict], transform: Transform, num_classes: Optional[int] = None, progress: bool = False):
+        if issubclass(MultimodalDataset, CacheDataset):
+            super().__init__(data, transform, progress=progress)
+        else:
+            super().__init__(data, transform)
         self.keys = data[0].keys()
         for x in data:
             assert self.keys == x.keys()

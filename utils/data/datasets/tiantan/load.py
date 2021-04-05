@@ -5,29 +5,26 @@ from copy import deepcopy
 from typing import Optional
 
 import numpy as np
-from monai.transforms import Compose, LoadImaged, Lambdad, AddChanneld, Orientationd, Resized, ThresholdIntensityd, \
-    NormalizeIntensityd, SelectItemsd
+import monai.transforms as monai_transforms
 from tqdm.contrib.concurrent import process_map
 
+from utils.data.datasets.tiantan import dataset_dir
 from utils.dicom_utils import ScanProtocol
-from utils.transforms import ConcatItemsAllowSingled
 
 def load_info(info):
     fold_id, info = info
-    label = _args.target_dict.get(info['subgroup'], None)
-    if label is None:
-        return None
+    label = _args.target_dict[info['subgroup']]
     scans = info['scans']
     assert len(scans) == 3
     scans = {
-        protocol: scans[i]
+        protocol: str(dataset_dir / scans[i])
         for i, protocol in enumerate(ScanProtocol)
     }
     data = _loader(scans)
     data['label'] = label
     return fold_id, data
 
-_loader: Optional[Compose] = None
+_loader: Optional[monai_transforms.Compose] = None
 _args: Optional[Namespace] = None
 
 def load_folds(args, loader=None):
@@ -40,26 +37,39 @@ def load_folds(args, loader=None):
             assert (x > 0).sum() > 0
             return x
 
-        loader = Compose([
-            LoadImaged(args.protocols),
-            Lambdad(args.protocols, crop),
-            AddChanneld(args.protocols),
-            Orientationd(args.protocols, axcodes='PLI'),
-            ThresholdIntensityd(args.protocols, threshold=0),
-            Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
-            NormalizeIntensityd(args.protocols, nonzero=True),
-            ConcatItemsAllowSingled(args.protocols, 'img'),
-            SelectItemsd('img'),
+        # loader = Compose([
+        #     LoadImaged(args.protocols),
+        #     Lambdad(args.protocols, crop),
+        #     AddChanneld(args.protocols),
+        #     Orientationd(args.protocols, axcodes='PLI'),
+        #     ThresholdIntensityd(args.protocols, threshold=0),
+        #     Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
+        #     NormalizeIntensityd(args.protocols, nonzero=True),
+        #     ConcatItemsd(args.protocols, 'img'),
+        #     SelectItemsd('img'),
+        # ])
+        loader = monai_transforms.Compose([
+            monai_transforms.LoadImaged(args.protocols),
+            monai_transforms.Lambdad(args.protocols, crop),
+            monai_transforms.AddChanneld(args.protocols),
+            monai_transforms.Orientationd(args.protocols, axcodes='PLI'),
+            monai_transforms.ThresholdIntensityd(args.protocols, threshold=0),
+            monai_transforms.SelectItemsd(args.protocols),
+            # Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
+            # NormalizeIntensityd(args.protocols, nonzero=True),
+            # ConcatItemsd(args.protocols, 'img'),
         ])
     _loader = loader
     _args = deepcopy(args)
-    folds_raw = json.load(open('folds.json'))
+    folds_raw = [
+        list(filter(lambda info: info['subgroup'] in args.target_dict, fold_raw))
+        for fold_raw in json.load(open(dataset_dir / f'folds-{args.n_folds}.json'))
+    ]
     if args.debug:
         folds_raw = [fold[:5] for fold in folds_raw]
 
     folds_flattened = [(fold_id, info) for fold_id, fold_raw in enumerate(folds_raw) for info in fold_raw]
     folds_flattened = process_map(load_info, folds_flattened, ncols=80, desc='loading data', chunksize=1, max_workers=5)
-    folds_flattened = filter(lambda x: x is not None, folds_flattened)
     folds = [[] for _ in range(len(folds_raw))]
     for fold_id, data in folds_flattened:
         folds[fold_id].append(data)

@@ -10,13 +10,9 @@ from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-import models.args
 from models import generate_model
 from runner_base import FinetunerBase
 from utils.data import MultimodalDataset
-from utils.data.datasets.tiantan.load import load_folds
-from utils.dicom_utils import ScanProtocol
-
 
 class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
@@ -24,7 +20,7 @@ class Finetuner(FinetunerBase):
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
             tmp_output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
             if self.is_world_master():
-                writer = SummaryWriter(log_dir=Path(f'runs/fold{val_id}') / self.args.model_output_root)
+                writer = SummaryWriter(log_dir=Path(f'runs-{self.args.n_folds}/fold{val_id}') / self.args.model_output_root)
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(self.args, pretrain=self.args.pretrain_name is not None)
             from torch.optim import AdamW
@@ -69,6 +65,7 @@ class Finetuner(FinetunerBase):
                     logging.info(f'patience {patience}/{self.args.patience}\n')
                     if patience == self.args.patience:
                         logging.info('run out of patience\n')
+                        break
 
             if self.is_world_master():
                 tmp_output_path.rename(output_path)
@@ -86,6 +83,7 @@ class Finetuner(FinetunerBase):
         model.eval()
         eval_loss = 0
         with torch.no_grad():
+            step = 0
             for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
                 img = data['img'].to(self.args.device)
                 label = data['label'].to(self.args.device)
@@ -95,16 +93,19 @@ class Finetuner(FinetunerBase):
 
                 loss = loss_fn(logit, label)
                 eval_loss += loss.item()
-        return eval_loss
+                step += 1
+        return eval_loss / step
 
 def parse_args():
     from argparse import ArgumentParser
+    from utils.dicom_utils import ScanProtocol
     import utils.args
     import models
 
     parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
+    parser.add_argument('--n_folds', type=int, choices=[3, 4], default=4)
     protocol_names = [value.name for value in ScanProtocol]
     parser.add_argument('--protocols', nargs='+', choices=protocol_names, default=protocol_names)
     parser.add_argument('--output_root', type=Path, required=True)
@@ -136,5 +137,7 @@ def main(args, folds):
     runner.run()
 
 if __name__ == '__main__':
+    from utils.data.datasets.tiantan.load import load_folds
+
     args = parse_args()
     main(args, load_folds(args))

@@ -30,8 +30,9 @@ def parse_args():
     args.n_classes = None
     args.model_output_root = args.output_root \
         / '+'.join(args.datasets) \
-        / 'ep{epochs},lr{lr},wd{weight_decay},{sample_size}x{sample_slices}'.format(**args.__dict__)
+        / 'ep{epochs},lr{lr},crop{crop_ratio},wd{weight_decay},{sample_size}x{sample_slices}'.format(**args.__dict__)
     print('output root:', args.model_output_root)
+    assert 0 < args.crop_ratio <= 1
     args.rank = 0
 
     return args
@@ -70,7 +71,9 @@ class Pretrainer(RunnerBase):
                         'optimizer': optimizer.state_dict(),
                         # 'scheduler': scheduler.state_dict()
                     }
-                    torch.save(save_states, self.args.model_output_root / f'ep{epoch}' / f'state.pth')
+                    save_path: Path = self.args.model_output_root / f'ep{epoch}' / f'state.pth'
+                    save_path.parent.mkdir(exist_ok=True)
+                    torch.save(save_states, save_path)
 
 def get_loader(dataset) -> Callable[[Namespace], MultimodalDataset]:
     import utils.data.datasets as datasets

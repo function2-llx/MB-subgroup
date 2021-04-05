@@ -3,7 +3,7 @@
 import json
 import random
 import re
-from collections import Counter
+from collections import Counter, OrderedDict
 
 import nibabel as nib
 import numpy as np
@@ -13,7 +13,7 @@ from tqdm import tqdm
 from utils.data.datasets.tiantan.preprocess import output_dir as processed_dir
 
 patients = {}
-n_folds = 4
+n_folds = 3
 folds = [[] for _ in range(n_folds)]
 random.seed(233)
 
@@ -35,12 +35,18 @@ desc_reject_list = [
 ]
 
 if __name__ == '__main__':
+    patients = OrderedDict([(group, []) for group in ['WNT', 'SHH', 'G3', 'G4']])
     for _, (patient, sex, age, weight, subgroup) in tqdm(patient_info.iterrows(), ncols=80, total=patient_info.shape[0]):
         counter = Counter()
         # group scans by shape
         grouped_scans = {}
         all_scans = []
-        for scan in (processed_dir / patient).glob('*.nii.gz'):
+        raw_all_scans = sorted(
+            (processed_dir / patient).glob('*.nii.gz'),
+            key=lambda x: int(re.match(r'\d+', x.parts[-1]).group()),
+        )
+
+        for scan in raw_all_scans:
             data: np.ndarray = nib.load(scan).get_fdata()
             info = json.load(open(re.sub(r'nii.gz$', 'json', str(scan))))
             desc = info['SeriesDescription']
@@ -58,7 +64,7 @@ if __name__ == '__main__':
             else:
                 print(patient)
                 continue
-        patients.setdefault(subgroup, []).append({
+        patients[subgroup].append({
             'patient': patient,
             'subgroup': subgroup,
             'sex': sex,
@@ -81,4 +87,4 @@ if __name__ == '__main__':
 
     print([len(fold) for fold in folds])
 
-    json.dump(folds, open('folds.json', 'w'), indent=4, ensure_ascii=False)
+    json.dump(folds, open(f'folds-{n_folds}.json', 'w'), indent=4, ensure_ascii=False)

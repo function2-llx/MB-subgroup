@@ -4,11 +4,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from monai.transforms import *
+import monai.transforms as monai_transforms
 from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
-from utils.transforms import ConcatItemsAllowSingled
 
 
 def parse_modality(modality):
@@ -47,12 +46,12 @@ def load_subject(subject):
 if __name__ == "__main__":
     mapping = pd.read_csv('origin/name_mapping.csv', index_col='BraTS_2020_subject_ID')
     survival_info = pd.read_csv('origin/survival_info.csv', index_col='Brats20ID')
-    loader = Compose([
-        LoadImaged(list(ScanProtocol) + ['seg']),
-        AddChanneld(list(ScanProtocol) + ['seg']),
-        Orientationd(list(ScanProtocol) + ['seg'], 'PLI'),
-        ConcatItemsAllowSingled(list(ScanProtocol), 'img'),
-        SelectItemsd(['img', 'seg']),
+    loader = monai_transforms.Compose([
+        monai_transforms.LoadImaged(list(ScanProtocol) + ['seg']),
+        monai_transforms.AddChanneld(list(ScanProtocol) + ['seg']),
+        monai_transforms.Orientationd(list(ScanProtocol) + ['seg'], 'PLI'),
+        monai_transforms.ConcatItemsd(list(ScanProtocol), 'img'),
+        monai_transforms.SelectItemsd(['img', 'seg']),
     ])
     subjects = []
     for subject_path in Path('origin').iterdir():

@@ -1,11 +1,13 @@
-from typing import Union, Any, Mapping, Hashable
+from typing import Union, Any, Mapping, Hashable, Sequence, Optional, Tuple
 
 import numpy as np
 import torch
 from monai.config import KeysCollection
+import monai.transforms as monai_transforms
 from monai.transforms import ToTensor, ToTensord, MapTransform, Transform, RandomizableTransform, RandRotate90, \
     RandSpatialCrop, RandSpatialCropd, RandRotate90d
 from monai.transforms.utility.array import PILImageImage
+from monai.utils import ensure_tuple_rep, fall_back_tuple
 
 
 class ToTensorDevice(ToTensor):
@@ -37,57 +39,6 @@ class ToTensorDeviced(ToTensord):
         """
         super().__init__(keys, allow_missing_keys)
         self.converter = ToTensorDevice(device)
-
-
-class ConcatItemsAllowSingled(MapTransform):
-    """
-    Concatenate specified items from data dictionary together on the first dim to construct a big array.
-    Expect all the items are numpy array or PyTorch Tensor.
-
-    """
-
-    def __init__(self, keys: KeysCollection, name: str, dim: int = 0, allow_missing_keys: bool = False) -> None:
-        """
-        Args:
-            keys: keys of the corresponding items to be concatenated together.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            name: the name corresponding to the key to store the concatenated data.
-            dim: on which dimension to concatenate the items, default is 0.
-            allow_missing_keys: don't raise exception if key is missing.
-
-        Raises:
-            ValueError: When insufficient keys are given (``len(self.keys) < 2``).
-
-        """
-        super().__init__(keys, allow_missing_keys)
-        # if len(self.keys) < 2:
-        #     raise ValueError("Concatenation requires at least 2 keys.")
-        self.name = name
-        self.dim = dim
-
-    def __call__(self, data):
-        """
-        Raises:
-            TypeError: When items in ``data`` differ in type.
-            TypeError: When the item type is not in ``Union[numpy.ndarray, torch.Tensor]``.
-
-        """
-        d = dict(data)
-        output = []
-        data_type = None
-        for key in self.key_iterator(d):
-            if data_type is None:
-                data_type = type(d[key])
-            elif not isinstance(d[key], data_type):
-                raise TypeError("All items in data must have the same type.")
-            output.append(d[key])
-        if data_type == np.ndarray:
-            d[self.name] = np.concatenate(output, axis=self.dim)
-        elif data_type == torch.Tensor:
-            d[self.name] = torch.cat(output, dim=self.dim)
-        else:
-            raise TypeError(f"Unsupported data type: {data_type}, available options are (numpy.ndarray, torch.Tensor).")
-        return d
 
 class SampleSlices(Transform):
     def __init__(self, start: int, sample_slices: int, spacing: int):
@@ -132,3 +83,14 @@ class RandSampleSlicesd(MapTransform, RandomizableTransform):
             d[key] = sample_slices(d[key])
 
         return d
+
+class RandSpatialCropWithRatiod(RandSpatialCropd):
+    def __init__(self, keys: KeysCollection, roi_ratio: Union[Sequence[float], float], random_center: bool = True, random_size: bool = True,
+                 allow_missing_keys: bool = False) -> None:
+        super().__init__(keys, -1, random_center, random_size, allow_missing_keys)
+        self.roi_ratio = roi_ratio
+
+    def randomize(self, img_size: Sequence[int]) -> None:
+        ratios = fall_back_tuple(self.roi_ratio, [1] * len(img_size))
+        self.roi_size = [int(size * ratio) for size, ratio in zip(img_size, ratios)]
+        super().randomize(img_size)
