@@ -10,6 +10,7 @@ from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+import models.args
 from models import generate_model
 from runner_base import FinetunerBase
 from utils.data import MultimodalDataset
@@ -22,7 +23,7 @@ class Finetuner(FinetunerBase):
         output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
             tmp_output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
-            if self.args.rank == 0:
+            if self.is_world_master():
                 writer = SummaryWriter(log_dir=Path(f'runs/fold{val_id}') / self.args.model_output_root)
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(self.args, pretrain=self.args.pretrain_name is not None)
@@ -44,13 +45,13 @@ class Finetuner(FinetunerBase):
                     labels = data['label'].to(self.args.device)
                     logits = model.forward(imgs)['linear']
                     loss = loss_fn(logits, labels)
-                    if self.args.rank == 0:
+                    if self.is_world_master():
                         writer.add_scalar('loss/train', loss.item(), step)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
                     step += 1
-                if self.args.rank == 0:
+                if self.is_world_master() == 0:
                     writer.flush()
 
                 val_loss = self.run_eval(model.module, val_set, loss_fn)
@@ -68,8 +69,10 @@ class Finetuner(FinetunerBase):
                     logging.info(f'patience {patience}/{self.args.patience}\n')
                     if patience == self.args.patience:
                         logging.info('run out of patience\n')
-                        break
-            tmp_output_path.rename(output_path)
+
+            if self.is_world_master():
+                tmp_output_path.rename(output_path)
+                logging.info(f'move checkpoint permanently to {output_path}')
         else:
             if self.args.train:
                 print('skip train')
@@ -99,7 +102,7 @@ def parse_args():
     import utils.args
     import models
 
-    parser = ArgumentParser(parents=[utils.args.parser, models.parser])
+    parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
     protocol_names = [value.name for value in ScanProtocol]
@@ -107,28 +110,28 @@ def parse_args():
     parser.add_argument('--output_root', type=Path, required=True)
 
     args = parser.parse_args()
+    args = utils.args.process_args(args)
+    args = models.args.process_args(args)
+
     args.target_names = {
         'all': ['WNT', 'SHH', 'G3', 'G4'],
         'WS': ['WNT', 'SHH'],
         'G3G4': ['G3', 'G4'],
     }[args.targets]
     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
+    # for output
     if args.weight_decay == 0.0:
         args.weight_decay = 0
-
     args.protocols = list(map(ScanProtocol.__getitem__, args.protocols))
-
-    return args
-
-def main(args, folds):
-    args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    args.n_classes = len(args.target_names)
     args.model_output_root = args.output_root \
         / args.targets \
         / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
         / '{aug},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(**args.__dict__)
     print('output root:', args.model_output_root)
-    args.n_classes = len(args.target_names)
-    args.rank = 0
+    return args
+
+def main(args, folds):
     runner = Finetuner(args, folds)
     runner.run()
 

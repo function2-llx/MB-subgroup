@@ -10,6 +10,6 @@ if __name__ == '__main__':
             args.lr = lr
             for wd in [0, 1e-5, 1e-4, 1e-3, 1e-2]:
                 args.weight_decay = wd
-                for weight_strategy in ['invsqrt', 'equal', 'inv']:
+                for weight_strategy in ['invsqrt', 'inv']:
                     args.weight_strategy = weight_strategy
                     main(args, folds)

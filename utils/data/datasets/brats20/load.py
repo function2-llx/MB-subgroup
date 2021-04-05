@@ -2,13 +2,13 @@ import json
 from pathlib import Path
 
 import numpy as np
-from monai.transforms import *
 from tqdm.contrib.concurrent import process_map
+import monai.transforms as monai_transforms
 
 from utils.data import MultimodalDataset
 from utils.transforms import RandSampleSlicesd
 
-class ConvertToMultiChannelBasedOnBratsClassesd(MapTransform):
+class ConvertToMultiChannelBasedOnBratsClassesd(monai_transforms.MapTransform):
     """
     Convert labels to multi channels based on brats classes:
         - the GD-enhancing tumor (ET — label 4)
@@ -60,21 +60,27 @@ def load_all(args) -> MultimodalDataset:
         ncols=80,
         max_workers=16,
     )
-    transform = Compose([
+    transform = monai_transforms.Compose([
         ConvertToMultiChannelBasedOnBratsClassesd('seg'),
-        ThresholdIntensityd('img', threshold=0),
-        Resized(
+        monai_transforms.ThresholdIntensityd('img', threshold=0),
+        monai_transforms.Resized(
             keys=('img', 'seg'),
             spatial_size=(args.sample_size, args.sample_size, -1),
             mode=('area', 'nearest'),
         ),
+        monai_transforms.RandSpatialCropd(
+            keys=('img', 'seg'),
+            roi_size=(args.sample_size, args.sample_size, args.sample_slices),
+            random_size=False,
+        ),
+        # note: this one seems not work, harmful to pretrain
         # 155: slices of BraTS; 24: slices of Tiantan; 155 // 24 = 6
-        RandSampleSlicesd(('img', 'seg'), sample_slices=args.sample_slices, spacing=155 // 24),
-        RandFlipd(keys=['img', 'seg'], prob=0.5, spatial_axis=0),
-        NormalizeIntensityd('img', nonzero=True, channel_wise=True),
-        RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
-        RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
-        ToTensord(keys=['img', 'seg']),
+        # RandSampleSlicesd(('img', 'seg'), sample_slices=args.sample_slices, spacing=155 // 24),
+        monai_transforms.RandFlipd(keys=['img', 'seg'], prob=0.5, spatial_axis=0),
+        monai_transforms.NormalizeIntensityd('img', nonzero=True, channel_wise=True),
+        monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
+        monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
+        monai_transforms.ToTensord(keys=['img', 'seg']),
     ])
 
     return MultimodalDataset(data, transform, num_classes=None)

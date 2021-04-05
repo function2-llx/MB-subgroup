@@ -22,8 +22,10 @@ class RunnerBase(ABC):
     def set_determinism(self):
         seed = self.args.seed
         monai.utils.set_determinism(seed)
-        if self.args.rank == 0:
+        if self.is_world_master():
             logging.info(f'set random seed of {seed}\n')
+        # not supported currently, throw RE for AdaptiveAvgPool
+        # torch.use_deterministic_algorithms(True)
 
     def is_world_master(self) -> bool:
         return self.args.rank == 0
