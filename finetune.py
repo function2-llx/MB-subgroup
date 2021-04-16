@@ -64,12 +64,12 @@ class Finetuner(FinetunerBase):
                     patience += 1
                     logging.info(f'patience {patience}/{self.args.patience}\n')
                     if patience == self.args.patience:
-                        logging.info('run out of patience\n')
+                        logging.info('run out of patience')
                         break
 
             if self.is_world_master():
                 tmp_output_path.rename(output_path)
-                logging.info(f'move checkpoint permanently to {output_path}')
+                logging.info(f'move checkpoint permanently to {output_path}\n')
         else:
             if self.args.train:
                 print('skip train')
@@ -96,7 +96,14 @@ class Finetuner(FinetunerBase):
                 step += 1
         return eval_loss / step
 
-def parse_args():
+def get_model_output_root(args):
+    return args.output_root \
+        / args.targets \
+        / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
+        / '{aug},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
+            **args.__dict__)
+
+def parse_args(search=False):
     from argparse import ArgumentParser
     from utils.dicom_utils import ScanProtocol
     import utils.args
@@ -125,11 +132,9 @@ def parse_args():
         args.weight_decay = 0
     args.protocols = list(map(ScanProtocol.__getitem__, args.protocols))
     args.n_classes = len(args.target_names)
-    args.model_output_root = args.output_root \
-        / args.targets \
-        / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
-        / '{aug},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(**args.__dict__)
-    print('output root:', args.model_output_root)
+    if not search:
+        args.model_output_root = get_model_output_root(args)
+        print('output root:', args.model_output_root)
     return args
 
 def main(args, folds):

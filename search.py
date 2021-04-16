@@ -1,8 +1,8 @@
-from finetune import main, parse_args
+from finetune import main, parse_args, get_model_output_root
 from utils.data.datasets.tiantan import load_folds
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args(search=True)
     for sample_size in [112, 224]:
         args.sample_size = sample_size
         folds = load_folds(args)
@@ -12,4 +12,6 @@ if __name__ == '__main__':
                 args.weight_decay = wd
                 for weight_strategy in ['invsqrt', 'inv']:
                     args.weight_strategy = weight_strategy
+                    args.model_output_root = get_model_output_root(args)
+                    print('output root:', args.model_output_root)
                     main(args, folds)

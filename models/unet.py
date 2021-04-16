@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Union, Tuple
+from typing import Sequence, Union, Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -10,27 +10,23 @@ from monai.networks.blocks.convolutions import Convolution, ResidualUnit
 from monai.networks.layers.factories import Act, Norm
 from monai.utils import SkipMode
 
+from . import Backbone
+
 class UBlock(nn.Module):
-    def __init__(self, down: nn.Module, subblock: nn.Module, up: nn.Module):
+    def __init__(self, down: Optional[nn.Module], subblock: nn.Module, up: Optional[nn.Module]):
         super().__init__()
+        assert (down is None) == (up is None)
         self.down = down
         self.subblock = subblock
         self.up = up
 
     def forward(self, x):
-        x = self.down(x)
+        if self.down is not None:
+            x = self.down(x)
         hidden, x = self.subblock(x)
-        x = self.up(x)
+        if self.up is not None:
+            x = self.up(x)
         return hidden, x
-
-class DoubleOutputLayer(nn.Module):
-    def __init__(self, layer: nn.Module):
-        super().__init__()
-        self.layer = layer
-
-    def forward(self, x) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = self.layer(x)
-        return x, x
 
 class DoubleSkipConnection(nn.Module):
     """
@@ -64,7 +60,7 @@ class DoubleSkipConnection(nn.Module):
         }[self.mode]()
         return hidden, y
 
-class UNet(nn.Module):
+class UNet(Backbone):
     def __init__(
         self,
         dimensions: int,
@@ -76,7 +72,7 @@ class UNet(nn.Module):
         up_kernel_size: Union[Sequence[int], int] = 3,
         num_res_units: int = 0,
         act=Act.PRELU,
-        norm=Norm.INSTANCE,
+        norm=Norm.BATCH,
         dropout=0.0,
         n_classes=None,
     ) -> None:
@@ -118,17 +114,6 @@ class UNet(nn.Module):
         if n_classes is not None:
             self.avg_pool = nn.AdaptiveAvgPool3d(1)
             self.fc = nn.Linear(channels[-1], n_classes)
-
-    def finetune_parameters(self, args):
-        params = [(n, p) for n, p in self.named_parameters() if p.requires_grad]
-        no_decay = ['bias', 'Norm.weight']
-        grouped_parameters = [
-            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay,
-             'lr': args.lr},
-            {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': args.lr},
-        ]
-        return grouped_parameters
 
     def _create_block(
         self, inc: int, outc: int, channels: Sequence[int], strides: Sequence[int], is_top: bool
@@ -193,14 +178,14 @@ class UNet(nn.Module):
             dropout=self.dropout,
         )
 
-    def _get_bottom_layer(self, in_channels: int, out_channels: int) -> nn.Module:
+    def _get_bottom_layer(self, in_channels: int, out_channels: int) -> UBlock:
         """
         Args:
             in_channels: number of input channels.
             out_channels: number of output channels.
         """
-        layer = self._get_down_layer(in_channels, out_channels, 1, False)
-        return DoubleOutputLayer(layer)
+        bottom = self._get_down_layer(in_channels, out_channels, 1, False)
+        return UBlock(None, bottom, None)
 
     def _get_up_layer(self, in_channels: int, out_channels: int, strides: int, is_top: bool) -> nn.Module:
         """
