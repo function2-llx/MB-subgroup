@@ -1,24 +1,22 @@
-import csv
-import json
 import os
 import random
 from glob import glob, iglob
-from random import sample
 from pathlib import Path
 
 import pandas as pd
 import pydicom
+from HD_BET.run import run_hd_bet
 from monai.data import ITKReader
 from monai.transforms import LoadImage
 from tqdm import tqdm
-from tqdm import trange
 
 from utils.dicom_utils import Plane, get_plane
 
 random.seed(233333)
 
 data_dir = 'origin'
-output_dir = Path('processed')
+nifti_output_dir = Path('processed')
+output_dir = Path('processed-ss')
 subgroup_dict = dict(pd.read_csv('subgroup.csv').values)
 patient_info = []
 
@@ -40,8 +38,8 @@ def process_patient(patient, patient_dir):
     weight = float(sample_ds.PatientWeight)
     patient_info.append((patient, sex, age, weight, subgroup_dict[patient]))
 
-    patient_output_dir = os.path.join(output_dir, patient)
-    os.makedirs(os.path.join(output_dir, patient), exist_ok=True)
+    patient_output_dir = os.path.join(nifti_output_dir, patient)
+    os.makedirs(os.path.join(nifti_output_dir, patient), exist_ok=True)
 
     def process_scan(scan_dir):
         slices = glob(os.path.join(scan_dir, '*.dcm'))
@@ -57,7 +55,7 @@ def process_patient(patient, patient_dir):
         process_scan(os.path.join(patient_dir, scan))
 
 def process_dcm():
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(nifti_output_dir, exist_ok=True)
     loader = LoadImage(ITKReader())
 
     for patient in tqdm(os.listdir(data_dir), ncols=80):
@@ -70,7 +68,13 @@ def process_dcm():
         # pd.DataFrame(scan_info, columns=('dir', 'desc', 'n')).to_csv('descs.csv', index=False)
 
     pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
-        .to_csv(os.path.join(output_dir, 'patient_info.csv'), index=False)
+        .to_csv(os.path.join(nifti_output_dir, 'patient_info.csv'), index=False)
+
+def skull_stripping():
+    mri_fnames = list(nifti_output_dir.glob('*/*.nii.gz'))
+    out_fnames = list(map(lambda mri_frame: str(output_dir / Path(*mri_frame.parts[1:])), mri_fnames))
+
+    run_hd_bet(list(map(str, mri_fnames)), out_fnames, postprocess=True)
 
 if __name__ == '__main__':
-    pass
+    skull_stripping()
