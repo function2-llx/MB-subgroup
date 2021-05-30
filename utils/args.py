@@ -5,9 +5,9 @@ import torch
 
 parser = ArgumentParser(add_help=False)
 
-parser.add_argument('--lr', type=float, default=1e-4)
+parser.add_argument('--lr', type=float, default=1e-5)
 parser.add_argument('--weight_decay', type=float, default=1e-5)
-parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--batch_size', type=int, default=4)
 parser.add_argument('--epochs', type=int, default=200)
 parser.add_argument('--train', action='store_true')
 parser.add_argument('--aug', choices=['no', 'weak', 'strong'], default='weak')

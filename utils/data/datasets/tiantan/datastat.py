@@ -1,31 +1,41 @@
 from argparse import Namespace
 from pathlib import Path
+import json
 
 import numpy as np
-from monai.transforms import LoadImaged
+from monai import transforms as monai_transforms
 from tqdm import tqdm
 
 from utils.data.datasets.tiantan import load_all
 from utils.dicom_utils import ScanProtocol
+from preprocess.convert import output_dir
+
+loader = monai_transforms.Compose([
+    monai_transforms.LoadImaged('img'),
+    monai_transforms.AddChanneld('img'),
+    # monai_transforms.Orientationd('img', axcodes='LAS'),
+    # monai_transforms.SpacingD('img', spacing)
+    # monai_transforms.ThresholdIntensityd('img', threshold=0),
+])
+
+
+
 
 if __name__ == '__main__':
-    shapes_path = Path('shapes.npy')
-    if shapes_path.exists():
-        shapes = np.load(shapes_path)
-    else:
-        shapes = []
-        for data in tqdm(
-            load_all(
-                Namespace(target_dict={name: i for i, name in enumerate(['WNT', 'SHH', 'G3', 'G4'])}, debug=False),
-                loader=LoadImaged(ScanProtocol),
-            ),
-            ncols=80,
-        ):
-            for key in ScanProtocol:
-                img = data[key]
-                shapes.append(img.shape[:2])
-        shapes = np.array(shapes)
-        np.save(shapes_path, shapes)
-    print('shape mean: ', shapes.mean(axis=0))
-    print('shape std', shapes.std(axis=0))
-    print('shape median', np.median(shapes, axis=0))
+    cohort = json.load(open('cohort.json'))
+    for info in cohort:
+        for scan in info['scans']:
+            scan_info = json.load(open(output_dir / info['patient'] / f'{scan}.json'))
+            scan_path = output_dir / info['patient'] / f'{scan}_ss.nii.gz'
+            print(scan_path)
+            img = loader({'img': str(scan_path)})
+            # print(scan_info['SpacingBetweenSlices'])
+            print('before:', img['img'].shape[1:], img['img_meta_dict']['pixdim'])
+            spacing = monai_transforms.SpacingD('img', pixdim=(1, 1, img['img_meta_dict']['pixdim'][3]))
+            img = spacing(img)
+            print('after:', img['img'].shape[1:], img['img_meta_dict']['pixdim'])
+            # resample_path = output_dir / info['patient'] / f'{scan}_re.nii.gz'
+            # print(img[['original_affine'])
+            # del img['img_meta_dict']['original_affine']
+            # monai_transforms.SaveImageD('img')(img)
+            # exit(0)

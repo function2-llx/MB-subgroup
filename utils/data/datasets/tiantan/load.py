@@ -9,6 +9,7 @@ import monai.transforms as monai_transforms
 from tqdm.contrib.concurrent import process_map
 
 from utils.data.datasets.tiantan import dataset_dir
+from utils.data.datasets.tiantan.preprocess import output_dir
 from utils.dicom_utils import ScanProtocol
 
 def load_info(info):
@@ -17,11 +18,12 @@ def load_info(info):
     scans = info['scans']
     assert len(scans) == 3
     scans = {
-        protocol: str(dataset_dir / scans[i])
+        protocol: str(dataset_dir / output_dir / info['patient'] / f'{scans[i]}_ss.nii.gz')
         for i, protocol in enumerate(ScanProtocol)
     }
     data = _loader(scans)
     data['label'] = label
+    data['patient'] = info['patient']
     return fold_id, data
 
 _loader: Optional[monai_transforms.Compose] = None
@@ -52,8 +54,9 @@ def load_folds(args, loader=None):
             monai_transforms.LoadImaged(args.protocols),
             monai_transforms.Lambdad(args.protocols, crop),
             monai_transforms.AddChanneld(args.protocols),
-            monai_transforms.Orientationd(args.protocols, axcodes='PLI'),
+            monai_transforms.Orientationd(args.protocols, axcodes='LAS'),
             monai_transforms.ThresholdIntensityd(args.protocols, threshold=0),
+
             monai_transforms.SelectItemsd(args.protocols),
             # Resized(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
             # NormalizeIntensityd(args.protocols, nonzero=True),
@@ -69,7 +72,7 @@ def load_folds(args, loader=None):
         folds_raw = [fold[:5] for fold in folds_raw]
 
     folds_flattened = [(fold_id, info) for fold_id, fold_raw in enumerate(folds_raw) for info in fold_raw]
-    folds_flattened = process_map(load_info, folds_flattened, ncols=80, desc='loading data', chunksize=1, max_workers=5)
+    folds_flattened = process_map(load_info, folds_flattened, ncols=80, desc='loading data')
     folds = [[] for _ in range(len(folds_raw))]
     for fold_id, data in folds_flattened:
         folds[fold_id].append(data)

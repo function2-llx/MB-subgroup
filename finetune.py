@@ -112,7 +112,7 @@ def parse_args(search=False):
     parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
-    parser.add_argument('--n_folds', type=int, choices=[3, 4], default=4)
+    parser.add_argument('--n_folds', type=int, choices=[3, 4], default=3)
     protocol_names = [value.name for value in ScanProtocol]
     parser.add_argument('--protocols', nargs='+', choices=protocol_names, default=protocol_names)
     parser.add_argument('--output_root', type=Path, required=True)
