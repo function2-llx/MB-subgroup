@@ -64,4 +64,4 @@ if __name__ == '__main__':
         # pd.DataFrame(scan_info, columns=('dir', 'desc', 'n')).to_csv('descs.csv', index=False)
 
     pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
-        .to_csv(os.path.join(output_dir, 'patient_info.csv'), index=False)
+        .to_csv(os.path.join(output_dir, '../nifti/patient_info.csv'), index=False)

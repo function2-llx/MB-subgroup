@@ -2,3 +2,5 @@ png/
 folds*.json
 cohort.json
 nifti*/
+skull-stripped
+sri24/
