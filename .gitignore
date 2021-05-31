@@ -140,7 +140,6 @@ cam.jpg
 processed_3d/
 output*/
 subgroup.csv
-patient_info.csv
 folds.json
 data-*/
 reports/
