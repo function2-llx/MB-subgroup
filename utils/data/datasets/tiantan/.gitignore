@@ -1,5 +1,6 @@
 png/
 folds*.json
+folds*.csv
 cohort.json
 nifti*/
 stripped/
