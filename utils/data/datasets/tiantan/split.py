@@ -16,7 +16,7 @@ subgroups = ['WNT', 'SHH', 'G3', 'G4']
 if __name__ == '__main__':
     cohort = json.load(open('cohort.json'))
     # group by subtypes
-    grouped_patients = [[patient for patient in cohort if patient['subgroup'] == group] for group in subgroups]
+    grouped_patients = [[patient['patient'] for patient in cohort if patient['subgroup'] == group] for group in subgroups]
     counts = np.empty((len(subgroups), n_folds), dtype=int)
     for subgroup_id, patients in enumerate(grouped_patients):
         q, r = divmod(len(patients), n_folds)
