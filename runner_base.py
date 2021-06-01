@@ -2,6 +2,7 @@ import itertools
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple
+from copy import deepcopy
 
 import monai
 import numpy as np
@@ -51,14 +52,8 @@ class FinetunerBase(RunnerBase):
         super().__init__(args)
         self.folds = folds
         self.val_transforms = [
-            monai_transforms.Resized(
-                self.args.protocols,
-                spatial_size=(self.args.sample_size, self.args.sample_size, -1),
-            ),
-            monai_transforms.ConcatItemsd(self.args.protocols, 'img'),
-            monai_transforms.SelectItemsd(keys=['img', 'label']),
-            monai_transforms.NormalizeIntensityd('img', channel_wise=True, nonzero=True),
-            ToTensorDeviced('img', self.args.device),
+            # monai_transforms.SelectItemsD(keys=['img', 'label']),
+            monai_transforms.ToTensorD('img', self.args.device),
         ]
         if args.rank == 0:
             self.reporters = {
@@ -78,18 +73,23 @@ class FinetunerBase(RunnerBase):
     def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
         train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
         train_transforms = {
-            'no': self.val_transforms,
+            'no': deepcopy(self.val_transforms),
             'weak': [
-                monai_transforms.Resized(
-                    self.args.protocols,
-                    spatial_size=(self.args.sample_size, self.args.sample_size, -1),
-                ),
-                monai_transforms.ConcatItemsd(self.args.protocols, 'img'),
-                monai_transforms.SelectItemsd(keys=['img', 'label']),
                 monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
-                monai_transforms.RandRotate90d(keys='img', prob=0.5),
-                monai_transforms.NormalizeIntensityd(keys='img', channel_wise=True, nonzero=True),
-                ToTensorDeviced('img', self.args.device),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
+                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
+                monai_transforms.RandSpatialCropD(
+                    keys='img',
+                    roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                    random_center=self.args.random_center,
+                    random_size=True,
+                ),
+                monai_transforms.ResizeD(
+                    keys='img',
+                    spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                ),
+                monai_transforms.ToTensorD('img'),
             ],
             'strong': [
                 # randomly crop selected slices
@@ -99,14 +99,10 @@ class FinetunerBase(RunnerBase):
                     random_center=True,
                     random_size=True,
                 ),
-                monai_transforms.Resized(
-                    keys=self.args.protocols,
-                    spatial_size=(self.args.sample_size, self.args.sample_size, -1),
-                ),
-                monai_transforms.ConcatItemsd(keys=self.args.protocols, name='img'),
-                monai_transforms.SelectItemsd(keys=['img', 'label']),
                 monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
-                monai_transforms.RandRotate90d(keys='img', prob=0.5),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
+                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
                 monai_transforms.NormalizeIntensityd(keys='img', channel_wise=True, nonzero=True),
                 monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
                 monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),

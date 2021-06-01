@@ -5,11 +5,9 @@ from fsl.utils.platform import platform
 from fsl.wrappers import flirt
 from tqdm.contrib.concurrent import process_map
 
-from histogram_matching import output_dir as input_dir
 from utils.dicom_utils import ScanProtocol
 
 output_dir = Path('sri24')
-ref_dir = Path(platform.fsldir) / 'data' / 'sri24'
 
 def process_patient(info):
     patient = info['patient']
@@ -23,5 +21,8 @@ def process_patient(info):
         flirt(str(src), str(ref), out=str(out))
 
 if __name__ == '__main__':
+    from histogram_matching import output_dir as input_dir
+    ref_dir = Path(platform.fsldir) / 'data' / 'sri24'
+
     cohort = json.load(open('cohort.json'))
     process_map(process_patient, cohort, ncols=80)

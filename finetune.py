@@ -16,7 +16,7 @@ from utils.data import MultimodalDataset
 
 class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
-        output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
             tmp_output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
             if self.is_world_master():
@@ -89,7 +89,7 @@ class Finetuner(FinetunerBase):
                 label = data['label'].to(self.args.device)
                 logit = model.forward(img)['linear']
                 if test_name:
-                    self.reporters[test_name].append(logit[0], label.item())
+                    self.reporters[test_name].append(data, logit[0])
 
                 loss = loss_fn(logit, label)
                 eval_loss += loss.item()
@@ -100,8 +100,10 @@ def get_model_output_root(args):
     return args.output_root \
         / args.targets \
         / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
-        / '{aug},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
-            **args.__dict__)
+        / '{aug_rc},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
+            aug_rc=f'{args.aug}-rc' if args.random_center else args.aug,
+            **args.__dict__
+        )
 
 def parse_args(search=False):
     from argparse import ArgumentParser
@@ -120,7 +122,6 @@ def parse_args(search=False):
     args = parser.parse_args()
     args = utils.args.process_args(args)
     args = models.args.process_args(args)
-
     args.target_names = {
         'all': ['WNT', 'SHH', 'G3', 'G4'],
         'WS': ['WNT', 'SHH'],
@@ -130,6 +131,9 @@ def parse_args(search=False):
     # for output
     if args.weight_decay == 0.0:
         args.weight_decay = 0
+    assert len(args.protocols) in [1, 3]
+    if len(args.protocols) == 1:
+        args.protocols = [args.protocols[0] for _ in range(3)]
     args.protocols = list(map(ScanProtocol.__getitem__, args.protocols))
     args.n_classes = len(args.target_names)
     if not search:
@@ -142,7 +146,7 @@ def main(args, folds):
     runner.run()
 
 if __name__ == '__main__':
-    from utils.data.datasets.tiantan.load import load_folds
+    from utils.data.datasets.tiantan.load import load_cohort
 
     args = parse_args()
-    main(args, load_folds(args))
+    main(args, load_cohort(args, args.n_folds))

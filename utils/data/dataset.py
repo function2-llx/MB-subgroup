@@ -4,7 +4,7 @@ import torch
 from monai.data import CacheDataset, Dataset
 from monai.transforms import Transform
 
-class MultimodalDataset(Dataset):
+class MultimodalDataset(CacheDataset):
     def __init__(self, data: List[Dict], transform: Transform, num_classes: Optional[int] = None, progress: bool = False):
         if issubclass(MultimodalDataset, CacheDataset):
             super().__init__(data, transform, progress=progress)

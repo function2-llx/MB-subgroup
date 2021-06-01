@@ -1,1 +1,1 @@
-from .convert import output_dir
+from .registration import output_dir

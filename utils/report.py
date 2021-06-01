@@ -11,7 +11,7 @@ from sklearn.metrics import classification_report, roc_curve, auc, confusion_mat
 class Reporter:
     def __init__(self, report_dir, target_names: List[str]):
         self.report_dir = Path(report_dir)
-        self.report_dir.mkdir(exist_ok=True)
+        self.report_dir.mkdir(parents=True, exist_ok=True)
         self.target_names = target_names
 
         self.y_true = []
@@ -60,14 +60,14 @@ class Reporter:
         pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names)\
             .to_csv(self.report_dir / 'cm.csv')
 
-    def append(self, patient: str, logit: torch.FloatTensor, label: int):
-        self.y_true.append(label)
+    def append(self, data, logit: torch.FloatTensor):
+        self.y_true.append(data['label'])
         pred = logit.argmax().item()
         self.y_pred.append(pred)
         output = torch.softmax(logit, dim=0)
         score = output.detach().cpu().numpy()
         self.y_score.append(score)
-        self.results.append((patient, label, pred, *score))
+        self.results.append((data['patient'], data['label'], pred, *score))
 
     def append_pred(self, pred: int, label: int):
         self.y_true.append(label)
