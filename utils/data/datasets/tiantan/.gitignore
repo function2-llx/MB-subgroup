@@ -4,3 +4,5 @@ cohort.json
 nifti*/
 skull-stripped
 sri24/
+dcm/
+n4itk

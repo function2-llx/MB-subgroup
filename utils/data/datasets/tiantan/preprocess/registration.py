@@ -1,14 +1,12 @@
 import json
 from pathlib import Path
-import os
 
-from fsl.wrappers import flirt
 from fsl.utils.platform import platform
-from fsl.data import atlases
+from fsl.wrappers import flirt
 from tqdm.contrib.concurrent import process_map
 
+from correction import output_dir as input_dir
 from utils.dicom_utils import ScanProtocol
-from skull_stripping import output_dir as input_dir
 
 output_dir = Path('sri24')
 ref_dir = Path(platform.fsldir) / 'data' / 'sri24'
