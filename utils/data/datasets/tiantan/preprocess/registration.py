@@ -5,7 +5,7 @@ from fsl.utils.platform import platform
 from fsl.wrappers import flirt
 from tqdm.contrib.concurrent import process_map
 
-from correction import output_dir as input_dir
+from histogram_matching import output_dir as input_dir
 from utils.dicom_utils import ScanProtocol
 
 output_dir = Path('sri24')

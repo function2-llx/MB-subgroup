@@ -21,7 +21,6 @@ def plot_example():
         'G3': ('MBMR163LWH', 7, 1024),
         'G4': ('MBMR148WTY', 5, 400),
     }
-    # norm = plt.Normalize(vmin=0, vmax=1024)
 
     fig, axes = plt.subplots(4, 3, gridspec_kw={'wspace': 0, 'hspace': 0}, squeeze=True, figsize=(7, 9), facecolor='black')
     for ax, protocol in zip(axes[0, :], ScanProtocol):
@@ -43,7 +42,7 @@ def plot_preprocess():
     # matplotlib.rcParams['font.family'] = ['Microsoft YaHei']
     steps = [
         ('原始图像', 'nifti', 9),
-        ('去除头骨', 'skull-stripped', 9),
+        ('去除头骨', 'stripped', 9),
         ('配准与重采样', 'sri24', 47),
     ]
     norm = plt.Normalize(vmin=0, vmax=1024)
