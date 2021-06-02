@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from models import generate_model
-from runner_base import FinetunerBase
+from finetuner_base import FinetunerBase
 from utils.data import MultimodalDataset
 
 class Finetuner(FinetunerBase):

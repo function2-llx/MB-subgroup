@@ -1,10 +1,7 @@
-import itertools
 import json
-from argparse import Namespace
 from copy import deepcopy
 from typing import Optional, Dict, List
 
-import numpy as np
 import monai.transforms as monai_transforms
 from tqdm.contrib.concurrent import process_map
 

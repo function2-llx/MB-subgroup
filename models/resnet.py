@@ -155,7 +155,9 @@ class ResNet(Backbone):
                                        stride=2)
 
         self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
-        self.fc = nn.Linear(block_inplanes[3] * block.expansion, n_classes)
+        self.n_classes = n_classes
+        if n_classes:
+            self.fc = nn.Linear(block_inplanes[3] * block.expansion, n_classes)
         self.num_seg = num_seg
         if num_seg:
             assert block == BasicBlock
@@ -295,13 +297,14 @@ class ResNet(Backbone):
         outputs['c4'] = x
         x = self.layer4(x)
         outputs['c5'] = x
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        outputs['linear'] = x
+
+        if self.n_classes:
+            x = self.avgpool(x)
+            x = x.view(x.size(0), -1)
+            outputs['linear'] = self.fc(x)
 
         if self.num_seg:
-            x = self.bottom(outputs['c5'])
+            x = self.bottom(x)
             x = self.up4(outputs['c5'] + x)
             x = self.up3(outputs['c4'] + x)
             x = self.up2(outputs['c3'] + x)

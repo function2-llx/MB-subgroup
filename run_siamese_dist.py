@@ -12,7 +12,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 from tqdm import tqdm
 
-from runner_base import FinetunerBase
+from finetuner_base import FinetunerBase
 from siamese import generate_model, load_pretrained_model, Siamese
 from utils.data import load_folds, MultimodalDataset, BalancedSampler
 

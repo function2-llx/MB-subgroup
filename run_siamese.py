@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from medical_net.model import generate_model
 from medical_net.models.resnet import ResNet
-from runner_base import FinetunerBase
+from finetuner_base import FinetunerBase
 from utils.data import load_folds, MultimodalDataset, BalancedSampler
 
 

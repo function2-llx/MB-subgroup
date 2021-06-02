@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import monai.transforms as monai_transforms
+from monai import transforms as monai_transforms
 from tqdm.contrib.concurrent import process_map
 
 from utils.dicom_utils import ScanProtocol
@@ -43,6 +44,34 @@ def load_subject(subject):
                 subject_info.update({'resect': resect})
     return subject_info
 
+class ConvertToMultiChannelBasedOnBratsClassesd(monai_transforms.MapTransform):
+    """
+    Convert labels to multi channels based on brats classes:
+        - the GD-enhancing tumor (ET — label 4)
+        - the peritumoral edema (ED — label 2)
+        - and the necrotic and non-enhancing tumor core (NCR/NET — label 1)
+
+    # label 1 is the peritumoral edema
+    # label 2 is the GD-enhancing tumor
+    # label 3 is the necrotic and non-enhancing tumor core
+    # The possible classes are TC (Tumor core), WT (Whole tumor)
+    # and ET (Enhancing tumor).
+
+    """
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            result = []
+            # merge labels 1, 2 and 4 to construct WT
+            result.append(d[key] != 0)
+            # merge label 1 and label 4 to construct TC
+            result.append((d[key] == 1) | (d[key] == 4))
+            # label 4 is AT
+            result.append(d[key] == 4)
+            d[key] = np.concatenate(result, axis=0).astype(np.float32)
+        return d
+
 if __name__ == "__main__":
     mapping = pd.read_csv('origin/name_mapping.csv', index_col='BraTS_2020_subject_ID')
     survival_info = pd.read_csv('origin/survival_info.csv', index_col='Brats20ID')
@@ -54,6 +83,7 @@ if __name__ == "__main__":
         monai_transforms.SelectItemsd(['img', 'seg']),
         monai_transforms.ThresholdIntensityD('img', threshold=0),
         monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
+        ConvertToMultiChannelBasedOnBratsClassesd('seg'),
     ])
     subjects = []
     for subject_path in Path('origin').iterdir():

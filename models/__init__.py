@@ -1,7 +1,8 @@
 import logging
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 
@@ -165,3 +166,10 @@ def make_data_parallel(model, is_distributed, device):
         model = nn.DataParallel(model, device_ids=None).cuda()
 
     return model
+
+# monai(BNWHD) to 3D-ResNet(BNDWH)
+def permute_img(data: torch.Tensor, inv=False):
+    if inv:
+        return data.transpose(-2, -3).transpose(-1, -2)
+    else:
+        return data.transpose(-1, -2).transpose(-2, -3)
