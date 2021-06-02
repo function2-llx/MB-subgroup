@@ -51,7 +51,8 @@ def load_cohort(args, n_folds=None):
             monai_transforms.ThresholdIntensityD('img', threshold=0),
             monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
         ])
-        cohort = process_map(load_info, json.load(open(dataset_dir / 'cohort.json')), desc='loading cohort', ncols=80)
+        cohort = filter(lambda info: info['subgroup'] in target_dict, json.load(open(dataset_dir / 'cohort.json')))
+        cohort = process_map(load_info, list(cohort), desc='loading cohort', ncols=80)
 
     if n_folds is not None:
         folds = json.load(open(dataset_dir / f'folds-{n_folds}.json'))

@@ -75,16 +75,16 @@ class FinetunerBase(RunnerBase):
         train_transforms = {
             'no': deepcopy(self.val_transforms),
             'weak': [
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
-                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
                 monai_transforms.RandSpatialCropD(
                     keys='img',
                     roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
                     random_center=self.args.random_center,
                     random_size=True,
                 ),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
+                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
                 monai_transforms.ResizeD(
                     keys='img',
                     spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
@@ -92,21 +92,23 @@ class FinetunerBase(RunnerBase):
                 monai_transforms.ToTensorD('img'),
             ],
             'strong': [
-                # randomly crop selected slices
-                RandSpatialCropWithRatiod(
-                    keys=self.args.protocols,
-                    roi_ratio=(self.args.crop_ratio, self.args.crop_ratio, 1),
-                    random_center=True,
+                monai_transforms.RandSpatialCropD(
+                    keys='img',
+                    roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                    random_center=self.args.random_center,
                     random_size=True,
                 ),
                 monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
                 monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
                 monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
                 monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
-                monai_transforms.NormalizeIntensityd(keys='img', channel_wise=True, nonzero=True),
                 monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
                 monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
-                ToTensorDeviced(keys='img', device=self.args.device),
+                monai_transforms.ResizeD(
+                    keys='img',
+                    spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                ),
+                monai_transforms.ToTensorD(keys='img'),
             ]
         }[self.args.aug]
 
