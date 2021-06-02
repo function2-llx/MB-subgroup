@@ -5,7 +5,7 @@ from typing import Callable
 import torch
 from monai.data import DataLoader
 from monai.losses import DiceLoss
-from torch.optim import AdamW
+from torch.optim import AdamW, Adam
 from torch.utils.data import ConcatDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -26,13 +26,12 @@ def parse_args():
     args = parser.parse_args()
     args = utils.args.process_args(args)
     args = models.process_args(args)
-    args.model = 'unet'
+    args.model = 'resnet'
     args.n_classes = None
     args.model_output_root = args.output_root \
         / '+'.join(args.datasets) \
-        / 'ep{epochs},lr{lr},crop{crop_ratio},wd{weight_decay},{sample_size}x{sample_slices}'.format(**args.__dict__)
+        / 'ep{epochs},lr{lr},wd{weight_decay},{sample_size}x{sample_slices}'.format(**args.__dict__)
     print('output root:', args.model_output_root)
-    assert 0 < args.crop_ratio <= 1
     args.rank = 0
 
     return args
@@ -42,13 +41,13 @@ class Pretrainer(RunnerBase):
         super().__init__(args)
         self.dataset = dataset
 
-        assert args.model == 'unet'
-        self.model = generate_model(args, pretrain=False).to(self.args.device)
+        assert args.model == 'resnet'
+        self.model = generate_model(args, pretrain=False, num_seg=3).to(self.args.device)
 
     def train(self):
         self.args.model_output_root.mkdir(exist_ok=True, parents=True)
         loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
-        optimizer = AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-5, amsgrad=True)
+        optimizer = Adam(self.model.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay, amsgrad=True)
         loader = DataLoader(self.dataset, batch_size=self.args.batch_size, shuffle=True)
         if self.is_world_master():
             writer = SummaryWriter(log_dir=Path('runs') / self.args.model_output_root)
@@ -83,11 +82,11 @@ def get_loader(dataset) -> Callable[[Namespace], MultimodalDataset]:
     return loader
 
 if __name__ == '__main__':
-    args = parse_args()
+    _args = parse_args()
     datasets = []
-    for dataset in args.datasets:
-        loader = get_loader(dataset)
-        datasets.append(loader(args))
+    for dataset in _args.datasets:
+        dataset_loader = get_loader(dataset)
+        datasets.append(dataset_loader(_args))
 
-    trainer = Pretrainer(args, ConcatDataset(datasets))
+    trainer = Pretrainer(_args, ConcatDataset(datasets))
     trainer.train()

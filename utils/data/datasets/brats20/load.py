@@ -6,7 +6,7 @@ from tqdm.contrib.concurrent import process_map
 import monai.transforms as monai_transforms
 
 from utils.data import MultimodalDataset
-from utils.transforms import RandSampleSlicesd, RandSpatialCropWithRatiod
+from utils.transforms import RandSampleSlicesD
 
 
 class ConvertToMultiChannelBasedOnBratsClassesd(monai_transforms.MapTransform):
@@ -59,38 +59,45 @@ def load_all(args) -> MultimodalDataset:
         subjects,
         desc='loading BraTS20',
         ncols=80,
-        max_workers=16,
     )
-    transform = monai_transforms.Compose([
+    # intensity of images were normalized during pre-processing
+    transforms = [
         ConvertToMultiChannelBasedOnBratsClassesd(keys='seg'),
-        monai_transforms.ThresholdIntensityd(keys='img', threshold=0),
+        RandSampleSlicesD('img', args.sample_slices)
+    ]
+    if 'crop' in args.aug:
+        transforms.extend([
+            monai_transforms.RandSpatialCropD(
+                keys='img',
+                roi_size=(args.sample_size, args.sample_size, args.sample_slices),
+                random_center=False,
+                random_size=True,
+            ),
+        ])
+    transform = monai_transforms.Compose([
         # randomly select slices
+        RandSampleSlicesD(['img', 'seg'], num_slices=args.sample_slices),
         monai_transforms.RandSpatialCropd(
             keys=['img', 'seg'],
-            roi_size=(-1, -1, args.sample_slices),
-            random_size=False,
-            random_center=True,
-        ),
-        # randomly crop selected slices
-        RandSpatialCropWithRatiod(
-            keys=['img', 'seg'],
-            roi_ratio=(args.crop_ratio, args.crop_ratio, 1),
-            random_center=True,
+            roi_size=(args.sample_size, args.sample_size, args.sample_slices),
             random_size=True,
+            random_center=False,
         ),
-        monai_transforms.Resized(
-            keys=['img', 'seg'],
-            spatial_size=(args.sample_size, args.sample_size, -1),
-            mode=('area', 'nearest'),
-        ),
+        # the other day I says (may outdated):
         # note: this one seems not work, harmful to pretrain
         # 155: slices of BraTS; 24: slices of Tiantan; 155 // 24 = 6
-        # RandSampleSlicesd(('img', 'seg'), sample_slices=args.sample_slices, spacing=155 // 24),
-        monai_transforms.RandRotate90d(keys=['img', 'seg'], prob=0.5),
-        monai_transforms.RandFlipd(keys=['img', 'seg'], prob=0.5, spatial_axis=0),
+        monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
+        monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
+        monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
+        monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
         monai_transforms.NormalizeIntensityd(keys='img', nonzero=True, channel_wise=True),
         monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
         monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
+        monai_transforms.Resized(
+            keys=['img', 'seg'],
+            spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
+            mode=('area', 'nearest'),
+        ),
         monai_transforms.ToTensord(keys=['img', 'seg']),
     ])
 

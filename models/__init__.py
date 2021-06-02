@@ -36,7 +36,7 @@ def get_fine_tuning_parameters(model, ft_begin_module):
 
     return parameters
 
-def generate_model(opt, pretrain: bool = True) -> Backbone:
+def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
     if opt.model == 'unet':
         model = UNet(
             dimensions=3,
@@ -57,6 +57,7 @@ def generate_model(opt, pretrain: bool = True) -> Backbone:
             conv1_t_stride=opt.conv1_t_stride,
             no_max_pool=opt.no_max_pool,
             widen_factor=opt.resnet_widen_factor,
+            num_seg=num_seg,
         )
     elif opt.model == 'resnet2p1d':
         model = resnet2p1d.generate_model(

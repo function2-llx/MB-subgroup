@@ -15,7 +15,7 @@ parser.add_argument('--model_depth', type=int, choices=[10, 18, 34, 50, 101], de
 parser.add_argument('--resnet_shortcut', default='B', choices=['A', 'B'], help='Shortcut type of resnet')
 parser.add_argument('--n_input_channels', type=int, default=3)
 parser.add_argument('--sample_size', default=224, type=int, help='Height and width of inputs')
-parser.add_argument('--sample_slices', default=64, type=int, help='slices of inputs, temporal size in terms of videos')
+parser.add_argument('--sample_slices', default=32, type=int, help='slices of inputs, temporal size in terms of videos')
 parser.add_argument('--pretrain_root', default='pretrained', type=Path, help='root directory for pretrained models')
 parser.add_argument('--pretrain_name', default=None, type=Path, help='Pretrained model name, also save path related to pretrain_root')
 parser.add_argument('--resnext_cardinality', default=32, type=int, help='ResNeXt cardinality')

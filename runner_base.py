@@ -2,17 +2,14 @@ import itertools
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple
-from copy import deepcopy
 
 import monai
-import numpy as np
 import torch
-import monai.transforms as monai_transforms
+from monai import transforms as monai_transforms
 
 from utils.data import MultimodalDataset
 from utils.report import Reporter
-from utils.transforms import ToTensorDeviced, RandSpatialCropWithRatiod
-
+from utils.transforms import RandSampleSlicesD, SampleSlicesD
 
 class RunnerBase(ABC):
     def __init__(self, args):
@@ -46,6 +43,43 @@ class RunnerBase(ABC):
                 force=True,
             )
 
+    def get_train_transforms(self):
+        train_transforms = [
+            RandSampleSlicesD('img', self.args.sample_slices)
+        ]
+        if 'crop' in self.args.aug:
+            train_transforms.extend([
+                monai_transforms.RandSpatialCropD(
+                    keys='img',
+                    roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                    random_center=False,
+                    random_size=True,
+                ),
+            ])
+        if 'flip' in self.args.aug:
+            train_transforms.extend([
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
+                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
+                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
+            ])
+        if 'voxel' in self.args.aug:
+            train_transforms.extend([
+                monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
+                monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
+            ])
+        train_transforms.extend([
+            monai_transforms.ResizeD(
+                keys='img',
+                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+            ),
+            monai_transforms.ToTensorD(keys='img'),
+        ])
+        return train_transforms
+
+
+def get_train_transforms(args):
+
 
 class FinetunerBase(RunnerBase):
     def __init__(self, args, folds):
@@ -53,6 +87,9 @@ class FinetunerBase(RunnerBase):
         self.folds = folds
         self.val_transforms = [
             # monai_transforms.SelectItemsD(keys=['img', 'label']),
+            # monai_transforms.ResizeD('img', spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices)),
+            SampleSlicesD('img', 2, args.sample_slices),
+            monai_transforms.ResizeD('img', spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices)),
             monai_transforms.ToTensorD('img', self.args.device),
         ]
         if args.rank == 0:
@@ -72,43 +109,7 @@ class FinetunerBase(RunnerBase):
 
     def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
         train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
-        train_transforms = {
-            'no': deepcopy(self.val_transforms),
-            'weak': [
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
-                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
-                monai_transforms.RandSpatialCropD(
-                    keys='img',
-                    roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-                    random_center=self.args.random_center,
-                    random_size=True,
-                ),
-                monai_transforms.ResizeD(
-                    keys='img',
-                    spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
-                ),
-                monai_transforms.ToTensorD('img'),
-            ],
-            'strong': [
-                # randomly crop selected slices
-                RandSpatialCropWithRatiod(
-                    keys=self.args.protocols,
-                    roi_ratio=(self.args.crop_ratio, self.args.crop_ratio, 1),
-                    random_center=True,
-                    random_size=True,
-                ),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=0),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=1),
-                monai_transforms.RandFlipd(keys='img', prob=0.5, spatial_axis=2),
-                monai_transforms.RandRotate90d(keys='img', prob=0.5, max_k=1),
-                monai_transforms.NormalizeIntensityd(keys='img', channel_wise=True, nonzero=True),
-                monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
-                monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
-                ToTensorDeviced(keys='img', device=self.args.device),
-            ]
-        }[self.args.aug]
+        train_transforms = self.get_train_transforms()
 
         train_set = MultimodalDataset(
             train_folds,

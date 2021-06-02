@@ -39,7 +39,8 @@ class Finetuner(FinetunerBase):
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
                     imgs = data['img'].to(self.args.device)
                     labels = data['label'].to(self.args.device)
-                    logits = model.forward(imgs)['linear']
+                    # monai order to 3D ResNet order
+                    logits = model.forward(imgs.permute(0, 1, 4, 2, 3))['linear']
                     loss = loss_fn(logits, labels)
                     if self.is_world_master():
                         writer.add_scalar('loss/train', loss.item(), step)
@@ -87,7 +88,7 @@ class Finetuner(FinetunerBase):
             for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
                 img = data['img'].to(self.args.device)
                 label = data['label'].to(self.args.device)
-                logit = model.forward(img)['linear']
+                logit = model.forward(img.permute(0, 1, 4, 2, 3))['linear']
                 if test_name:
                     self.reporters[test_name].append(data, logit[0])
 
@@ -100,8 +101,8 @@ def get_model_output_root(args):
     return args.output_root \
         / args.targets \
         / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
-        / '{aug_rc},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
-            aug_rc=f'{args.aug}-rc' if args.random_center else args.aug,
+        / '{aug_list},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
+            aug_list='+'.join(args.aug) if args.aug else 'no',
             **args.__dict__
         )
 
@@ -112,7 +113,7 @@ def parse_args(search=False):
     import models
 
     parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
-    parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='inv')
+    parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='invsqrt')
     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
     parser.add_argument('--n_folds', type=int, choices=[3, 4], default=3)
     protocol_names = [value.name for value in ScanProtocol]

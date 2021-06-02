@@ -49,9 +49,11 @@ if __name__ == "__main__":
     loader = monai_transforms.Compose([
         monai_transforms.LoadImaged(list(ScanProtocol) + ['seg']),
         monai_transforms.AddChanneld(list(ScanProtocol) + ['seg']),
-        monai_transforms.Orientationd(list(ScanProtocol) + ['seg'], 'PLI'),
+        monai_transforms.Orientationd(list(ScanProtocol) + ['seg'], 'LAS'),
         monai_transforms.ConcatItemsd(list(ScanProtocol), 'img'),
         monai_transforms.SelectItemsd(['img', 'seg']),
+        monai_transforms.ThresholdIntensityD('img', threshold=0),
+        monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
     ])
     subjects = []
     for subject_path in Path('origin').iterdir():

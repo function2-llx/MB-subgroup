@@ -1,9 +1,12 @@
+from typing import Union, Sequence
+
 import math
 from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from monai.networks import blocks as monai_blocks
 
 from .backbone import Backbone
 
@@ -112,8 +115,12 @@ class ResNet(Backbone):
         shortcut_type='B',
         widen_factor=1.0,
         n_classes=None,
+        num_seg=None,
     ):
         super().__init__()
+        assert n_input_channels == 3
+        assert conv1_t_size == 7
+        assert conv1_t_stride == 1
 
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
 
@@ -149,6 +156,15 @@ class ResNet(Backbone):
 
         self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
         self.fc = nn.Linear(block_inplanes[3] * block.expansion, n_classes)
+        self.num_seg = num_seg
+        if num_seg:
+            assert block == BasicBlock
+            self.bottom = self._get_bottom_layer(block_inplanes[3])
+            self.up4 = self._get_up_layer(block_inplanes[3], block_inplanes[2], 2, False)
+            self.up3 = self._get_up_layer(block_inplanes[2], block_inplanes[1], 2, False)
+            self.up2 = self._get_up_layer(block_inplanes[1], block_inplanes[0], 2, False)
+            self.up1 = self._get_up_layer(block_inplanes[0], block_inplanes[0], 1, False)
+            self.seg_out = self._get_up_layer(block_inplanes[0], num_seg, 2, True)
 
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
@@ -158,6 +174,75 @@ class ResNet(Backbone):
             elif isinstance(m, nn.BatchNorm3d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
+    def _get_up_layer(self, in_channels: int, out_channels: int, strides: Union[Sequence[int], int], is_top: bool) -> nn.Module:
+        """
+        Args:
+            in_channels: number of input channels.
+            out_channels: number of output channels.
+            strides: convolution stride.
+            is_top: True if this is the top block.
+        """
+
+        if is_top:
+            return nn.Sequential(
+                # maxpool
+                monai_blocks.Convolution(
+                    3,
+                    in_channels,
+                    in_channels,
+                    strides=2,
+                    kernel_size=3,
+                    conv_only=False,
+                    is_transposed=True,
+                ),
+                # conv1
+                monai_blocks.Convolution(
+                    3,
+                    in_channels,
+                    out_channels,
+                    strides=(1, 2, 2),
+                    # doubt
+                    kernel_size=(7, 7, 7),
+                    conv_only=True,
+                    is_transposed=True,
+                )
+            )
+        else:
+            conv: Union[monai_blocks.Convolution, nn.Sequential]
+            conv = monai_blocks.Convolution(
+                3,
+                in_channels,
+                out_channels,
+                strides=strides,
+                kernel_size=3,
+                conv_only=False,
+                is_transposed=True,
+            )
+
+            ru = monai_blocks.ResidualUnit(
+                3,
+                out_channels,
+                out_channels,
+                strides=1,
+                kernel_size=3,
+                subunits=1,
+                last_conv_only=False,
+            )
+
+            return nn.Sequential(conv, ru)
+
+    def _get_bottom_layer(self, in_channels: int, out_channels: int = None) -> nn.Module:
+        if out_channels is None:
+            out_channels = in_channels
+        return monai_blocks.ResidualUnit(
+            3,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            strides=1,
+            kernel_size=3,
+            subunits=2,
+        )
 
     def _downsample_basic_block(self, x, planes, stride):
         out = F.avg_pool3d(x, kernel_size=1, stride=stride)
@@ -214,6 +299,16 @@ class ResNet(Backbone):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         outputs['linear'] = x
+
+        if self.num_seg:
+            x = self.bottom(outputs['c5'])
+            x = self.up4(outputs['c5'] + x)
+            x = self.up3(outputs['c4'] + x)
+            x = self.up2(outputs['c3'] + x)
+            x = self.up1(outputs['c2'] + x)
+            x = self.seg_out(outputs['c1'] + x)
+            outputs['seg'] = x
+
         return outputs
 
 def generate_model(model_depth, **kwargs):
