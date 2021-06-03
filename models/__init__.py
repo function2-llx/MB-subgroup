@@ -128,7 +128,6 @@ def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
             if not any(skip_key in key for skip_key in skip_keys)
         })
         missing_keys, unexpected_keys = model.load_state_dict(update_state_dict, strict=False)
-        assert len(unexpected_keys) == 0
 
     return model.to(opt.device)
 

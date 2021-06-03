@@ -20,7 +20,7 @@ class Finetuner(FinetunerBase):
         if self.args.train and (self.args.force_retrain or not output_path.exists()):
             tmp_output_path: Path = self.args.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
             if self.is_world_master():
-                writer = SummaryWriter(log_dir=Path(f'runs-{self.args.n_folds}/fold{val_id}') / self.args.model_output_root)
+                writer = SummaryWriter(log_dir=Path(f'runs') / f'fold{val_id}' / self.args.model_output_root)
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(self.args, pretrain=self.args.pretrain_name is not None)
             from torch.optim import AdamW

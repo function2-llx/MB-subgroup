@@ -39,7 +39,7 @@ class RunnerBase(ABC):
                 force=True,
             )
 
-    def get_train_transforms(self, with_seg=True):
+    def get_train_transforms(self, with_seg=False):
         from monai.utils import InterpolateMode
 
         keys = ['img']

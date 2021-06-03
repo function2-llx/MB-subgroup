@@ -1,7 +1,7 @@
 from argparse import Namespace
 from pathlib import Path
 from typing import Callable
-
+from monai.networks.nets import UNet
 import torch
 from monai.data import DataLoader
 from monai.losses import DiceLoss
@@ -29,7 +29,7 @@ def parse_args():
     args.n_classes = None
     args.model_output_root = args.output_root \
         / '+'.join(args.datasets) \
-        / '{aug_list},bs{batch_size},lr{lr},wd{weight_decay},{sample_size}x{sample_slices}'.format(
+        / 'res{model_depth},{aug_list},bs{batch_size},lr{lr},wd{weight_decay},{sample_size}x{sample_slices}'.format(
             aug_list='+'.join(args.aug) if args.aug else 'no',
             **args.__dict__,
         )
@@ -59,7 +59,20 @@ class Pretrainer(RunnerBase):
         if self.is_world_master():
             writer = SummaryWriter(log_dir=Path('runs') / self.args.model_output_root)
 
-        for epoch in range(1, self.args.epochs + 1):
+        start_epoch = 1
+        if not self.args.force_retrain:
+            states = None
+            for epoch in range(1, self.args.epochs + 1):
+                save_path: Path = self.args.model_output_root / f'ep{epoch}' / f'state.pth'
+                if save_path.exists():
+                    states = torch.load(save_path)
+                    start_epoch = epoch + 1
+
+            if states is not None:
+                self.model.load_state_dict(states['state_dict'])
+                optimizer.load_state_dict(states['optimizer'])
+
+        for epoch in range(start_epoch, self.args.epochs + 1):
             epoch_loss = 0
             for data in tqdm(loader, ncols=80, desc=f'epoch{epoch}'):
                 outputs = self.model.forward(permute_img(data['img'].to(self.args.device)))
@@ -70,7 +83,7 @@ class Pretrainer(RunnerBase):
                 epoch_loss += loss.item()
 
             if self.is_world_master():
-                writer.add_scalar('loss', epoch_loss, epoch)
+                writer.add_scalar('loss', epoch_loss / len(loader), epoch)
                 if epoch % self.args.save_epoch == 0:
                     save_states = {
                         'state_dict': self.model.state_dict(),
