@@ -48,7 +48,7 @@ class Pretrainer(RunnerBase):
     def prepare_data(self):
         from utils.data.datasets.brats20 import load_all
         data = load_all(self.args)
-        return MultimodalDataset(data, self.get_train_transforms(with_seg=True), progress=False)
+        return MultimodalDataset(data, RunnerBase.get_train_transforms(self.args, with_seg=True), progress=False)
 
     def train(self):
         self.args.model_output_root.mkdir(exist_ok=True, parents=True)

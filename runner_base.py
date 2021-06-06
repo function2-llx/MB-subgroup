@@ -3,9 +3,9 @@ from abc import ABC
 
 import monai
 from monai import transforms as monai_transforms
+from monai.utils import InterpolateMode
 
-from utils.transforms import RandSampleSlicesD
-
+from utils.transforms import RandSampleSlicesD, SampleSlicesD
 
 class RunnerBase(ABC):
     def __init__(self, args):
@@ -39,7 +39,8 @@ class RunnerBase(ABC):
                 force=True,
             )
 
-    def get_train_transforms(self, with_seg=False):
+    @staticmethod
+    def get_train_transforms(args, with_seg=False):
         from monai.utils import InterpolateMode
 
         keys = ['img']
@@ -48,25 +49,25 @@ class RunnerBase(ABC):
             keys.append('seg')
             resize_mode.append(InterpolateMode.NEAREST)
         train_transforms = [
-            RandSampleSlicesD(keys=keys, num_slices=self.args.sample_slices),
+            RandSampleSlicesD(keys=keys, num_slices=args.sample_slices),
         ]
-        if 'crop' in self.args.aug:
+        if 'crop' in args.aug:
             train_transforms.extend([
                 monai_transforms.RandSpatialCropD(
                     keys=keys,
-                    roi_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                    roi_size=(args.sample_size, args.sample_size, args.sample_slices),
                     random_center=False,
                     random_size=True,
                 ),
             ])
-        if 'flip' in self.args.aug:
+        if 'flip' in args.aug:
             train_transforms.extend([
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=0),
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=1),
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=2),
                 monai_transforms.RandRotate90d(keys=keys, prob=0.5, max_k=1),
             ])
-        if 'voxel' in self.args.aug:
+        if 'voxel' in args.aug:
             # seg won't be affected
             train_transforms.extend([
                 monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
@@ -75,10 +76,28 @@ class RunnerBase(ABC):
         train_transforms.extend([
             monai_transforms.ResizeD(
                 keys=keys,
-                spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices),
+                spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
                 mode=resize_mode,
             ),
             monai_transforms.ToTensorD(keys=keys),
         ])
 
         return train_transforms
+
+    @staticmethod
+    def get_inference_transforms(args, with_seg=False):
+        keys = ['img']
+        resize_mode = [InterpolateMode.AREA]
+        if with_seg:
+            keys.append('seg')
+            resize_mode.append(InterpolateMode.NEAREST)
+
+        return [
+            SampleSlicesD(keys, 2, args.sample_slices),
+            monai_transforms.ResizeD(
+                keys,
+                spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
+                mode=resize_mode,
+            ),
+            monai_transforms.ToTensorD(keys),
+        ]

@@ -15,13 +15,6 @@ class FinetunerBase(RunnerBase):
     def __init__(self, args, folds):
         super().__init__(args)
         self.folds = folds
-        self.val_transforms = [
-            # monai_transforms.SelectItemsD(keys=['img', 'label']),
-            # monai_transforms.ResizeD('img', spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices)),
-            SampleSlicesD('img', 2, args.sample_slices),
-            monai_transforms.ResizeD('img', spatial_size=(self.args.sample_size, self.args.sample_size, self.args.sample_slices)),
-            monai_transforms.ToTensorD('img'),
-        ]
         if args.rank == 0:
             self.reporters = {
                 test_name: Reporter(args.model_output_root / test_name, self.args.target_names)
@@ -32,18 +25,17 @@ class FinetunerBase(RunnerBase):
         val_fold = self.folds[val_id]
         val_set = MultimodalDataset(
             val_fold,
-            monai_transforms.Compose(self.val_transforms),
+            monai_transforms.Compose(RunnerBase.get_inference_transforms(self.args)),
             len(self.args.target_names),
         )
         return val_set
 
     def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
         train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
-        train_transforms = self.get_train_transforms()
 
         train_set = MultimodalDataset(
             train_folds,
-            monai_transforms.Compose(train_transforms),
+            monai_transforms.Compose(RunnerBase.get_train_transforms(self.args)),
             len(self.args.target_names),
         )
         return train_set, self.prepare_val_fold(val_id)
