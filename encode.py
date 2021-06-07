@@ -13,7 +13,8 @@ class Encoder(RunnerBase):
         super().__init__(args)
 
 if __name__ == '__main__':
-    from models import generate_model, permute_img
+    from models import generate_model
+    from models.utils import permute_img
     from finetune import parse_args
 
     args = parse_args()

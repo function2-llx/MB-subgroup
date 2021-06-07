@@ -30,6 +30,7 @@ parser.add_argument('--conv1_t_size', default=7, type=int, help='Kernel size in 
 parser.add_argument('--conv1_t_stride', default=1, type=int, help='Stride in t dim of conv1.')
 parser.add_argument('--no_max_pool', action='store_true', help='If true, the max pooling after conv1 is removed.')
 parser.add_argument('--wide_resnet_k', default=2, type=int, help='Wide resnet k')
+parser.add_argument('--recons', action='store_true')
 
 def process_args(args):
     if args.pretrain_name == 'scratch':

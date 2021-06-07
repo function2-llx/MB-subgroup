@@ -116,3 +116,10 @@ def get_pretrain_config(pretrained_name: str):
         'model_depth': d,
         'n_pretrain_classes': n_pre
     }
+
+# monai(BNWHD) to 3D-ResNet(BNDWH)
+def permute_img(data: torch.Tensor, inv=False):
+    if inv:
+        return data.transpose(-2, -3).transpose(-1, -2)
+    else:
+        return data.transpose(-1, -2).transpose(-2, -3)

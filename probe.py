@@ -1,22 +1,38 @@
+import json
+import operator
+
+import numpy as np
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import cross_validate
+
+from utils.data.datasets.tiantan import dataset_dir
+
+n_folds = 3
+
 if __name__ == '__main__':
-    from models import generate_model
-
-    def parse_args():
-        import utils.args
-        import models
-        from argparse import ArgumentParser
-        parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
-
-        args = parser.parse_args()
-        return args
-
-    args = parse_args()
-    args.target_names = ['WNT', 'SHH', 'G3', 'G4']
-    args.target_dict = {
-        name: i
-        for i, name in enumerate(args.target_names)
+    features = np.load('features.npz')
+    cohort = {
+        info['patient']: info
+        for info in json.load(open(dataset_dir / 'cohort.json'))
     }
-    model = generate_model(args, pretrain=True)
-    from utils.data.datasets.tiantan import load_cohort
-    cohort = load_cohort(args)
-    
+    folds = json.load(open(dataset_dir / f'folds-{n_folds}.json'))
+    targets = ['WNT', 'SHH', 'G3', 'G4']
+    X = []
+    y = []
+    np.random.seed(2333)
+
+    for val_id in range(n_folds):
+        X_train, y_train, X_val, y_val = [], [], [], []
+        for fold_id, fold in enumerate(folds):
+            X = fold_id
+            for patient in fold:
+
+
+
+    for info in cohort:
+        X.append(features[patient])
+        y.append(subgroup)
+
+    svm = LinearSVC(random_state=2333)
+    results = cross_validate(svm, X, y, cv=3)
+    print(results)

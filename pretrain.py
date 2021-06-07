@@ -9,7 +9,8 @@ from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from models import generate_model, permute_img
+from models import generate_model
+from models.utils import permute_img
 from runner_base import RunnerBase
 from utils.data import MultimodalDataset
 

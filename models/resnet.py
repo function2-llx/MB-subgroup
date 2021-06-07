@@ -1,4 +1,4 @@
-from typing import Union, Sequence
+from typing import Union, Sequence, TypedDict
 
 import math
 from functools import partial
@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from monai.networks import blocks as monai_blocks
 
+from .utils import permute_img
 from .backbone import Backbone
 
 def get_inplanes():
@@ -103,6 +104,24 @@ class Bottleneck(nn.Module):
         return out
 
 class ResNet(Backbone):
+    class Decoder:
+        def __init__(self, bottom: nn.Module, up1: nn.Module, up2: nn.Module, up3: nn.Module, up4: nn.Module, out: nn.Module):
+            self.bottom = bottom
+            self.up1 = up1
+            self.up2 = up2
+            self.up3 = up3
+            self.up4 = up4
+            self.out = out
+
+        def decode(self, c1, c2, c3, c4, c5):
+            up = self.bottom(c5)
+            up = self.up4(c5 + up)
+            up = self.up3(c4 + up)
+            up = self.up2(c3 + up)
+            up = self.up1(c2 + up)
+            out = self.out(c1 + up)
+            return out
+
     def __init__(
         self,
         block,
@@ -116,6 +135,7 @@ class ResNet(Backbone):
         widen_factor=1.0,
         n_classes=None,
         num_seg=None,
+        recons=False,
     ):
         super().__init__()
         assert n_input_channels == 3
@@ -161,12 +181,28 @@ class ResNet(Backbone):
         self.num_seg = num_seg
         if num_seg:
             assert block == BasicBlock
-            self.bottom = self._get_bottom_layer(block_inplanes[3])
-            self.up4 = self._get_up_layer(block_inplanes[3], block_inplanes[2], 2, False)
-            self.up3 = self._get_up_layer(block_inplanes[2], block_inplanes[1], 2, False)
-            self.up2 = self._get_up_layer(block_inplanes[1], block_inplanes[0], 2, False)
-            self.up1 = self._get_up_layer(block_inplanes[0], block_inplanes[0], 1, False)
-            self.seg_out = self._get_up_layer(block_inplanes[0], num_seg, 2, True)
+            self.seg = ResNet.Decoder(
+                self._get_bottom_layer(block_inplanes[3]),
+                self._get_up_layer(block_inplanes[3], block_inplanes[2], 2, False),
+                self._get_up_layer(block_inplanes[2], block_inplanes[1], 2, False),
+                self._get_up_layer(block_inplanes[1], block_inplanes[0], 2, False),
+                self._get_up_layer(block_inplanes[0], block_inplanes[0], 1, False),
+                self._get_up_layer(block_inplanes[0], num_seg, 2, True),
+            )
+        else:
+            self.seg = None
+
+        if recons:
+            self.recons = ResNet.Decoder(
+                self._get_bottom_layer(block_inplanes[3]),
+                self._get_up_layer(block_inplanes[3], block_inplanes[2], 2, False),
+                self._get_up_layer(block_inplanes[2], block_inplanes[1], 2, False),
+                self._get_up_layer(block_inplanes[1], block_inplanes[0], 2, False),
+                self._get_up_layer(block_inplanes[0], block_inplanes[0], 1, False),
+                self._get_up_layer(block_inplanes[0], n_input_channels, 2, True),
+            )
+        else:
+            self.recons = None
 
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
@@ -282,35 +318,35 @@ class ResNet(Backbone):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        x = permute_img(x)
         outputs = {}
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
+        c1 = self.conv1(x)
+        c1 = self.bn1(c1)
+        c1 = self.relu(c1)
         if not self.no_max_pool:
-            x = self.maxpool(x)
-        outputs['c1'] = x
-        x = self.layer1(x)
-        outputs['c2'] = x
-        x = self.layer2(x)
-        outputs['c3'] = x
-        x = self.layer3(x)
-        outputs['c4'] = x
-        x = self.layer4(x)
-        outputs['c5'] = x
+            c1 = self.maxpool(c1)
+        c2 = self.layer1(c1)
+        c3 = self.layer2(c2)
+        c4 = self.layer3(c3)
+        c5 = self.layer4(c4)
+        outputs['c1'] = c1
+        outputs['c2'] = c2
+        outputs['c3'] = c3
+        outputs['c4'] = c4
+        outputs['c5'] = c5
 
         if self.n_classes:
-            x = self.avgpool(x)
-            x = x.view(x.size(0), -1)
-            outputs['linear'] = self.fc(x)
+            linear = self.avgpool(c5)
+            linear = linear.view(linear.size(0), -1)
+            outputs['linear'] = self.fc(linear)
 
-        if self.num_seg:
-            x = self.bottom(x)
-            x = self.up4(outputs['c5'] + x)
-            x = self.up3(outputs['c4'] + x)
-            x = self.up2(outputs['c3'] + x)
-            x = self.up1(outputs['c2'] + x)
-            x = self.seg_out(outputs['c1'] + x)
-            outputs['seg'] = x
+        if self.recons is not None:
+            recons = self.recons(c1, c2, c3, c4, c5)
+            outputs['recons'] = permute_img(recons, inv=True)
+
+        if self.seg is not None:
+            seg = self.seg(c1, c2, c3, c4, c5)
+            outputs['seg'] = permute_img(seg, inv=True)
 
         return outputs
 

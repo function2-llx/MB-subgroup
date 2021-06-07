@@ -31,6 +31,7 @@ class Finetuner(FinetunerBase):
             model = nn.DataParallel(model)
             train_loader = DataLoader(train_set, batch_size=self.args.batch_size, shuffle=True)
             loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.args.weight_strategy).to(self.args.device))
+            recons_fn = nn.MSELoss()
             best_loss = float('inf')
             patience = 0
             step = 0
@@ -39,12 +40,19 @@ class Finetuner(FinetunerBase):
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
                     imgs = data['img'].to(self.args.device)
                     labels = data['label'].to(self.args.device)
-                    # monai order to 3D ResNet order
-                    logits = model.forward(imgs.permute(0, 1, 4, 2, 3))['linear']
+                    outputs = model.forward(imgs)
+                    logits = outputs['linear']
                     loss = loss_fn(logits, labels)
+                    if self.args.recons:
+                        recons_loss = recons_fn(imgs, outputs['recons'])
                     if self.is_world_master():
                         writer.add_scalar('loss/train', loss.item(), step)
+                        if self.args.recons:
+                            writer.add_scalar('recons/train', recons_loss.item(), step)
+
                     optimizer.zero_grad()
+                    if self.args.recons:
+                        loss += recons_loss
                     loss.backward()
                     optimizer.step()
                     step += 1
@@ -142,12 +150,15 @@ def parse_args(search=False):
         print('output root:', args.model_output_root)
     return args
 
-def main(args, folds):
+def finetune(args, folds):
     runner = Finetuner(args, folds)
     runner.run()
 
-if __name__ == '__main__':
+def main():
     from utils.data.datasets.tiantan.load import load_cohort
 
     args = parse_args()
-    main(args, load_cohort(args, args.n_folds))
+    finetune(args, load_cohort(args, args.n_folds))
+
+if __name__ == '__main__':
+    main()

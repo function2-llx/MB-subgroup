@@ -1,4 +1,4 @@
-from finetune import main, parse_args, get_model_output_root
+from finetune import finetune, parse_args, get_model_output_root
 from utils.data.datasets.tiantan import load_folds
 
 if __name__ == '__main__':
@@ -14,4 +14,4 @@ if __name__ == '__main__':
                     args.weight_strategy = weight_strategy
                     args.model_output_root = get_model_output_root(args)
                     print('output root:', args.model_output_root)
-                    main(args, folds)
+                    finetune(args, folds)
