@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 from monai import transforms as monai_transforms
@@ -8,13 +10,10 @@ from tqdm import tqdm
 from runner_base import RunnerBase
 from utils.data import MultimodalDataset
 
-class Encoder(RunnerBase):
-    def __init__(self, args):
-        super().__init__(args)
+output_dir = Path('features')
 
 if __name__ == '__main__':
     from models import generate_model
-    from models.utils import permute_img
     from finetune import parse_args
 
     args = parse_args()
@@ -25,12 +24,14 @@ if __name__ == '__main__':
         monai_transforms.Compose(RunnerBase.get_inference_transforms(args)),
         len(args.target_names),
     )
-    model = generate_model(args, pretrain=True).eval()
+    model = generate_model(args, pretrain=args.pretrain_name is not None).eval()
     pool = nn.AdaptiveAvgPool3d(1)
     features = {}
     with torch.no_grad():
         for data in tqdm(DataLoader(dataset, batch_size=1), ncols=80, desc='encoding data'):
-            feature: torch.Tensor = model.forward(permute_img(data['img'].to(args.device)))['c5']
+            img = data['img'].to(args.device)
+            feature: torch.Tensor = model.forward(img)['c5']
             feature = pool(feature).view(-1)
             features[data['patient'][0]] = feature.detach().cpu().numpy()
-    np.savez_compressed('features.npz', **features)
+    output_dir.mkdir(exist_ok=True)
+    np.savez_compressed(output_dir / f'{args.features}.npz', **features)

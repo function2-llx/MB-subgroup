@@ -118,8 +118,8 @@ def get_pretrain_config(pretrained_name: str):
     }
 
 # monai(BNWHD) to 3D-ResNet(BNDWH)
-def permute_img(data: torch.Tensor, inv=False):
+def permute_img(data: torch.Tensor, inv=False) -> torch.Tensor:
     if inv:
-        return data.transpose(-2, -3).transpose(-1, -2)
+        return data.transpose(-2, -3).transpose(-1, -2).contiguous()
     else:
-        return data.transpose(-1, -2).transpose(-2, -3)
+        return data.transpose(-1, -2).transpose(-2, -3).contiguous()

@@ -59,6 +59,7 @@ def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
             no_max_pool=opt.no_max_pool,
             widen_factor=opt.resnet_widen_factor,
             num_seg=num_seg,
+            recons=opt.recons,
         )
     elif opt.model == 'resnet2p1d':
         model = resnet2p1d.generate_model(

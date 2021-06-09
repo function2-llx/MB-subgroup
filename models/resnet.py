@@ -104,16 +104,18 @@ class Bottleneck(nn.Module):
         return out
 
 class ResNet(Backbone):
-    class Decoder:
-        def __init__(self, bottom: nn.Module, up1: nn.Module, up2: nn.Module, up3: nn.Module, up4: nn.Module, out: nn.Module):
+    class Decoder(nn.Module):
+        def __init__(self, bottom: nn.Module, up4: nn.Module, up3: nn.Module, up2: nn.Module, up1: nn.Module,
+                     out: nn.Module):
+            super().__init__()
             self.bottom = bottom
-            self.up1 = up1
-            self.up2 = up2
-            self.up3 = up3
             self.up4 = up4
+            self.up3 = up3
+            self.up2 = up2
+            self.up1 = up1
             self.out = out
 
-        def decode(self, c1, c2, c3, c4, c5):
+        def forward(self, c1, c2, c3, c4, c5):
             up = self.bottom(c5)
             up = self.up4(c5 + up)
             up = self.up3(c4 + up)
@@ -317,7 +319,7 @@ class ResNet(Backbone):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         x = permute_img(x)
         outputs = {}
         c1 = self.conv1(x)

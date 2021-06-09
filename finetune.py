@@ -96,7 +96,7 @@ class Finetuner(FinetunerBase):
             for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
                 img = data['img'].to(self.args.device)
                 label = data['label'].to(self.args.device)
-                logit = model.forward(img.permute(0, 1, 4, 2, 3))['linear']
+                logit = model.forward(img)['linear']
                 if test_name:
                     self.reporters[test_name].append(data, logit[0])
 
@@ -127,6 +127,7 @@ def parse_args(search=False):
     protocol_names = [value.name for value in ScanProtocol]
     parser.add_argument('--protocols', nargs='+', choices=protocol_names, default=protocol_names)
     parser.add_argument('--output_root', type=Path, required=True)
+    parser.add_argument('--features', type=str)
 
     args = parser.parse_args()
     args = utils.args.process_args(args)
