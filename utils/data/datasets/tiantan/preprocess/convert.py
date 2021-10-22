@@ -61,4 +61,4 @@ if __name__ == '__main__':
 
     patient_info = list(itertools.chain(*process_map(process_patient, patients, ncols=80)))
     pd.DataFrame(patient_info, columns=['patient', 'sex', 'age', 'weight', 'subgroup']) \
-        .to_csv(os.path.join(output_dir, 'patient_info.csv'), index=False)
+        .to_csv(output_dir / 'patient_info.csv', index=False)

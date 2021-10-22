@@ -1,15 +1,13 @@
-from pathlib import Path
-from collections import OrderedDict
-import re
-import json
-from typing import List, Dict
 import itertools
+import json
+from pathlib import Path
+from typing import Optional
 
-import numpy as np
 import nibabel as nib
+import numpy as np
+import pandas as pd
 from monai.transforms import *
 from tqdm.contrib.concurrent import process_map
-import pandas as pd
 
 from convert import output_dir as input_dir
 from utils.dicom_utils import ScanProtocol
@@ -29,7 +27,6 @@ def check_las(filepath):
     if ''.join(nib.orientations.aff2axcodes(img.affine)) != 'LAS':
         print(filepath, img.get_fdata().shape)
 
-patient_info = pd.read_csv(input_dir / 'patient_info.csv')
 desc_reject_list = [
     'Apparent Diffusion Coefficient (mm2/s)',
     'Ax DWI 1000b',
@@ -45,6 +42,20 @@ desc_reject_list = [
     'SE12_HiCNR',
     'TOF_3D_multi-slab',
 ]
+
+def parse_desc(desc: str) -> Optional[ScanProtocol]:
+    if desc in desc_reject_list:
+        return None
+    desc = desc.lower()
+    if 't2' in desc:
+        return ScanProtocol.T2
+    elif 't1' in desc:
+        if '+c' in desc:
+            return ScanProtocol.T1c
+        else:
+            return ScanProtocol.T1
+
+    return None
 
 def patient_select(row):
     _, (patient, sex, age, weight, subgroup) = row
@@ -75,15 +86,10 @@ def patient_select(row):
                 raise e
 
             desc: str = info['SeriesDescription']
-            if data.ndim == 3 and 22 <= data.shape[2] <= 26 and desc not in desc_reject_list:
-                desc = desc.lower()
-                if 't2' in desc:
-                    protocol_scans[ScanProtocol.T2] = scan_name
-                elif 't1' in desc:
-                    if '+c' in desc:
-                        protocol_scans[ScanProtocol.T1c] = scan_name
-                    else:
-                        protocol_scans[ScanProtocol.T1].append(scan_name)
+            if data.ndim == 3 and 22 <= data.shape[2] <= 26:
+                protocol = parse_desc(desc)
+                if protocol is not None:
+                    protocol_scans[protocol] = scan_name
 
         if protocol_scans[ScanProtocol.T2] is None or len(protocol_scans[ScanProtocol.T1]) == 0:
             print('\nt2', patient, subgroup)
@@ -109,6 +115,7 @@ def patient_select(row):
     }]
 
 if __name__ == '__main__':
+    patient_info = pd.read_csv(input_dir / 'patient_info.csv')
     process_map(check_las, list(Path(input_dir).glob('*/*.nii.gz')), ncols=80)
     cohort = itertools.chain(*process_map(patient_select, list(patient_info.iterrows()), ncols=80))
     json.dump(list(cohort), open('cohort.json', 'w'), indent=4, ensure_ascii=False)
