@@ -3,7 +3,6 @@ from typing import Optional
 
 import numpy as np
 
-
 @unique
 class Plane(Enum):
     Sagittal = 0
