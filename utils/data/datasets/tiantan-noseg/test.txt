@@ -1,0 +1,327 @@
+Dataset.file_meta -------------------------------
+(0002, 0000) File Meta Information Group Length  UL: 62
+(0002, 0002) Media Storage SOP Class UID         UI: MR Image Storage
+(0002, 0010) Transfer Syntax UID                 UI: Explicit VR Little Endian
+-------------------------------------------------
+(0008, 0000) Group Length                        UL: 396
+(0008, 0005) Specific Character Set              CS: 'ISO_IR 100'
+(0008, 0008) Image Type                          CS: ['ORIGINAL', 'PRIMARY', 'OTHER']
+(0008, 0016) SOP Class UID                       UI: MR Image Storage
+(0008, 0018) SOP Instance UID                    UI: 1.2.840.113619.2.136.1762896353.1840.1181692101.970
+(0008, 0020) Study Date                          DA: '20070613'
+(0008, 0021) Series Date                         DA: '20070613'
+(0008, 0022) Acquisition Date                    DA: '20070613'
+(0008, 0023) Content Date                        DA: '20070613'
+(0008, 0030) Study Time                          TM: '191135'
+(0008, 0031) Series Time                         TM: '191135'
+(0008, 0032) Acquisition Time                    TM: '191135'
+(0008, 0033) Content Time                        TM: '191135'
+(0008, 0050) Accession Number                    SH: ''
+(0008, 0060) Modality                            CS: 'MR'
+(0008, 0070) Manufacturer                        LO: 'GE MEDICAL SYSTEMS'
+(0008, 0080) Institution Name                    LO: 'Tiantan Hospital'
+(0008, 0090) Referring Physician's Name          PN: ''
+(0008, 1010) Station Name                        SH: 'GEMSlx3T'
+(0008, 103e) Series Description                  LO: 'Sag T1,Flair'
+(0008, 1090) Manufacturer's Model Name           LO: 'GENESIS_SIGNA'
+(0009, 0000) Private Creator                     UL: 178
+(0009, 0010) Private tag data                    LO: 'GEMS_IDEN_01'
+(0009, 1001) [Full fidelity]                     LO: 'GE_GENESIS_FF'
+(0009, 1002) [Suite id]                          SH: 'GEMS'
+(0009, 1004) [Product id]                        SH: 'SIGNA'
+(0009, 1027) [Image actual date]                 SL: 1181761895
+(0009, 1030) [Service id]                        SH: '0267'
+(0009, 1031) [Mobile location number]            SH: '999'
+(0009, 10e3) [Equipment UID]                     UI: 1.2.840.113619.1.1.4.1762896353
+(0009, 10e6) [Genesis Version - now]             SH: '09'
+(0009, 10e7) [Exam Record checksum]              UL: 3892319286
+(0009, 10e9) [Actual series data time stamp]     SL: 1181761895
+(0010, 0000) Group Length                        UL: 80
+(0010, 0010) Patient's Name                      PN: 'MA KE QIAO'
+(0010, 0020) Patient ID                          LO: '191074'
+(0010, 0030) Patient's Birth Date                DA: ''
+(0010, 0040) Patient's Sex                       CS: 'M'
+(0010, 1010) Patient's Age                       AS: '005Y'
+(0010, 1030) Patient's Weight                    DS: "70.0"
+(0010, 21b0) Additional Patient History          LT: ''
+(0011, 0000) Private Creator                     UL: 30
+(0011, 0010) Private tag data                    LO: 'GEMS_PATI_01'
+(0011, 1010) [Patient Status]                    SS: 0
+(0018, 0000) Group Length                        UL: 444
+(0018, 0020) Scanning Sequence                   CS: 'RM'
+(0018, 0021) Sequence Variant                    CS: 'NONE'
+(0018, 0022) Scan Options                        CS: ['VB_GEMS ', 'SEQ_GEMS', 'TRF_GEMS']
+(0018, 0023) MR Acquisition Type                 CS: '2D'
+(0018, 0025) Angio Flag                          CS: 'N'
+(0018, 0050) Slice Thickness                     DS: "5.0"
+(0018, 0080) Repetition Time                     DS: "1971.86"
+(0018, 0081) Echo Time                           DS: "19.696"
+(0018, 0082) Inversion Time                      DS: "860.0"
+(0018, 0083) Number of Averages                  DS: "1.0"
+(0018, 0084) Imaging Frequency                   DS: "1282090000.0"
+(0018, 0085) Imaged Nucleus                      SH: 'H1'
+(0018, 0086) Echo Number(s)                      IS: "1"
+(0018, 0087) Magnetic Field Strength             DS: "30000.0"
+(0018, 0088) Spacing Between Slices              DS: "6.0"
+(0018, 0091) Echo Train Length                   IS: "6"
+(0018, 0093) Percent Sampling                    DS: "100.0"
+(0018, 0094) Percent Phase Field of View         DS: "100.0"
+(0018, 0095) Pixel Bandwidth                     DS: "81.3802"
+(0018, 1000) Device Serial Number                LO: '000082427040020'
+(0018, 1020) Software Versions                   LO: '09'
+(0018, 1050) Spatial Resolution                  DS: "0.982143"
+(0018, 1088) Heart Rate                          IS: "0"
+(0018, 1090) Cardiac Number of Images            IS: "0"
+(0018, 1094) Trigger Window                      IS: "0"
+(0018, 1100) Reconstruction Diameter             DS: "220.0"
+(0018, 1250) Receive Coil Name                   SH: 'HEAD'
+(0018, 1251) Transmit Coil Name                  SH: 'HEAD'
+(0018, 1310) Acquisition Matrix                  US: [0, 256, 224, 0]
+(0018, 1312) In-plane Phase Encoding Direction   CS: 'ROW'
+(0018, 1314) Flip Angle                          DS: "90.0"
+(0018, 1315) Variable Flip Angle Flag            CS: 'N'
+(0018, 1316) SAR                                 DS: "0.133466"
+(0018, 5100) Patient Position                    CS: 'HFS'
+(0019, 0000) Private Creator                     UL: 1010
+(0019, 0010) Private tag data                    LO: 'GEMS_ACQU_01'
+(0019, 100f) [Horiz. Frame of ref.]              DS: "289.8"
+(0019, 1011) [Series contrast]                   SS: 0
+(0019, 1012) [Last pseq]                         SS: 3
+(0019, 1017) [Series plane]                      SS: 4
+(0019, 1018) [First scan ras]                    LO: 'L'
+(0019, 1019) [First scan location]               DS: "-45.0"
+(0019, 101a) [Last scan ras]                     LO: 'R'
+(0019, 101b) [Last scan loc]                     DS: "33.0"
+(0019, 101e) [Display field of view]             DS: "220.0"
+(0019, 105a) [Acquisition Duration]              FL: 79078720.0
+(0019, 107d) [Second echo]                       DS: "0.0"
+(0019, 107e) [Number of echoes]                  SS: 1
+(0019, 107f) [Table delta]                       DS: "0.0"
+(0019, 1081) [Contiguous]                        SS: 1
+(0019, 1084) [Peak SAR]                          DS: "7.11571"
+(0019, 1085) [Monitor SAR]                       SS: 1
+(0019, 1087) [Cardiac repetition time]           DS: "0.0"
+(0019, 1088) [Images per cardiac cycle]          SS: 0
+(0019, 108a) [Actual receive gain analog]        SS: 11
+(0019, 108b) [Actual receive gain digital]       SS: 15
+(0019, 108d) [Delay after trigger]               DS: "0.0"
+(0019, 108f) [Swappf]                            SS: 0
+(0019, 1090) [Pause Interval]                    SS: 0
+(0019, 1091) [Pause Time]                        DS: "0.0"
+(0019, 1092) [Slice offset on freq axis]         SL: 0
+(0019, 1093) [Auto Prescan Center Frequency]     DS: "1282091450.0"
+(0019, 1094) [Auto Prescan Transmit Gain]        SS: 133
+(0019, 1095) [Auto Prescan Analog receiver gain] SS: 11
+(0019, 1096) [Auto Prescan Digital receiver gain SS: 15
+(0019, 1097) [Bitmap defining CVs]               SL: 32
+(0019, 1098) [Center freq. Method]               SS: 2
+(0019, 109b) [Pulse Sequence Mode]               SS: 1
+(0019, 109c) [Pulse Sequence Name]               LO: 't1flair'
+(0019, 109d) [Pulse Sequence Date]               DT: '20041016065837'
+(0019, 109e) [Internal Pulse Sequence Name]      LO: 'FSE-XL'
+(0019, 109f) [Transmitting Coil Type]            SS: 1
+(0019, 10a0) [Surface Coil Type]                 SS: 0
+(0019, 10a1) [Extremity Coil flag]               SS: 0
+(0019, 10a2) [Raw data run number]               SL: 38405
+(0019, 10a3) [Calibrated Field strength]         UL: 0
+(0019, 10a4) [SAT fat/water/bone]                SS: 0
+(0019, 10a7) [User data 0]                       DS: "0.0"
+(0019, 10a8) [User data 1]                       DS: "0.0"
+(0019, 10a9) [User data 2]                       DS: "0.0"
+(0019, 10aa) [User data 3]                       DS: "0.0"
+(0019, 10ab) [User data 4]                       DS: "1.0"
+(0019, 10ac) [User data 5]                       DS: "125.0"
+(0019, 10ad) [User data 6]                       DS: "0.0"
+(0019, 10ae) [User data 7]                       DS: "0.0"
+(0019, 10af) [User data 8]                       DS: "0.0"
+(0019, 10b0) [User data 9]                       DS: "0.0"
+(0019, 10b1) [User data 10]                      DS: "0.0"
+(0019, 10b2) [User data 11]                      DS: "0.0"
+(0019, 10b3) [User data 12]                      DS: "0.0"
+(0019, 10b4) [User data 13]                      DS: "0.0"
+(0019, 10b5) [User data 14]                      DS: "0.0"
+(0019, 10b6) [User data 15]                      DS: "0.0"
+(0019, 10b7) [User data 16]                      DS: "0.0"
+(0019, 10b8) [User data 17]                      DS: "0.0"
+(0019, 10b9) [User data 18]                      DS: "0.0"
+(0019, 10ba) [User data 19]                      DS: "0.0"
+(0019, 10bb) [User data 20]                      DS: "0.0"
+(0019, 10bc) [User data 21]                      DS: "0.0"
+(0019, 10bd) [User data 22]                      DS: "0.0"
+(0019, 10be) [Projection angle]                  DS: "0.0"
+(0019, 10c0) [Saturation planes]                 SS: 0
+(0019, 10c1) [Surface coil intensity]            SS: 0
+(0019, 10c2) [SAT location R]                    SS: 9990
+(0019, 10c3) [SAT location L]                    SS: 9990
+(0019, 10c4) [SAT location A]                    SS: 9990
+(0019, 10c5) [SAT location P]                    SS: 9990
+(0019, 10c6) [SAT location H]                    SS: 9990
+(0019, 10c7) [SAT location F]                    SS: 9990
+(0019, 10c8) [SAT thickness R/L]                 SS: 0
+(0019, 10c9) [SAT thickness A/P]                 SS: 0
+(0019, 10ca) [SAT thickness H/F]                 SS: 0
+(0019, 10cb) [Phase Contrast flow axis]          SS: 0
+(0019, 10cc) [Velocity encoding]                 SS: 0
+(0019, 10cd) [Thickness disclaimer]              SS: 0
+(0019, 10ce) [Prescan type]                      SS: 2
+(0019, 10cf) [Prescan status]                    SS: 0
+(0019, 10d2) [Projection Algorithm]              SS: 0
+(0019, 10d3) [Projection Algorithm Name]         SH: ''
+(0019, 10d5) [Fractional echo]                   SS: 2
+(0019, 10d7) [Cardiac phase number]              SS: 0
+(0019, 10d8) [Variable echoflag]                 SS: 0
+(0019, 10d9) [Concatenated SAT {# DTI Diffusion  DS: "0.0"
+(0019, 10df) [User data 23 {# DTI Diffusion Dir. DS: "0.0"
+(0019, 10e0) [User data 24 {# DTI Diffusion Dir. DS: "0.0"
+(0019, 10e2) [Velocity Encode Scale]             DS: "0.0"
+(0019, 10f2) [Fast phases]                       SS: 0
+(0019, 10f9) [Transmit gain]                     DS: "133.0"
+(0020, 0000) Group Length                        UL: 318
+(0020, 000d) Study Instance UID                  UI: 1.2.840.113619.2.136.1762896353.1840.1181692101.963
+(0020, 000e) Series Instance UID                 UI: 1.2.840.113619.2.136.1762896353.1840.1181692101.964
+(0020, 0010) Study ID                            SH: '44323'
+(0020, 0011) Series Number                       IS: "1"
+(0020, 0012) Acquisition Number                  IS: "0"
+(0020, 0013) Instance Number                     IS: "6"
+(0020, 0032) Image Position (Patient)            DS: [15, -100,  110]
+(0020, 0037) Image Orientation (Patient)         DS: [0,  1,  0,  0,  0, -1]
+(0020, 0052) Frame of Reference UID              UI: 1.2.840.113619.2.136.1762896353.1867.1181691689.910
+(0020, 0060) Laterality                          CS: ''
+(0020, 0110) Temporal Resolution                 DS: "0.0"
+(0020, 1040) Position Reference Indicator        LO: ''
+(0020, 1041) Slice Location                      DS: "-15.0000009537"
+(0021, 0000) Private Creator                     UL: 328
+(0021, 0010) Private tag data                    LO: 'GEMS_RELA_01'
+(0021, 1003) [Series from which Prescribed]      SS: 0
+(0021, 1005) [Genesis Version - now]             SH: '09'
+(0021, 1007) [Series Record checksum]            UL: 1063349528
+(0021, 1018) [Genesis version - Now]             SH: '09'
+(0021, 1019) [Acq recon record checksum]         UL: 1096880933
+(0021, 1035) [Series from which prescribed]      SS: 0
+(0021, 1036) [Image from which prescribed]       SS: 0
+(0021, 1037) [Screen Format]                     SS: 16
+(0021, 104f) [Locations in acquisition]          SS: 14
+(0021, 1050) [Graphically prescribed]            SS: 0
+(0021, 1051) [Rotation from source x rot]        DS: "0.0"
+(0021, 1052) [Rotation from source y rot]        DS: "0.0"
+(0021, 1053) [Rotation from source z rot]        DS: "0.0"
+(0021, 1056) [Num 3D slabs]                      SL: 0
+(0021, 1057) [Locs per 3D slab]                  SL: 0
+(0021, 1058) [Overlaps]                          SL: 0
+(0021, 1059) [Image Filtering 0.5/0.2T]          SL: 0
+(0021, 105a) [Diffusion direction]               SL: 0
+(0021, 105b) [Tagging Flip Angle]                DS: "180.0"
+(0021, 105c) [Tagging Orientation]               DS: "45.0"
+(0021, 105d) [Tag Spacing]                       DS: "50000.0"
+(0021, 105e) [RTIA_timer]                        DS: "0.0"
+(0021, 105f) [Fps]                               DS: "0.0"
+(0021, 1081) [Auto window/level alpha]           DS: "0.0"
+(0021, 1082) [Auto window/level beta]            DS: "0.0"
+(0021, 1083) [Auto window/level window]          DS: "0.0"
+(0021, 1084) [Auto window/level level]           DS: "0.0"
+(0023, 0000) Private Creator                     UL: 58
+(0023, 0010) Private tag data                    LO: 'GEMS_STDY_01'
+(0023, 1070) [Start time(secs) in first axial]   FD: 0.0
+(0023, 1074) [No. of updates to header]          SL: 0
+(0023, 107d) [Indicates study has complete info  SS: 0
+(0025, 0000) Private Creator                     UL: 128
+(0025, 0010) Private tag data                    LO: 'GEMS_SERS_01'
+(0025, 1006) [Last pulse sequence used]          SS: 3
+(0025, 1007) [Images in Series]                  SL: 14
+(0025, 1010) [Landmark Counter]                  SL: 0
+(0025, 1011) [Number of Acquisitions]            SS: 1
+(0025, 1014) [Indicates no. of updates to header SL: 0
+(0025, 1017) [Series Complete Flag]              SL: 0
+(0025, 1018) [Number of images archived]         SL: 0
+(0025, 1019) [Last image number used]            SL: 14
+(0025, 101a) [Primary Receiver Suite and Host]   SH: 'GEMSlx3T'
+(0027, 0000) Private Creator                     UL: 306
+(0027, 0010) Private tag data                    LO: 'GEMS_IMAG_01'
+(0027, 1006) [Image archive flag]                SL: 0
+(0027, 1010) [Scout Type]                        SS: 0
+(0027, 1030) [Foreign Image Revision]            SH: ''
+(0027, 1031) [Imaging Mode]                      SS: 1
+(0027, 1032) [Pulse Sequence]                    SS: 3
+(0027, 1033) [Imaging Options]                   SL: 134226944
+(0027, 1035) [Plane Type]                        SS: 4
+(0027, 1036) [Oblique Plane]                     SL: 4
+(0027, 1040) [RAS letter of image location]      SH: 'L'
+(0027, 1041) [Image location]                    FL: -15.000000953674316
+(0027, 1042) [Center R coord of plane image]     FL: -15.000000953674316
+(0027, 1043) [Center A coord of plane image]     FL: -10.0
+(0027, 1044) [Center S coord of plane image]     FL: 0.0
+(0027, 1045) [Normal R coord]                    FL: 1.0
+(0027, 1046) [Normal A coord]                    FL: 0.0
+(0027, 1047) [Normal S coord]                    FL: 0.0
+(0027, 1048) [R Coord of Top Right Corner]       FL: -15.000000953674316
+(0027, 1049) [A Coord of Top Right Corner]       FL: -120.0
+(0027, 104a) [S Coord of Top Right Corner]       FL: 110.0
+(0027, 104b) [R Coord of Bottom Right Corner]    FL: -15.000000953674316
+(0027, 104c) [A Coord of Bottom Right Corner]    FL: -120.0
+(0027, 104d) [S Coord of Bottom Right Corner]    FL: -110.0
+(0027, 1060) [Image dimension - X]               FL: 256.0
+(0027, 1061) [Image dimension - Y]               FL: 224.0
+(0027, 1062) [Number of Excitations]             FL: 1.0
+(0028, 0000) Group Length                        UL: 150
+(0028, 0002) Samples per Pixel                   US: 1
+(0028, 0004) Photometric Interpretation          CS: 'MONOCHROME2'
+(0028, 0010) Rows                                US: 512
+(0028, 0011) Columns                             US: 512
+(0028, 0030) Pixel Spacing                       DS: [0.429688, 0.429688]
+(0028, 0100) Bits Allocated                      US: 16
+(0028, 0101) Bits Stored                         US: 16
+(0028, 0102) High Bit                            US: 15
+(0028, 0103) Pixel Representation                US: 1
+(0028, 0120) Pixel Padding Value                 SS: 0
+(0028, 1050) Window Center                       DS: "626.0"
+(0028, 1051) Window Width                        DS: "1253.0"
+(0029, 0000) Private Creator                     UL: 102
+(0029, 0010) Private tag data                    LO: 'GEMS_IMPS_01'
+(0029, 1015) [Lower range of Pixels1]            SL: 0
+(0029, 1016) [Upper range of Pixels1]            SL: 0
+(0029, 1017) [Lower range of Pixels2]            SL: 0
+(0029, 1018) [Upper range of Pixels2]            SL: 0
+(0029, 1026) [Version of the hdr struct]         SS: 2
+(0029, 1034) [Advantage comp. Overflow]          SL: 16384
+(0029, 1035) [Advantage comp. Underflow]         SL: 0
+(0043, 0000) Private Creator                     UL: 5162
+(0043, 0010) Private tag data                    LO: 'GEMS_PARM_01'
+(0043, 1001) [Bitmap of prescan options]         SS: 0
+(0043, 1002) [Gradient offset in X]              SS: 0
+(0043, 1003) [Gradient offset in Y]              SS: 0
+(0043, 1004) [Gradient offset in Z]              SS: 0
+(0043, 1006) [Number of EPI shots]               SS: 0
+(0043, 1007) [Views per segment]                 SS: 0
+(0043, 1008) [Respiratory rate, bpm]             SS: 0
+(0043, 1009) [Respiratory trigger point]         SS: 0
+(0043, 100a) [Type of receiver used]             SS: 1
+(0043, 100b) [DB/dt Peak rate of change of gradi DS: "0.0"
+(0043, 100c) [dB/dt Limits in units of percent]  DS: "66.0"
+(0043, 100d) [PSD estimated limit]               DS: "0.0"
+(0043, 100e) [PSD estimated limit in tesla per s DS: "0.0"
+(0043, 100f) [Saravghead]                        DS: "2.84629"
+(0043, 1010) [Window value]                      US: 0
+(0043, 101c) [GE image integrity]                SS: 0
+(0043, 101d) [Level value]                       SS: 0
+(0043, 1028) [Unique image iden]                 OB: Array of 80 elements
+(0043, 1029) [Histogram tables]                  OB: Array of 2068 elements
+(0043, 102a) [User defined data]                 OB: Array of 2420 elements
+(0043, 102c) [Effective echo spacing]            SS: 0
+(0043, 102d) [Filter Mode (String slop field 1 i SH: ''
+(0043, 102e) [String slop field 2]               SH: ''
+(0043, 102f) [Image Type (real, imaginary, phase SS: 0
+(0043, 1030) [Vas collapse flag]                 SS: 0
+(0043, 1032) [Vas flags]                         SS: 2
+(0043, 1033) [Neg_scanspacing]                   FL: 0.0
+(0043, 1034) [Offset Frequency]                  IS: "1200"
+(0043, 1035) [User_usage_tag]                    UL: 0
+(0043, 1036) [User_fill_map_MSW]                 UL: 0
+(0043, 1037) [User_fill_map_LSW]                 UL: 0
+(0043, 1038) [User data 25...User data 48 {User4 FL: Array of 24 elements
+(0043, 1039) [Slop_int_6... slop_int_9]          IS: [  0, 32,  0,  7]
+(0043, 1060) [Slop_int_10...slop_int_17]         IS: [  0,  0,  0, 10,  0,  0,  0,  0]
+(0043, 1061) [Scanner Study Entity UID]          UI: 1.2.840.113619.2.136.1762896353.1840.1181692101.963
+(0043, 1062) [Scanner Study ID]                  SH: '44323'
+(0043, 106f) [Scanner Table Entry (single gradie DS: [0,  0,  0]
+(7fe0, 0000) Group Length                        UL: 524300
+(7fe0, 0010) Pixel Data                          OW: Array of 524288 elements
