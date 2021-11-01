@@ -40,31 +40,31 @@ def parse_args():
     return args
 
 class Pretrainer(RunnerBase):
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, conf):
+        super().__init__(conf)
 
-        assert args.model == 'resnet'
-        self.model = generate_model(args, pretrain=False, num_seg=3).to(self.args.device)
+        assert conf.model == 'resnet'
+        self.model = generate_model(conf, pretrain=False, num_seg=3).to(self.conf.device)
 
     def prepare_data(self):
         from utils.data.datasets.brats20 import load_all
-        data = load_all(self.args)
-        return MultimodalDataset(data, RunnerBase.get_train_transforms(self.args, with_seg=True), progress=False)
+        data = load_all(self.conf)
+        return MultimodalDataset(data, RunnerBase.get_train_transforms(self.conf, with_seg=True), progress=False)
 
     def train(self):
-        self.args.model_output_root.mkdir(exist_ok=True, parents=True)
+        self.conf.model_output_root.mkdir(exist_ok=True, parents=True)
         dataset = self.prepare_data()
         loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
-        optimizer = Adam(self.model.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay, amsgrad=True)
-        loader = DataLoader(dataset, batch_size=self.args.batch_size, shuffle=True)
+        optimizer = Adam(self.model.parameters(), lr=self.conf.lr, weight_decay=self.conf.weight_decay, amsgrad=True)
+        loader = DataLoader(dataset, batch_size=self.conf.batch_size, shuffle=True)
         if self.is_world_master():
-            writer = SummaryWriter(log_dir=Path('runs') / self.args.model_output_root)
+            writer = SummaryWriter(log_dir=Path('runs') / self.conf.model_output_root)
 
         start_epoch = 1
-        if not self.args.force_retrain:
+        if not self.conf.force_retrain:
             states = None
-            for epoch in range(1, self.args.epochs + 1):
-                save_path: Path = self.args.model_output_root / f'ep{epoch}' / f'state.pth'
+            for epoch in range(1, self.conf.epochs + 1):
+                save_path: Path = self.conf.model_output_root / f'ep{epoch}' / f'state.pth'
                 if save_path.exists():
                     states = torch.load(save_path)
                     start_epoch = epoch + 1
@@ -73,11 +73,11 @@ class Pretrainer(RunnerBase):
                 self.model.load_state_dict(states['state_dict'])
                 optimizer.load_state_dict(states['optimizer'])
 
-        for epoch in range(start_epoch, self.args.epochs + 1):
+        for epoch in range(start_epoch, self.conf.epochs + 1):
             epoch_loss = 0
             for data in tqdm(loader, ncols=80, desc=f'epoch{epoch}'):
-                outputs = self.model.forward(permute_img(data['img'].to(self.args.device)))
-                loss = loss_fn(outputs['seg'], permute_img(data['seg'].to(self.args.device)))
+                outputs = self.model.forward(permute_img(data['img'].to(self.conf.device)))
+                loss = loss_fn(outputs['seg'], permute_img(data['seg'].to(self.conf.device)))
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -85,13 +85,13 @@ class Pretrainer(RunnerBase):
 
             if self.is_world_master():
                 writer.add_scalar('loss', epoch_loss / len(loader), epoch)
-                if epoch % self.args.save_epoch == 0:
+                if epoch % self.conf.save_epoch == 0:
                     save_states = {
                         'state_dict': self.model.state_dict(),
                         'optimizer': optimizer.state_dict(),
                         # 'scheduler': scheduler.state_dict()
                     }
-                    save_path: Path = self.args.model_output_root / f'ep{epoch}' / f'state.pth'
+                    save_path: Path = self.conf.model_output_root / f'ep{epoch}' / f'state.pth'
                     save_path.parent.mkdir(exist_ok=True)
                     torch.save(save_states, save_path)
 

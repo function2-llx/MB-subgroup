@@ -2,15 +2,12 @@ import json
 from pathlib import Path
 from typing import Optional
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-from matplotlib import colors
-from matplotlib.axes import Axes
 from monai.transforms import LoadImage
 
 from utils.dicom_utils import ScanProtocol
 
+data_dir = Path(__file__).parent / 'origin'
 loader = LoadImage()
 
 results = {}
@@ -40,7 +37,6 @@ def check_patient(patient_dir: Path):
         print(patient, list(map(lambda file: file.name, files)))
 
 def main():
-    data_dir = Path('MB-MRI(2021-10-07)')
     try:
         for patient in data_dir.iterdir():
             check_patient(patient)

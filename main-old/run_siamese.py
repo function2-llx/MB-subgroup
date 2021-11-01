@@ -45,8 +45,8 @@ def get_args():
     return args
 
 class Runner(FinetunerBase):
-    def __init__(self, args, folds):
-        super().__init__(args, folds)
+    def __init__(self, conf, folds):
+        super().__init__(conf, folds)
         self.loss_fn = MSELoss()
 
     def get_grouped_parameters(self, model: nn.Module):
@@ -54,9 +54,9 @@ class Runner(FinetunerBase):
         no_decay = ['fc']
         grouped_parameters = [
             {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': 1e-5,
-             'lr': self.args.lr},
+             'lr': self.conf.lr},
             {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': self.args.lr * 5},
+             'lr': self.conf.lr * 5},
         ]
         return grouped_parameters
 
@@ -81,27 +81,27 @@ class Runner(FinetunerBase):
         return loss, pred
 
     def run_fold(self, val_id: int):
-        output_path = self.args.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        output_path = self.conf.model_output_root / f'checkpoint-{val_id}.pth.tar'
         train_set, val_set = self.prepare_fold(val_id)
-        if self.args.train:
+        if self.conf.train:
             logging.info(f'run cross validation on fold {val_id}')
             # model = load_pretrained_model(self.args.pretrained_name)
             model = generate_model(args, pretrain=True)
-            model = model.to(self.args.device)
+            model = model.to(self.conf.device)
             model = DataParallel(model)
             train_loader = DataLoader(
                 train_set,
-                batch_size=self.args.batch_size,
-                sampler=BalancedSampler(train_set, total=self.args.val_steps),
+                batch_size=self.conf.batch_size,
+                sampler=BalancedSampler(train_set, total=self.conf.val_steps),
             )
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
             best_loss = float('inf')
             patience = 0
-            for epoch in range(1, self.args.epochs + 1):
+            for epoch in range(1, self.conf.epochs + 1):
                 model.train()
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
                     optimizer.zero_grad()
-                    features = model.forward(type(model.module).feature, data['img'].to(self.args.device))
+                    features = model.forward(type(model.module).feature, data['img'].to(self.conf.device))
                     loss, _ = self.forward(features, features, data['label'], data['label'], reg=True)
                     loss.backward()
                     optimizer.step()
@@ -116,14 +116,14 @@ class Runner(FinetunerBase):
                     patience = 0
                 else:
                     patience += 1
-                    logging.info(f'patience {patience}/{self.args.patience}\n')
-                    if patience == self.args.patience:
+                    logging.info(f'patience {patience}/{self.conf.patience}\n')
+                    if patience == self.conf.patience:
                         logging.info('run out of patience\n')
                         break
 
-        model = generate_model(self.args, pretrain=False)
+        model = generate_model(self.conf, pretrain=False)
         model.load_state_dict(torch.load(output_path))
-        model = model.to(self.args.device)
+        model = model.to(self.conf.device)
 
         self.run_eval(model, train_set, val_set, 'cross-val')
 
@@ -136,13 +136,13 @@ class Runner(FinetunerBase):
             for data in tqdm(DataLoader(ref_set, batch_size=1, shuffle=False), ncols=80, desc='calculating ref'):
                 ref_features.append(model.feature(data['img']))
                 ref_labels.append(data['label'].item())
-            ref_features = torch.cat(ref_features).to(self.args.device)
-            ref_labels = torch.tensor(ref_labels).to(self.args.device)
+            ref_features = torch.cat(ref_features).to(self.conf.device)
+            ref_labels = torch.tensor(ref_labels).to(self.conf.device)
 
             acc = 0
             for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
-                feature = model.feature(data['img'].to(self.args.device))
-                label = data['label'].to(self.args.device)
+                feature = model.feature(data['img'].to(self.conf.device))
+                label = data['label'].to(self.conf.device)
                 loss, pred = self.forward(feature, ref_features, label, ref_labels, reg=False)
                 eval_loss += loss.item()
                 pred = ref_labels[pred.item()].item()

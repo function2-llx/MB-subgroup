@@ -61,7 +61,7 @@ class Reporter:
             .to_csv(self.report_dir / 'cm.csv')
 
     def append(self, data, logit: torch.FloatTensor):
-        self.y_true.append(data['label'])
+        self.y_true.append(data['label'].item())
         pred = logit.argmax().item()
         self.y_pred.append(pred)
         output = torch.softmax(logit, dim=0)

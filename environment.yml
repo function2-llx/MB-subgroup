@@ -4,10 +4,11 @@ dependencies:
   - defaults::conda=4.10.3
   - defaults::python=3.9.7
   - tqdm=4.62.3
+  - pyyaml=6.0
 
   - pytorch::pytorch=1.10.0
   - pytorch::torchvision=0.11.1
-  - nvidia::cudatoolkit=11.3
+  - defaults::cudatoolkit=11.3
 
   - numpy=1.21.3
   - scikit-learn=1.0
@@ -20,6 +21,8 @@ dependencies:
 
   - pip=21.3
   - pip:
+    - tensorboard==2.7.0
     - mashumaro==2.8
+    - aenum==3.1.1
     - monai-weekly
     - itk

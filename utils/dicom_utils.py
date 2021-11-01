@@ -1,7 +1,8 @@
-from enum import unique, Enum
+# from enum import unique, Enum, auto, EnumMeta
 from typing import Optional
 
 import numpy as np
+from aenum import Enum, unique, auto, EnumMeta
 
 @unique
 class Plane(Enum):
@@ -9,11 +10,21 @@ class Plane(Enum):
     Coronal = 1
     Axial = 2
 
-@unique
-class ScanProtocol(Enum):
-    T1 = 0
-    T1c = 1
-    T2 = 2
+class ScanProtocolMeta(EnumMeta):
+    def __call__(cls, value):
+        if isinstance(value, str):
+            return cls.protocol_map[value.lower()]
+        return super().__call__(value)
+
+class ScanProtocol(Enum, metaclass=ScanProtocolMeta):
+    T1 = auto()
+    T1c = auto()
+    T2 = auto()
+
+ScanProtocolMeta.protocol_map = {
+    protocol.name.lower(): protocol
+    for protocol in ScanProtocol
+}
 
 def get_plane(ds) -> Optional[Plane]:
     try:

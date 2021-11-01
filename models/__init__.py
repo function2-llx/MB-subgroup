@@ -5,6 +5,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
+from utils.conf import Conf
 from . import resnet, resnet2p1d, wide_resnet, resnext, pre_act_resnet, densenet
 from .args import parser, process_args
 from .backbone import Backbone
@@ -37,8 +38,8 @@ def get_fine_tuning_parameters(model, ft_begin_module):
 
     return parameters
 
-def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
-    if opt.model == 'unet':
+def generate_model(conf: Conf, pretrain: bool = True) -> Backbone:
+    if conf.model == 'unet':
         model = UNet(
             dimensions=3,
             in_channels=3,
@@ -46,81 +47,81 @@ def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
             num_res_units=2,
-            n_classes=opt.n_classes,
+            n_classes=conf.n_classes,
         )
-    elif opt.model == 'resnet':
+    elif conf.model == 'resnet':
         model = resnet.generate_model(
-            model_depth=opt.model_depth,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            shortcut_type=opt.resnet_shortcut,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool,
-            widen_factor=opt.resnet_widen_factor,
-            num_seg=num_seg,
-            recons=opt.recons,
+            model_depth=conf.model_depth,
+            n_classes=len(conf.subgroups),
+            n_input_channels=len(conf.protocols),
+            shortcut_type=conf.resnet_shortcut,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool,
+            widen_factor=conf.resnet_widen_factor,
+            num_seg=len(conf.segs),
+            recons=conf.recons,
         )
-    elif opt.model == 'resnet2p1d':
+    elif conf.model == 'resnet2p1d':
         model = resnet2p1d.generate_model(
-            model_depth=opt.model_depth,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            shortcut_type=opt.resnet_shortcut,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool,
-            widen_factor=opt.resnet_widen_factor,
+            model_depth=conf.model_depth,
+            n_classes=conf.n_classes,
+            n_input_channels=conf.n_input_channels,
+            shortcut_type=conf.resnet_shortcut,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool,
+            widen_factor=conf.resnet_widen_factor,
         )
-    elif opt.model == 'wideresnet':
+    elif conf.model == 'wideresnet':
         model = wide_resnet.generate_model(
-            model_depth=opt.model_depth,
-            k=opt.wide_resnet_k,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            shortcut_type=opt.resnet_shortcut,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool
+            model_depth=conf.model_depth,
+            k=conf.wide_resnet_k,
+            n_classes=conf.n_classes,
+            n_input_channels=conf.n_input_channels,
+            shortcut_type=conf.resnet_shortcut,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool
         )
-    elif opt.model == 'resnext':
+    elif conf.model == 'resnext':
         model = resnext.generate_model(
-            model_depth=opt.model_depth,
-            cardinality=opt.resnext_cardinality,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            shortcut_type=opt.resnet_shortcut,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool,
+            model_depth=conf.model_depth,
+            cardinality=conf.resnext_cardinality,
+            n_classes=conf.n_classes,
+            n_input_channels=conf.n_input_channels,
+            shortcut_type=conf.resnet_shortcut,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool,
         )
-    elif opt.model == 'preresnet':
+    elif conf.model == 'preresnet':
         model = pre_act_resnet.generate_model(
-            model_depth=opt.model_depth,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            shortcut_type=opt.resnet_shortcut,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool,
+            model_depth=conf.model_depth,
+            n_classes=conf.n_classes,
+            n_input_channels=conf.n_input_channels,
+            shortcut_type=conf.resnet_shortcut,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool,
         )
-    elif opt.model == 'densenet':
+    elif conf.model == 'densenet':
         model = densenet.generate_model(
-            model_depth=opt.model_depth,
-            n_classes=opt.n_classes,
-            n_input_channels=opt.n_input_channels,
-            conv1_t_size=opt.conv1_t_size,
-            conv1_t_stride=opt.conv1_t_stride,
-            no_max_pool=opt.no_max_pool,
+            model_depth=conf.model_depth,
+            n_classes=conf.n_classes,
+            n_input_channels=conf.n_input_channels,
+            conv1_t_size=conf.conv1_t_size,
+            conv1_t_stride=conf.conv1_t_stride,
+            no_max_pool=conf.no_max_pool,
         )
     else:
         raise ValueError
 
     if pretrain:
-        assert opt.pretrain_name is not None
-        pretrain_path = opt.pretrain_root / opt.pretrain_name / 'state.pth'
+        assert conf.pretrain_name is not None
+        pretrain_path = conf.pretrain_root / conf.pretrain_name / 'state.pth'
         # pretrain loading wrapper
-        if opt.rank == 0:
+        if conf.rank == 0:
             logging.info(f'load pre-trained weights from {pretrain_path}')
         pretrained_state_dict: OrderedDict[str, Tensor] = torch.load(pretrain_path)['state_dict']
         skip_keys = ['fc']
@@ -130,7 +131,7 @@ def generate_model(opt, pretrain: bool = True, num_seg=None) -> Backbone:
         })
         missing_keys, unexpected_keys = model.load_state_dict(update_state_dict, strict=False)
 
-    return model.to(opt.device)
+    return model.to(conf.device)
 
 def setup_finetune(model, model_name, n_finetune_classes):
     tmp_model = model
