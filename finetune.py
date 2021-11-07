@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import Optional, Tuple
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
+
 from monai.data import DataLoader
 from monai.losses import DiceLoss
 from torch import nn
@@ -108,6 +111,7 @@ class Finetuner(FinetunerBase):
             plt.plot([metric.seg_loss for metric in val_metrics], label='seg loss')
             plt.legend()
             plt.savefig(plot_dir / 'val-loss.pdf')
+            plt.show()
         else:
             if self.conf.do_train:
                 print('skip train')
@@ -157,7 +161,8 @@ class Finetuner(FinetunerBase):
                     continue
 
                 seg = output['seg'].sigmoid()
-                fig, ax = plt.subplots(1, 3)
+                fig, ax = plt.subplots(1, 3, figsize=(16, 5))
+                fig: Figure
                 ax = {
                     protocol: ax[i]
                     for i, protocol in enumerate(self.conf.protocols)
@@ -166,7 +171,7 @@ class Finetuner(FinetunerBase):
                 for protocol in self.conf.protocols:
                     img = data[protocol][0, 0]
                     idx = img.shape[2] // 2
-                    ax[protocol].imshow(img[:, :, idx], cmap='gray')
+                    ax[protocol].imshow(np.rot90(img[:, :, idx]), cmap='gray')
                     seg_t = {
                         ScanProtocol.T2: 'AT',
                         ScanProtocol.T1c: 'CT',
@@ -175,11 +180,12 @@ class Finetuner(FinetunerBase):
                         seg_id = self.conf.segs.index(seg_t)
                         from matplotlib.colors import ListedColormap
                         cur_seg = seg[0, seg_id, :, :, idx] > 0.5
+                        seg_ref = data['seg'][0, seg_id, :, :, idx]
                         cur_seg = cur_seg.int().cpu().numpy()
-                        ax[protocol].imshow(cur_seg, vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
-                plt.savefig(plot_dir / f"{data['patient'][0]}.pdf")
+                        ax[protocol].imshow(np.rot90(cur_seg), vmin=0, vmax=1, cmap=ListedColormap(['none', 'red']), alpha=0.5)
+                        ax[protocol].imshow(np.rot90(seg_ref), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
+                fig.savefig(plot_dir / f"{data['patient'][0]}.pdf", dpi=300)
                 plt.show()
-                plot_num -= 1
 
         return EvalMetric(
             cls_loss=eval_cls_loss / step,
@@ -241,7 +247,7 @@ def main():
     from utils.conf import get_conf
     conf = get_conf()
     conf.do_train = True
-    conf.force_retrain = True
+    # conf.force_retrain = True
     finetune(conf, load_cohort(conf))
 
 if __name__ == '__main__':
