@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Dict, List
 
+import numpy as np
 import torch
 
 import monai.transforms as monai_transforms
@@ -83,14 +84,14 @@ def load_cohort(conf: Conf, show_example=True):
             for protocol in conf.protocols:
                 img = example[protocol][0]
                 idx = img.shape[2] // 2
-                ax[protocol].imshow(img[:, :, idx], cmap='gray')
+                ax[protocol].imshow(np.rot90(img[:, :, idx]), cmap='gray')
                 seg_t = {
                     ScanProtocol.T2: 'AT',
                     ScanProtocol.T1c: 'CT',
                 }.get(protocol, None)
                 if seg_t is not None:
                     from matplotlib.colors import ListedColormap
-                    ax[protocol].imshow(example[seg_t][0, :, :, idx], vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
+                    ax[protocol].imshow(np.rot90(example[seg_t][0, :, :, idx]), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
 
             plt.show()
 
