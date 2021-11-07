@@ -1,7 +1,8 @@
 import logging
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+from dataclasses import dataclass
 
 import torch
 from matplotlib import pyplot as plt
@@ -18,13 +19,20 @@ from finetuner_base import FinetunerBase
 from utils.conf import Conf
 from utils.data import MultimodalDataset
 
+@dataclass
+class EvalMetric:
+    cls_loss: float
+    seg_loss: float
+
 class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
-        output_path: Path = self.conf.model_output_root / f'checkpoint-{val_id}.pth.tar'
+        output_path: Path = self.conf.output_dir / f'checkpoint-{val_id}.pth.tar'
+        plot_dir = self.conf.output_dir / f'plot-fold{val_id}'
+        plot_dir.mkdir(exist_ok=True, parents=True)
         if self.conf.do_train and (self.conf.force_retrain or not output_path.exists()):
-            tmp_output_path: Path = self.conf.model_output_root / f'checkpoint-{val_id}-tmp.pth.tar'
+            tmp_output_path: Path = self.conf.output_dir / f'checkpoint-{val_id}-tmp.pth.tar'
             # if self.is_world_master():
-            writer = SummaryWriter(log_dir=Path(f'runs') / f'fold{val_id}' / self.conf.model_output_root)
+            writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / self.conf.output_dir))
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(self.conf, pretrain=self.conf.pretrain_name is not None)
             from torch.optim import AdamW
@@ -41,6 +49,8 @@ class Finetuner(FinetunerBase):
             best_loss = float('inf')
             patience = 0
             step = 0
+
+            val_metrics = []
             for epoch in range(1, self.conf.epochs + 1):
                 model.train()
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
@@ -51,7 +61,7 @@ class Finetuner(FinetunerBase):
                     logits = outputs['linear']
                     cls_loss = cls_loss_fn(logits, labels)
                     seg_loss = seg_loss_fn(outputs['seg'], segs)
-                    loss = cls_loss + seg_loss
+                    loss = self.conf.cls_factor * cls_loss + self.conf.seg_factor * seg_loss
                     # if self.conf.recons:
                     #     recons_loss = recons_fn(imgs, outputs['recons'])
                     # if self.is_world_master():
@@ -68,26 +78,36 @@ class Finetuner(FinetunerBase):
                 # if self.is_world_master() == 0:
                 writer.flush()
 
-                val_loss = self.run_eval(model.module, val_set, cls_loss_fn)
+                metric = self.run_eval(model.module, val_set)
+                val_loss = self.combine_loss(metric.cls_loss, metric.seg_loss)
                 scheduler.step(val_loss)
                 logging.info(f'cur loss:  {val_loss}')
                 logging.info(f'best loss: {best_loss}')
+                val_metrics.append(metric)
 
-                if val_loss < best_loss:
-                    best_loss = val_loss
+                if self.conf.patience == 0:
                     torch.save(model.module.state_dict(), tmp_output_path)
                     logging.info(f'model updated, saved to {tmp_output_path}\n')
-                    patience = 0
                 else:
-                    patience += 1
-                    logging.info(f'patience {patience}/{self.conf.patience}\n')
-                    if patience == self.conf.patience:
-                        logging.info('run out of patience')
-                        break
+                    if val_loss < best_loss:
+                        best_loss = val_loss
+                        torch.save(model.module.state_dict(), tmp_output_path)
+                        logging.info(f'model updated, saved to {tmp_output_path}\n')
+                        patience = 0
+                    else:
+                        patience += 1
+                        logging.info(f'patience {patience}/{self.conf.patience}\n')
+                        if patience == self.conf.patience:
+                            logging.info('run out of patience')
+                            break
 
             # if self.is_world_master():
             tmp_output_path.rename(output_path)
             logging.info(f'move checkpoint permanently to {output_path}\n')
+            plt.plot([metric.cls_loss for metric in val_metrics], label='cls loss')
+            plt.plot([metric.seg_loss for metric in val_metrics], label='seg loss')
+            plt.legend()
+            plt.savefig(plot_dir / 'val-loss.pdf')
         else:
             if self.conf.do_train:
                 print('skip train')
@@ -95,31 +115,45 @@ class Finetuner(FinetunerBase):
 
         model = generate_model(self.conf, pretrain=False)
         model.load_state_dict(torch.load(output_path))
-        self.run_eval(model, val_set, CrossEntropyLoss(), 'cross-val', plot_num=3, plot_dir=self.conf.model_output_root / f'plot-fold{val_id}')
+        self.run_eval(model, val_set, 'cross-val', plot_num=3, plot_dir=plot_dir)
 
-    def run_eval(self, model: nn.Module, eval_dataset: MultimodalDataset, loss_fn: CrossEntropyLoss, test_name: Optional[str] = None, plot_num=0, plot_dir: Path = None) -> float:
+    def run_eval(
+        self,
+        model: nn.Module,
+        eval_dataset: MultimodalDataset,
+        test_name: Optional[str] = None,
+        plot_num=0,
+        plot_dir: Path = None,
+    ) -> EvalMetric:
         model.eval()
-        eval_loss = 0
         if plot_num > 0:
             assert plot_dir is not None
             plot_dir.mkdir(parents=True, exist_ok=True)
+
+        cls_loss_fn = CrossEntropyLoss()
+        seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
+        eval_cls_loss = 0
+        eval_seg_loss = 0
 
         plot_idx = random.sample(range(len(eval_dataset)), plot_num)
         with torch.no_grad():
             step = 0
             for idx, data in enumerate(tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating')):
                 img = data['img'].to(self.conf.device)
-                label = data['label'].to(self.conf.device)
+                cls_label = data['label'].to(self.conf.device)
+                seg = data['seg'].to(self.conf.device)
                 output = model.forward(img)
                 logit = output['linear']
                 if test_name:
                     self.reporters[test_name].append(data, logit[0])
 
-                loss = loss_fn(logit, label)
-                eval_loss += loss.item()
+                cls_loss = cls_loss_fn(logit, cls_label)
+                seg_loss = seg_loss_fn(output['seg'], seg)
+                eval_cls_loss += cls_loss.item()
+                eval_seg_loss += seg_loss.item()
                 step += 1
 
-                if  idx not in plot_idx:
+                if idx not in plot_idx:
                     continue
 
                 seg = output['seg'].sigmoid()
@@ -143,11 +177,14 @@ class Finetuner(FinetunerBase):
                         cur_seg = seg[0, seg_id, :, :, idx] > 0.5
                         cur_seg = cur_seg.int().cpu().numpy()
                         ax[protocol].imshow(cur_seg, vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
-                plt.savefig(plot_dir / f"{data['patient']}.pdf")
+                plt.savefig(plot_dir / f"{data['patient'][0]}.pdf")
                 plt.show()
                 plot_num -= 1
 
-        return eval_loss / step
+        return EvalMetric(
+            cls_loss=eval_cls_loss / step,
+            seg_loss=eval_seg_loss / step,
+        )
 
 def get_model_output_root(args):
     return args.output_root \

@@ -30,9 +30,12 @@ class Conf(DataClassYAMLMixin):
     patience: int
     img_dir: Path
     seg_dir: Path
+    output_dir: Path
     do_train: bool = False
     force_retrain: bool = False
     epochs: int = 100
+    cls_factor: float = 0.1
+    seg_factor: float = 1
     lr_reduce_factor: float = 0.2
     resnet_shortcut: str = 'B'
     weight_decay: float = 0
@@ -44,18 +47,21 @@ class Conf(DataClassYAMLMixin):
     device: str = None
 
     def __post_init__(self):
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+        with open(self.output_dir / 'conf.yaml', 'w') as f:
+            yaml.safe_dump(self.to_dict(), f)
         self.folds_file = Path(self.folds_file)
         self.segs = list(map(str.upper, self.segs))
         for seg in self.segs:
             assert seg in ['AT', 'CT', 'WT']
-        self.model_output_root = Path('output') / self.name
+        # self.model_output_root = self.output_dir / self.name
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.img_dir = Path(self.img_dir)
         self.seg_dir = Path(self.seg_dir)
 
 def get_conf() -> Conf:
     if len(sys.argv) == 2:
-        with open(conf_dir / f'{sys.argv[1]}.yml') as f:
+        with open(sys.argv[1]) as f:
             return Conf.from_dict(yaml.safe_load(f))
     else:
         raise NotImplemented

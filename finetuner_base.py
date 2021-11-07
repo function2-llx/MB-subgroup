@@ -17,7 +17,7 @@ class FinetunerBase(RunnerBase):
         self.folds = folds
         # if args.rank == 0:
         self.reporters = {
-            test_name: Reporter(Path('output') / conf.name / test_name, conf.subgroups)
+            test_name: Reporter(conf.output_dir / test_name, conf.subgroups)
             for test_name in ['cross-val']
         }
 

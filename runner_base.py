@@ -1,7 +1,11 @@
 import logging
+import random
 from abc import ABC
 
+import numpy as np
+
 import monai
+import torch
 from monai import transforms as monai_transforms
 from monai.utils import InterpolateMode
 
@@ -12,14 +16,21 @@ class RunnerBase(ABC):
     def __init__(self, conf: Conf):
         self.conf = conf
         self.setup_logging()
-        # if conf.do_train:
-        #     self.set_determinism()
+        if conf.do_train:
+            self.set_determinism()
 
-    # def set_determinism(self):
-    #     seed = self.conf.seed
-    #     monai.utils.set_determinism(seed)
-    #     if self.is_world_master():
-    #         logging.info(f'set random seed of {seed}\n')
+    def combine_loss(self, cls_loss, seg_loss):
+        return self.conf.cls_factor * cls_loss + self.conf.seg_factor * seg_loss
+
+    def set_determinism(self):
+        seed = 2333
+        # harm the speed
+        # monai.utils.set_determinism(seed)
+        # if self.is_world_master():
+        logging.info(f'set random seed of {seed}\n')
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
         # not supported currently, throw RE for AdaptiveAvgPool
         # torch.use_deterministic_algorithms(True)
 
@@ -30,8 +41,8 @@ class RunnerBase(ABC):
         conf = self.conf
         handlers = [logging.StreamHandler()]
         if conf.do_train:
-            conf.model_output_root.mkdir(parents=True, exist_ok=True)
-            handlers.append(logging.FileHandler(conf.model_output_root / 'train.log', mode='a'))
+            conf.output_dir.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(conf.output_dir / 'train.log', mode='a'))
             logging.basicConfig(
                 format='%(asctime)s [%(levelname)s] %(message)s',
                 datefmt=logging.Formatter.default_time_format,

@@ -4,7 +4,7 @@ import pandas as pd
 
 from utils.dicom_utils import ScanProtocol
 
-data_dir = Path('stripped-nopost')
+data_dir = Path('stripped')
 
 def main():
     cohort = pd.read_excel('cohort.xlsx', index_col='name(raw)')

@@ -1,5 +1,6 @@
-name: baseline
+name: stripped
 subgroups:
+  - WNT
   - SHH
   - G3
   - G4
@@ -18,8 +19,13 @@ model: resnet
 model_depth: 18
 batch_size: 4
 recons: false
-lr: 1e-6
-patience: 3
+lr: 1e-4
+epochs: 20
+patience: 0
 aug:
   - flip
-data_dir: stripped-nopost
+img_dir: utils/data/datasets/tiantan/stripped
+seg_dir: utils/data/datasets/tiantan/origin
+output_dir: output/all/stripped
+cls_factor: 0.1
+seg_factor: 1
