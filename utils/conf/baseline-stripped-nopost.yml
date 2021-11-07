@@ -1,4 +1,4 @@
-name: baseline
+name: baseline-stripped-nopost
 subgroups:
   - SHH
   - G3
@@ -18,8 +18,9 @@ model: resnet
 model_depth: 18
 batch_size: 4
 recons: false
-lr: 1e-6
-patience: 3
+lr: 1e-4
+patience: 5
 aug:
   - flip
-data_dir: stripped-nopost
+img_dir: utils/data/datasets/tiantan/stripped-nopost
+seg_dir: utils/data/datasets/tiantan/origin

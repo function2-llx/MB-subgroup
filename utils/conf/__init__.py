@@ -28,6 +28,8 @@ class Conf(DataClassYAMLMixin):
     aug: List[str]
     batch_size: int
     patience: int
+    img_dir: Path
+    seg_dir: Path
     do_train: bool = False
     force_retrain: bool = False
     epochs: int = 100
@@ -48,6 +50,8 @@ class Conf(DataClassYAMLMixin):
             assert seg in ['AT', 'CT', 'WT']
         self.model_output_root = Path('output') / self.name
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.img_dir = Path(self.img_dir)
+        self.seg_dir = Path(self.seg_dir)
 
 def get_conf() -> Conf:
     if len(sys.argv) == 2:

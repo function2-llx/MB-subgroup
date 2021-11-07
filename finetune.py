@@ -1,4 +1,5 @@
 import logging
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -50,7 +51,7 @@ class Finetuner(FinetunerBase):
                     logits = outputs['linear']
                     cls_loss = cls_loss_fn(logits, labels)
                     seg_loss = seg_loss_fn(outputs['seg'], segs)
-                    loss = seg_loss
+                    loss = cls_loss + seg_loss
                     # if self.conf.recons:
                     #     recons_loss = recons_fn(imgs, outputs['recons'])
                     # if self.is_world_master():
@@ -94,15 +95,19 @@ class Finetuner(FinetunerBase):
 
         model = generate_model(self.conf, pretrain=False)
         model.load_state_dict(torch.load(output_path))
-        self.run_eval(model, val_set, CrossEntropyLoss(), 'cross-val')
+        self.run_eval(model, val_set, CrossEntropyLoss(), 'cross-val', plot_num=3, plot_dir=self.conf.model_output_root / f'plot-fold{val_id}')
 
-    def run_eval(self, model: nn.Module, eval_dataset: MultimodalDataset, loss_fn: CrossEntropyLoss, test_name: Optional[str] = None) -> float:
-        plot = True
+    def run_eval(self, model: nn.Module, eval_dataset: MultimodalDataset, loss_fn: CrossEntropyLoss, test_name: Optional[str] = None, plot_num=0, plot_dir: Path = None) -> float:
         model.eval()
         eval_loss = 0
+        if plot_num > 0:
+            assert plot_dir is not None
+            plot_dir.mkdir(parents=True, exist_ok=True)
+
+        plot_idx = random.sample(range(len(eval_dataset)), plot_num)
         with torch.no_grad():
             step = 0
-            for data in tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
+            for idx, data in enumerate(tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating')):
                 img = data['img'].to(self.conf.device)
                 label = data['label'].to(self.conf.device)
                 output = model.forward(img)
@@ -114,9 +119,10 @@ class Finetuner(FinetunerBase):
                 eval_loss += loss.item()
                 step += 1
 
-                if not plot:
+                if  idx not in plot_idx:
                     continue
-                seg = output['seg']
+
+                seg = output['seg'].sigmoid()
                 fig, ax = plt.subplots(1, 3)
                 ax = {
                     protocol: ax[i]
@@ -137,7 +143,9 @@ class Finetuner(FinetunerBase):
                         cur_seg = seg[0, seg_id, :, :, idx] > 0.5
                         cur_seg = cur_seg.int().cpu().numpy()
                         ax[protocol].imshow(cur_seg, vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
+                plt.savefig(plot_dir / f"{data['patient']}.pdf")
                 plt.show()
+                plot_num -= 1
 
         return eval_loss / step
 

@@ -3,12 +3,14 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Optional, Dict, List
 
+import torch
+
 import monai.transforms as monai_transforms
 import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from utils.conf import Conf
-from .check_files import data_dir
+# from .check_files import data_dir
 
 dataset_root = Path(__file__).parent
 
@@ -20,13 +22,13 @@ _conf: Conf
 def load_info(info: pd.Series):
     label = target_dict[info['subgroup']]
     patient = info['name(raw)']
-    # print(patient)
-    patient_dir = data_dir / patient
+    img_dir = _conf.img_dir / patient
+    seg_dir = _conf.seg_dir / patient
     inputs = {}
     for protocol in _conf.protocols:
-        inputs[protocol] = patient_dir / info[protocol.name]
+        inputs[protocol] = img_dir / info[protocol.name]
     for seg in _conf.segs:
-        inputs[seg] = patient_dir / info[seg]
+        inputs[seg] = seg_dir / info[seg]
 
     data = loader(inputs)
     data['patient'] = patient
@@ -60,13 +62,14 @@ def load_cohort(conf: Conf, show_example=True):
             ),
             monai_transforms.ConcatItemsD(conf.protocols, 'img'),
             monai_transforms.ConcatItemsD(conf.segs, 'seg'),
+            monai_transforms.CastToTypeD('seg', dtype=torch.int),
             # monai_transforms.SelectItemsD(['img', 'seg']),
             monai_transforms.ThresholdIntensityD('img', threshold=0),
             monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
         ])
         cohort = pd.read_excel(dataset_root / 'cohort.xlsx')
         cohort = cohort[cohort['subgroup'].isin(conf.subgroups)]
-        cohort = process_map(load_info, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80)
+        cohort = process_map(load_info, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80, max_workers=16)
         if show_example:
             import random
             from matplotlib import pyplot as plt
