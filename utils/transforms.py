@@ -1,14 +1,12 @@
-from typing import Union, Any, Mapping, Hashable, Sequence, Optional, Tuple
+from typing import Union, Mapping, Hashable, Sequence
 
+import monai.transforms as monai_transforms
 import numpy as np
 import torch
 from monai.config import KeysCollection
-import monai.transforms as monai_transforms
-from monai.transforms import ToTensor, ToTensord, MapTransform, Transform, RandomizableTransform, RandRotate90, \
-    RandSpatialCrop, RandSpatialCropd, RandRotate90d
+from monai.transforms import ToTensor, ToTensord, MapTransform, Transform, RandomizableTransform, RandSpatialCropd
 from monai.transforms.utility.array import PILImageImage
-from monai.utils import ensure_tuple_rep, fall_back_tuple
-
+from monai.utils import fall_back_tuple
 
 class ToTensorDevice(ToTensor):
     """
@@ -134,3 +132,31 @@ class RandSpatialCropWithRatiod(RandSpatialCropd):
         ratios = fall_back_tuple(self.roi_ratio, [1] * len(img_size))
         self.roi_size = [int(size * ratio) for size, ratio in zip(img_size, ratios)]
         super().randomize(img_size)
+
+class ConvertToMultiChannelBasedOnBratsClassesd(monai_transforms.MapTransform):
+    """
+    Convert labels to multi channels based on brats classes:
+        - the GD-enhancing tumor (ET — label 4)
+        - the peritumoral edema (ED — label 2)
+        - and the necrotic and non-enhancing tumor core (NCR/NET — label 1)
+
+    # label 1 is the peritumoral edema
+    # label 2 is the GD-enhancing tumor
+    # label 3 is the necrotic and non-enhancing tumor core
+    # The possible classes are TC (Tumor core), WT (Whole tumor)
+    # and ET (Enhancing tumor).
+
+    """
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            result = []
+            # merge labels 1, 2 and 4 to construct WT
+            result.append(d[key] != 0)
+            # merge label 1 and label 4 to construct TC
+            result.append((d[key] == 1) | (d[key] == 4))
+            # label 4 is AT
+            result.append(d[key] == 4)
+            d[key] = np.concatenate(result, axis=0).astype(np.float32)
+        return d

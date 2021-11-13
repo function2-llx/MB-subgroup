@@ -1,26 +1,28 @@
 import logging
 import random
 from abc import ABC
+from pathlib import Path
+from typing import Union, List
 
 import numpy as np
-
-import monai
 import torch
 from monai import transforms as monai_transforms
-from monai.utils import InterpolateMode
+from monai.transforms import Transform
+from transformers import TrainingArguments
 
+from utils.args import DataTrainingArgs, ModelArgs
 from utils.conf import Conf
-from utils.transforms import RandSampleSlicesD, SampleSlicesD
+from utils.transforms import RandSampleSlicesD
 
 class RunnerBase(ABC):
-    def __init__(self, conf: Conf):
-        self.conf = conf
+    def __init__(self, args: Union[TrainingArguments, DataTrainingArgs, ModelArgs]):
+        self.args = args
         self.setup_logging()
-        if conf.do_train:
+        if args.do_train:
             self.set_determinism()
 
     def combine_loss(self, cls_loss, seg_loss):
-        return self.conf.cls_factor * cls_loss + self.conf.seg_factor * seg_loss
+        return self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
 
     def set_determinism(self):
         seed = 2333
@@ -35,14 +37,14 @@ class RunnerBase(ABC):
         # torch.use_deterministic_algorithms(True)
 
     def is_world_master(self) -> bool:
-        return self.conf.rank == 0
+        return self.args.process_index == 0
 
     def setup_logging(self):
-        conf = self.conf
+        args = self.args
         handlers = [logging.StreamHandler()]
-        if conf.do_train:
-            conf.output_dir.mkdir(parents=True, exist_ok=True)
-            handlers.append(logging.FileHandler(conf.output_dir / 'train.log', mode='a'))
+        if args.do_train:
+            Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(args.output_dir / 'train.log', mode='a'))
             logging.basicConfig(
                 format='%(asctime)s [%(levelname)s] %(message)s',
                 datefmt=logging.Formatter.default_time_format,
@@ -52,46 +54,46 @@ class RunnerBase(ABC):
             )
 
     @staticmethod
-    def get_train_transforms(conf: Conf):
+    def get_train_transforms(args: DataTrainingArgs) -> List[Transform]:
         from monai.utils import InterpolateMode
 
         keys = ['img', 'seg']
-        # resize_mode = [InterpolateMode.AREA, InterpolateMode.NEAREST]
-        train_transforms = []
-        # train_transforms = [
-        #     RandSampleSlicesD(keys=keys, num_slices=conf.sample_slices),
-        # ]
-        if 'crop' in conf.aug:
+        resize_mode = [InterpolateMode.AREA, InterpolateMode.NEAREST]
+        # train_transforms = []
+        train_transforms = [
+            RandSampleSlicesD(keys=keys, num_slices=args.sample_slices),
+        ]
+        if 'crop' in args.aug:
             train_transforms.extend([
                 monai_transforms.RandSpatialCropD(
                     keys=keys,
-                    roi_size=(conf.sample_size, conf.sample_size, conf.sample_slices),
+                    roi_size=(args.sample_size, args.sample_size, args.sample_slices),
                     random_center=False,
                     random_size=True,
                 ),
             ])
-        if 'flip' in conf.aug:
+        if 'flip' in args.aug:
             train_transforms.extend([
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=0),
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=1),
                 monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=2),
                 monai_transforms.RandRotate90d(keys=keys, prob=0.5, max_k=1),
             ])
-        if 'voxel' in conf.aug:
+        if 'voxel' in args.aug:
             # seg won't be affected
             train_transforms.extend([
                 monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
                 monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
             ])
-        train_transforms.append(monai_transforms.ToTensorD(keys))
-        # train_transforms.extend([
-        #     monai_transforms.ResizeD(
-        #         keys=keys,
-        #         spatial_size=(conf.sample_size, conf.sample_size, conf.sample_slices),
-        #         mode=resize_mode,
-        #     ),
-        #     monai_transforms.ToTensorD(keys=keys),
-        # ])
+        # train_transforms.append(monai_transforms.ToTensorD(keys))
+        train_transforms.extend([
+            monai_transforms.ResizeD(
+                keys=keys,
+                spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
+                mode=resize_mode,
+            ),
+            monai_transforms.ToTensorD(keys=keys),
+        ])
 
         return train_transforms
 

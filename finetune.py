@@ -29,22 +29,22 @@ class EvalMetric:
 
 class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
-        output_path: Path = self.conf.output_dir / f'checkpoint-{val_id}.pth.tar'
-        plot_dir = self.conf.output_dir / f'plot-fold{val_id}'
+        output_path: Path = self.args.output_dir / f'checkpoint-{val_id}.pth.tar'
+        plot_dir = self.args.output_dir / f'plot-fold{val_id}'
         plot_dir.mkdir(exist_ok=True, parents=True)
-        if self.conf.do_train and (self.conf.force_retrain or not output_path.exists()):
-            tmp_output_path: Path = self.conf.output_dir / f'checkpoint-{val_id}-tmp.pth.tar'
+        if self.args.do_train and (self.args.force_retrain or not output_path.exists()):
+            tmp_output_path: Path = self.args.output_dir / f'checkpoint-{val_id}-tmp.pth.tar'
             # if self.is_world_master():
-            writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / self.conf.output_dir))
+            writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / self.args.output_dir))
             logging.info(f'run cross validation on fold {val_id}')
-            model = generate_model(self.conf, pretrain=self.conf.pretrain_name is not None)
+            model = generate_model(self.args, pretrain=self.args.pretrain_name is not None, num_seg=len(self.args.segs))
             from torch.optim import AdamW
-            optimizer = AdamW(model.finetune_parameters(self.conf))
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.conf.lr_reduce_factor, patience=3, verbose=True)
+            optimizer = AdamW(model.finetune_parameters(self.args))
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.lr_reduce_factor, patience=3, verbose=True)
             train_set, val_set = self.prepare_fold(val_id)
             logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
             model = nn.DataParallel(model)
-            train_loader = DataLoader(train_set, batch_size=self.conf.batch_size, shuffle=True)
+            train_loader = DataLoader(train_set, batch_size=self.args.batch_size, shuffle=True)
             # loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.conf.weight_strategy).to(self.conf.device))
             cls_loss_fn = CrossEntropyLoss()
             seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
@@ -54,17 +54,17 @@ class Finetuner(FinetunerBase):
             step = 0
 
             val_metrics = []
-            for epoch in range(1, self.conf.epochs + 1):
+            for epoch in range(1, self.args.epochs + 1):
                 model.train()
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
-                    imgs = data['img'].to(self.conf.device)
-                    labels = data['label'].to(self.conf.device)
-                    segs = data['seg'].to(self.conf.device)
+                    imgs = data['img'].to(self.args.device)
+                    labels = data['label'].to(self.args.device)
+                    segs = data['seg'].to(self.args.device)
                     outputs = model.forward(imgs)
                     logits = outputs['linear']
                     cls_loss = cls_loss_fn(logits, labels)
                     seg_loss = seg_loss_fn(outputs['seg'], segs)
-                    loss = self.conf.cls_factor * cls_loss + self.conf.seg_factor * seg_loss
+                    loss = self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
                     # if self.conf.recons:
                     #     recons_loss = recons_fn(imgs, outputs['recons'])
                     # if self.is_world_master():
@@ -88,7 +88,7 @@ class Finetuner(FinetunerBase):
                 logging.info(f'best loss: {best_loss}')
                 val_metrics.append(metric)
 
-                if self.conf.patience == 0:
+                if self.args.patience == 0:
                     torch.save(model.module.state_dict(), tmp_output_path)
                     logging.info(f'model updated, saved to {tmp_output_path}\n')
                 else:
@@ -99,25 +99,26 @@ class Finetuner(FinetunerBase):
                         patience = 0
                     else:
                         patience += 1
-                        logging.info(f'patience {patience}/{self.conf.patience}\n')
-                        if patience == self.conf.patience:
+                        logging.info(f'patience {patience}/{self.args.patience}\n')
+                        if patience == self.args.patience:
                             logging.info('run out of patience')
                             break
 
             # if self.is_world_master():
             tmp_output_path.rename(output_path)
             logging.info(f'move checkpoint permanently to {output_path}\n')
-            plt.plot([metric.cls_loss for metric in val_metrics], label='cls loss')
-            plt.plot([metric.seg_loss for metric in val_metrics], label='seg loss')
-            plt.legend()
-            plt.savefig(plot_dir / 'val-loss.pdf')
+            fig, ax = plt.subplots()
+            ax.plot([metric.cls_loss for metric in val_metrics], label='cls loss')
+            ax.plot([metric.seg_loss for metric in val_metrics], label='seg loss')
+            ax.legend()
+            fig.savefig(plot_dir / 'val-loss.pdf')
             plt.show()
         else:
-            if self.conf.do_train:
+            if self.args.do_train:
                 print('skip train')
             val_set = self.prepare_val_fold(val_id)
 
-        model = generate_model(self.conf, pretrain=False)
+        model = generate_model(self.args, pretrain=False)
         model.load_state_dict(torch.load(output_path))
         self.run_eval(model, val_set, 'cross-val', plot_num=3, plot_dir=plot_dir)
 
@@ -143,9 +144,9 @@ class Finetuner(FinetunerBase):
         with torch.no_grad():
             step = 0
             for idx, data in enumerate(tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating')):
-                img = data['img'].to(self.conf.device)
-                cls_label = data['label'].to(self.conf.device)
-                seg = data['seg'].to(self.conf.device)
+                img = data['img'].to(self.args.device)
+                cls_label = data['label'].to(self.args.device)
+                seg = data['seg'].to(self.args.device)
                 output = model.forward(img)
                 logit = output['linear']
                 if test_name:
@@ -165,10 +166,10 @@ class Finetuner(FinetunerBase):
                 fig: Figure
                 ax = {
                     protocol: ax[i]
-                    for i, protocol in enumerate(self.conf.protocols)
+                    for i, protocol in enumerate(self.args.protocols)
                 }
                 from utils.dicom_utils import ScanProtocol
-                for protocol in self.conf.protocols:
+                for protocol in self.args.protocols:
                     img = data[protocol][0, 0]
                     idx = img.shape[2] // 2
                     ax[protocol].imshow(np.rot90(img[:, :, idx]), cmap='gray')
@@ -177,7 +178,7 @@ class Finetuner(FinetunerBase):
                         ScanProtocol.T1c: 'CT',
                     }.get(protocol, None)
                     if seg_t is not None:
-                        seg_id = self.conf.segs.index(seg_t)
+                        seg_id = self.args.segs.index(seg_t)
                         from matplotlib.colors import ListedColormap
                         cur_seg = seg[0, seg_id, :, :, idx] > 0.5
                         seg_ref = data['seg'][0, seg_id, :, :, idx]

@@ -75,16 +75,16 @@ class Runner(FinetunerBase):
         output_path = self.model_output_root / f'checkpoint-{val_id}.pth.tar'
         train_set, val_set = self.prepare_fold(val_id)
         torch.autograd.set_detect_anomaly(True)
-        if self.conf.train:
+        if self.args.train:
             if dist.get_rank() == 0:
                 logging.info(f'run cross validation on fold {val_id}')
-            model = load_pretrained_model(self.conf.pretrained_name)
+            model = load_pretrained_model(self.args.pretrained_name)
             model.setup_fc()
-            model = model.to(self.conf.device)
-            model = DistributedDataParallel(model, [self.conf.device], broadcast_buffers=False)
-            sampler = DistributedSampler(train_set, num_replicas=self.conf.world_size, rank=dist.get_rank(), shuffle=True)
-            train_loader = DataLoader(train_set, batch_size=self.conf.batch_size, sampler=sampler, shuffle=False)
-            val_steps = self.conf.val_steps
+            model = model.to(self.args.device)
+            model = DistributedDataParallel(model, [self.args.device], broadcast_buffers=False)
+            sampler = DistributedSampler(train_set, num_replicas=self.args.world_size, rank=dist.get_rank(), shuffle=True)
+            train_loader = DataLoader(train_set, batch_size=self.args.batch_size, sampler=sampler, shuffle=False)
+            val_steps = self.args.val_steps
             if val_steps == 0:
                 val_steps = len(train_loader)
             optimizer = optim.AdaBelief(self.get_grouped_parameters(model))
@@ -92,7 +92,7 @@ class Runner(FinetunerBase):
             # use a list for dist.broadcast_object_list
             patience = [0]
             step = 0
-            for epoch in range(1, self.conf.epochs + 1):
+            for epoch in range(1, self.args.epochs + 1):
                 model.train()
                 for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80, disable=dist.get_rank() != 0):
                     optimizer.zero_grad()
@@ -103,7 +103,7 @@ class Runner(FinetunerBase):
                         cur_features[:, None, :].repeat(1, all_features.shape[0], 1),
                         all_features[None, :, :].repeat(cur_features.shape[0], 1, 1)
                     )
-                    cur_labels = data['label'].to(self.conf.device)
+                    cur_labels = data['label'].to(self.args.device)
                     all_labels = self.all_gather(cur_labels)
                     r_true = torch.eq(
                         cur_labels[:, None].repeat(1, all_labels.shape[0]),
@@ -126,9 +126,9 @@ class Runner(FinetunerBase):
                                 patience[0] = 0
                             else:
                                 patience[0] += 1
-                                logging.info(f'patience {patience[0]}/{self.conf.patience}\n')
+                                logging.info(f'patience {patience[0]}/{self.args.patience}\n')
                         dist.broadcast_object_list(patience, src=0)
-                        if patience[0] == self.conf.patience:
+                        if patience[0] == self.args.patience:
                             if dist.get_rank() == 0:
                                 logging.info('run out of patience\n')
                             break
@@ -136,16 +136,16 @@ class Runner(FinetunerBase):
                     continue
                 break
 
-        model = generate_model(self.conf.pretrained_name, len(self.conf.target_names)).to(self.conf.device)
+        model = generate_model(self.args.pretrained_name, len(self.args.target_names)).to(self.args.device)
         model.setup_fc()
         model.load_state_dict(torch.load(output_path))
-        model = model.to(self.conf.device)
+        model = model.to(self.args.device)
 
         if dist.get_rank() == 0:
             self.run_eval(model, train_set, val_set, 'cross-val')
 
     def all_gather(self, tensor):
-        tensors_list = [torch.empty(tensor.shape, dtype=tensor.dtype).to(self.conf.device) for _ in range(self.conf.world_size)]
+        tensors_list = [torch.empty(tensor.shape, dtype=tensor.dtype).to(self.args.device) for _ in range(self.args.world_size)]
         dist.all_gather(tensors_list, tensor)
         return torch.cat(tensors_list)
 
@@ -158,12 +158,12 @@ class Runner(FinetunerBase):
             for data in tqdm(DataLoader(ref_set, batch_size=1, shuffle=False), ncols=80, desc='calculating ref'):
                 ref.append(model.feature(data['img']))
                 labels.append(data['label'].item())
-            ref = torch.cat(ref).to(self.conf.device)
-            labels = torch.tensor(labels).to(self.conf.device)
+            ref = torch.cat(ref).to(self.args.device)
+            labels = torch.tensor(labels).to(self.args.device)
 
             acc = 0
             for data in tqdm(DataLoader(eval_set, batch_size=1, shuffle=False), ncols=80, desc='evaluating'):
-                img = data['img'].to(self.conf.device)
+                img = data['img'].to(self.args.device)
                 label = data['label'].item()
                 x = model.feature(img)
                 x = x.repeat(len(ref_set), 1)

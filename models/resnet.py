@@ -369,5 +369,7 @@ def generate_model(model_depth, **kwargs):
         model = ResNet(Bottleneck, [3, 8, 36, 3], get_inplanes(), **kwargs)
     elif model_depth == 200:
         model = ResNet(Bottleneck, [3, 24, 36, 3], get_inplanes(), **kwargs)
+    else:
+        raise ValueError
 
     return model

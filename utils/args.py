@@ -1,26 +1,58 @@
-from argparse import ArgumentParser
-from typing import Optional
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List
 
-import torch
+import yaml
+from argparse import Namespace
+from transformers import HfArgumentParser, TrainingArguments
 
-parser = ArgumentParser(add_help=False)
+@dataclass
+class DataTrainingArgs:
+    sample_size: int = field(default=None)
+    sample_slices: int = field(default=None)
+    aug: List[str] = field(default=None)
+    subjects: int = field(default=None)
 
-parser.add_argument('--lr', type=float, default=1e-5)
-parser.add_argument('--weight_decay', type=float, default=0)
-parser.add_argument('--batch_size', type=int, default=4)
-parser.add_argument('--epochs', type=int, default=200)
-parser.add_argument('--train', action='store_true')
-# parser.add_argument('--aug', choices=['no', 'weak', 'strong'], default='weak')
-parser.add_argument('--aug', nargs='*', choices=['crop', 'flip', 'voxel'], default=['flip'])
-# parser.add_argument('--crop_ratio', type=float, default=1)
-parser.add_argument('--lr_reduce_factor', type=float, default=0.2)
-parser.add_argument('--seed', type=int, default=2333)
-parser.add_argument('--patience', type=int, default=6)
-parser.add_argument('--debug', action='store_true')
-parser.add_argument('--val_steps', type=Optional[int], default=None)
-parser.add_argument('--force_retrain', action='store_true')
+@dataclass
+class ModelArgs:
+    model: str = field(default=None)
+    resnet_shortcut: str = 'B'
+    conv1_t_size: int = 7
+    model_depth: int = 34
+    conv1_t_stride: int = 1
+    resnet_widen_factor: float = 1
+    no_max_pool: bool = False
+    cls_factor: float = None
+    seg_factor: float = None
 
-def process_args(args):
-    args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    args.rank = 0
-    return args
+@dataclass
+class PretrainArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
+    pass
+
+class ArgumentParser(HfArgumentParser):
+    def __init__(self, *args, use_conf=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.use_conf = use_conf
+
+    def parse_args_into_dataclasses(self, **kwargs):
+        from sys import argv
+
+        if not self.use_conf:
+            return super().parse_args_into_dataclasses(**kwargs)
+        conf_path = Path(argv[1])
+        if conf_path.suffix in ['.yml', '.yaml']:
+            with open(conf_path) as f:
+                conf = yaml.safe_load(f)
+        elif conf_path.suffix == '.json':
+            with open(conf_path) as f:
+                conf = json.load(f)
+        else:
+            raise ValueError(f'不支持的参数配置格式：{conf_path.suffix}')
+        args = argv[2:]
+        # 手动修复检查 required 不看 namespace 的问题
+        if 'output_dir' in conf:
+            args.extend(['--output_dir', conf['output_dir']])
+
+        args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
+        return self.parse_dict(vars(args))

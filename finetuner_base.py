@@ -25,8 +25,8 @@ class FinetunerBase(RunnerBase):
         val_fold = self.folds[val_id]
         val_set = MultimodalDataset(
             val_fold,
-            monai_transforms.Compose(RunnerBase.get_inference_transforms(self.conf)),
-            len(self.conf.subgroups),
+            monai_transforms.Compose(RunnerBase.get_inference_transforms(self.args)),
+            len(self.args.subgroups),
         )
         return val_set
 
@@ -35,8 +35,8 @@ class FinetunerBase(RunnerBase):
 
         train_set = MultimodalDataset(
             train_folds,
-            monai_transforms.Compose(RunnerBase.get_train_transforms(self.conf)),
-            len(self.conf.subgroups),
+            monai_transforms.Compose(RunnerBase.get_train_transforms(self.args)),
+            len(self.args.subgroups),
         )
         return train_set, self.prepare_val_fold(val_id)
 

@@ -13,7 +13,6 @@ conf_dir = Path(__file__).parent
 
 @dataclass
 class Conf(DataClassYAMLMixin):
-    name: str
     n_folds: int
     folds_file: Path
     subgroups: List[str]
@@ -31,9 +30,11 @@ class Conf(DataClassYAMLMixin):
     img_dir: Path
     seg_dir: Path
     output_dir: Path
+    name: str = None
     do_train: bool = False
     force_retrain: bool = False
     epochs: int = 100
+    save_epoch: int = 1
     cls_factor: float = 0.1
     seg_factor: float = 1
     lr_reduce_factor: float = 0.2

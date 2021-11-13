@@ -1,0 +1,12 @@
+sample_size: 224
+sample_slices: 32
+model: resnet
+model_depth: 34
+per_device_train_batch_size: 25
+learning_rate: 1.0e-4
+num_train_epochs: 30
+patience: 0
+aug:
+  - flip
+  - crop
+output_dir: output/pretrain/brats21
