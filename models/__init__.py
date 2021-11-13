@@ -8,9 +8,8 @@ from transformers import TrainingArguments
 
 from utils.args import ModelArgs, DataTrainingArgs
 from . import resnet, resnet2p1d, wide_resnet, resnext, pre_act_resnet, densenet
-from .args import parser, process_args
 from .backbone import Backbone
-from .segresnet import SegResNetVAE
+from .segresnet import SegResNet
 from .unet import UNet
 
 
@@ -73,11 +72,13 @@ def generate_model(
             # recons=conf.recons,
         )
     elif args.model == 'segresnet':
-        model = SegResNetVAE(
-            input_image_size=(args.sample_size, args.sample_size, args.sample_slices),
+        model = SegResNet(
+            # input_image_size=(args.sample_size, args.sample_size, args.sample_slices),
             in_channels=in_channels,
             out_channels=num_seg,
             num_classes=num_classes,
+            blocks_down=(3, 4, 6, 3),
+            blocks_up=(2, 2, 2),
         )
     elif args.model == 'resnet2p1d':
         model = resnet2p1d.generate_model(

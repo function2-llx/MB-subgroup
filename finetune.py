@@ -1,8 +1,9 @@
 import logging
+import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional
 
 import numpy as np
 import torch
@@ -41,7 +42,7 @@ class Finetuner(FinetunerBase):
         # output_path: Path = output_dir / f'checkpoint-{val_id}.pth.tar'
         # plot_dir = output_dir / f'plot-fold{val_id}'
         # plot_dir.mkdir(exist_ok=True, parents=True)
-        if self.args.do_train and (self.args.overwrite_output_dir or not fold_output_dir.exists()):
+        if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / 'checkpoint.pth.tar').exists()):
             # tmp_output_path: Path = output_dir / f'checkpoint-{val_id}-tmp.pth.tar'
             # tmp_output_path: Path = output_dir / f'checkpoint-{val_id}/'
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
@@ -55,7 +56,7 @@ class Finetuner(FinetunerBase):
             )
             from torch.optim import AdamW
             optimizer = AdamW(model.finetune_parameters(self.args))
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.learning_rate, patience=3, verbose=True)
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.lr_reduce_factor, patience=3, verbose=True)
             train_set, val_set = self.prepare_fold(val_id)
             logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
             # model = nn.DataParallel(model)
@@ -101,8 +102,8 @@ class Finetuner(FinetunerBase):
                     step += 1
                 # if self.is_world_master() == 0:
                 writer.flush()
-
-                val_output = self.run_eval(model, val_set)
+                checkpoint_save_dir = fold_output_dir / f'checkpoint-ep{epoch}'
+                val_output = self.run_eval(model, val_set, plot_dir=checkpoint_save_dir, plot_num=3)
                 val_loss = self.combine_loss(val_output.cls_loss, val_output.seg_loss)
                 scheduler.step(val_loss)
                 logging.info(f'cur loss:  {val_loss}')
@@ -125,23 +126,7 @@ class Finetuner(FinetunerBase):
                 torch.save(save_states, checkpoint_save_dir / 'states.pth')
                 logging.info(f'save checkpoint to {checkpoint_save_dir}\n')
 
-                # else:
-                #     if val_loss < best_loss:
-                #         best_loss = val_loss
-                #         torch.save(model.module.state_dict(), tmp_output_path)
-                #         logging.info(f'model updated, saved to {tmp_output_path}\n')
-                #         patience = 0
-                #     else:
-                #         patience += 1
-                #         logging.info(f'patience {patience}/{self.args.patience}\n')
-                #         if patience == self.args.patience:
-                #             logging.info('run out of patience')
-                #             break
-
             torch.save(model.state_dict(), fold_output_dir / 'checkpoint.pth.tar')
-            # if self.is_world_master():
-            # tmp_output_path.rename(output_path)
-            # logging.info(f'move checkpoint permanently to {output_path}\n')
             fig, ax = plt.subplots()
             ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
             ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
@@ -178,6 +163,7 @@ class Finetuner(FinetunerBase):
         post_trans = Compose(
             [EnsureType(), Activations(sigmoid=True), AsDiscrete(threshold_values=True)]
         )
+        plot_idx = random.sample(range(len(eval_dataset)), plot_num)
         if plot_num > 0:
             assert plot_dir is not None
             plot_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +171,9 @@ class Finetuner(FinetunerBase):
         cls_loss_fn = CrossEntropyLoss()
         seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
         ret = EvalOutput()
-        # plot_idx = random.sample(range(len(eval_dataset)), plot_num)
+        if plot_num > 0:
+            assert plot_dir is not None
+            plot_dir.mkdir(parents=True, exist_ok=True)
         meandices = []
         with torch.no_grad():
             step = 0
@@ -193,11 +181,11 @@ class Finetuner(FinetunerBase):
                 img = data['img'].to(self.args.device)
                 cls_label = data['label'].to(self.args.device)
                 seg_ref = data['seg'].to(self.args.device)
-                output = model.forward(img)
-                logit = output['linear']
-                seg_pred = torch.stack([post_trans(i) for i in decollate_batch(output['seg'])])
+                output: SegResNetOutput = model.forward(img)
+                logit = output.cls
+                seg_pred = torch.stack([post_trans(i) for i in decollate_batch(output.seg)])
                 cls_loss = cls_loss_fn(logit, cls_label)
-                seg_loss = seg_loss_fn(output['seg'], seg_ref)
+                seg_loss = seg_loss_fn(output.seg, seg_ref)
                 ret.cls_loss += cls_loss.item()
                 ret.seg_loss += seg_loss.item()
                 meandice = compute_meandice(seg_pred, seg_ref)[0]
@@ -206,6 +194,8 @@ class Finetuner(FinetunerBase):
                 meandices.append(meandice)
                 step += 1
 
+                if idx not in plot_idx:
+                    continue
                 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
                 fig: Figure
                 ax = {
@@ -226,8 +216,7 @@ class Finetuner(FinetunerBase):
                     seg_id = self.args.segs.index(seg_t)
                     from matplotlib.colors import ListedColormap
                     cur_seg_ref = seg_ref[0, seg_id, :, :, idx].cpu().numpy()
-                    cur_seg_pred = seg_pred[0, seg_id, :, :, idx]
-                    cur_seg_pred = cur_seg_pred.int().cpu().numpy()
+                    cur_seg_pred = seg_pred[0, seg_id, :, :, idx].int().cpu().numpy()
                     ax[protocol].imshow(np.rot90(cur_seg_pred), vmin=0, vmax=1, cmap=ListedColormap(['none', 'red']), alpha=0.5)
                     ax[protocol].imshow(np.rot90(cur_seg_ref), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
                 fig.savefig(plot_dir / f"{data['patient'][0]}.pdf", dpi=300)
@@ -237,52 +226,6 @@ class Finetuner(FinetunerBase):
         ret.seg_loss /= step
         ret.meandice = torch.stack(meandices)
         return ret
-
-# def get_model_output_root(args):
-#     return args.output_root \
-#         / args.targets \
-#         / (f'{args.model}{args.model_depth}-scratch' if args.pretrain_name is None else args.pretrain_name) \
-#         / '{aug_list},bs{batch_size},lr{lr},wd{weight_decay},{weight_strategy},{sample_size}x{sample_slices}'.format(
-#             aug_list='+'.join(args.aug) if args.aug else 'no',
-#             **args.__dict__
-#         )
-
-# def parse_args(search=False):
-#     from argparse import ArgumentParser
-#     from utils.dicom_utils import ScanProtocol
-#     import utils.args
-#     import models
-#
-#     parser = ArgumentParser(parents=[utils.args.parser, models.args.parser])
-#     parser.add_argument('--weight_strategy', choices=['invsqrt', 'equal', 'inv'], default='invsqrt')
-#     parser.add_argument('--targets', choices=['all', 'G3G4', 'WS'], default='all')
-#     parser.add_argument('--n_folds', type=int, choices=[3, 4], default=3)
-#     protocol_names = [value.name for value in ScanProtocol]
-#     parser.add_argument('--protocols', nargs='+', choices=protocol_names, default=protocol_names)
-#     parser.add_argument('--output_root', type=Path, required=True)
-#     parser.add_argument('--features', type=str)
-#
-#     args = parser.parse_args()
-#     args = utils.args.process_args(args)
-#     args = models.args.process_args(args)
-#     args.target_names = {
-#         'all': ['WNT', 'SHH', 'G3', 'G4'],
-#         'WS': ['WNT', 'SHH'],
-#         'G3G4': ['G3', 'G4'],
-#     }[args.targets]
-#     args.target_dict = {name: i for i, name in enumerate(args.target_names)}
-#     # for output
-#     if args.weight_decay == 0.0:
-#         args.weight_decay = 0
-#     assert len(args.protocols) in [1, 3]
-#     if len(args.protocols) == 1:
-#         args.protocols = [args.protocols[0] for _ in range(3)]
-#     args.protocols = list(map(ScanProtocol.__getitem__, args.protocols))
-#     args.n_classes = len(args.target_names)
-#     if not search:
-#         args.model_output_root = get_model_output_root(args)
-#         print('output root:', args.model_output_root)
-#     return args
 
 def finetune(args: FinetuneArgs, folds):
     runner = Finetuner(args, folds)

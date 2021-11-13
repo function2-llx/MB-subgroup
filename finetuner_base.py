@@ -1,4 +1,5 @@
 import itertools
+import logging
 from abc import abstractmethod
 from pathlib import Path
 from typing import Tuple, Dict
@@ -8,7 +9,6 @@ from monai import transforms as monai_transforms
 
 from runner_base import RunnerBase
 from utils.args import FinetuneArgs
-from utils.conf import Conf
 from utils.data import MultimodalDataset
 from utils.report import Reporter
 
@@ -19,6 +19,7 @@ class FinetunerBase(RunnerBase):
         super().__init__(args)
         self.folds = folds
         # if args.rank == 0:
+        logging.info(f"Training/evaluation parameters {args}")
         self.reporters: Dict[str, Reporter] = {
             test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups)
             for test_name in ['cross-val']

@@ -11,7 +11,6 @@ import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from utils.args import FinetuneArgs
-from utils.conf import Conf
 # from .check_files import data_dir
 
 dataset_root = Path(__file__).parent
@@ -19,7 +18,7 @@ dataset_root = Path(__file__).parent
 loader: Optional[monai_transforms.Compose] = None
 # map label string to int
 target_dict: Dict[str, int]
-_args: Conf
+_args: FinetuneArgs
 
 def load_info(info: pd.Series):
     label = target_dict[info['subgroup']]

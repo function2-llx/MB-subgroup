@@ -49,6 +49,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
     segs: List[str] = field(default_factory=list)
     num_pretrain_seg: int = field(default=None)
     patience: int = field(default=0)
+    lr_reduce_factor: float = field(default=0.2)
 
     def __post_init__(self):
         super().__post_init__()

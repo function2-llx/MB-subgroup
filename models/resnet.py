@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from monai.networks import blocks as monai_blocks
 from monai.networks.nets import ResNet
 
+from .segresnet import SegResNetOutput
 from .utils import permute_img
 from .backbone import Backbone
 
@@ -322,7 +323,7 @@ class ResNet(Backbone):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> SegResNetOutput:
         x = permute_img(x)
         outputs = {}
         c1 = self.conv1(x)
@@ -353,7 +354,10 @@ class ResNet(Backbone):
             seg = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
             outputs['seg'] = permute_img(seg, inv=True)
 
-        return outputs
+        return SegResNetOutput(
+            cls=outputs['linear'],
+            seg=outputs['seg'],
+        )
 
 def generate_model(model_depth, **kwargs):
     assert model_depth in [10, 18, 34, 50, 101, 152, 200]

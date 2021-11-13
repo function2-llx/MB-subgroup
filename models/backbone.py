@@ -6,9 +6,6 @@ __all__ = ["Backbone"]
 
 from transformers import TrainingArguments
 
-from utils.args import ModelArgs
-from utils.conf import Conf
-
 class Backbone(nn.Module, metaclass=ABCMeta):
     """
     Abstract base class for network backbones.
