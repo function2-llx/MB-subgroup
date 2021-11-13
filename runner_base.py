@@ -6,12 +6,11 @@ from typing import Union, List
 
 import numpy as np
 import torch
-from monai import transforms as monai_transforms
-from monai.transforms import Transform
 from transformers import TrainingArguments
 
-from utils.args import DataTrainingArgs, ModelArgs
-from utils.conf import Conf
+from monai import transforms as monai_transforms
+from monai.transforms import Transform
+from utils.args import DataTrainingArgs, ModelArgs, FinetuneArgs
 from utils.transforms import RandSampleSlicesD
 
 class RunnerBase(ABC):
@@ -21,8 +20,11 @@ class RunnerBase(ABC):
         if args.do_train:
             self.set_determinism()
 
-    def combine_loss(self, cls_loss, seg_loss):
-        return self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
+    def combine_loss(self, cls_loss, seg_loss, vae_loss=None) -> torch.FloatTensor:
+        ret = self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
+        if vae_loss is not None:
+            ret += vae_loss * self.args.vae_factor
+        return ret
 
     def set_determinism(self):
         seed = 2333
@@ -43,8 +45,9 @@ class RunnerBase(ABC):
         args = self.args
         handlers = [logging.StreamHandler()]
         if args.do_train:
-            Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-            handlers.append(logging.FileHandler(args.output_dir / 'train.log', mode='a'))
+            output_dir = Path(args.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(output_dir / 'train.log', mode='a'))
             logging.basicConfig(
                 format='%(asctime)s [%(levelname)s] %(message)s',
                 datefmt=logging.Formatter.default_time_format,
@@ -98,7 +101,7 @@ class RunnerBase(ABC):
         return train_transforms
 
     @staticmethod
-    def get_inference_transforms(conf: Conf):
+    def get_inference_transforms(args: FinetuneArgs):
         keys = ['img', 'seg']
         # resize_mode = [InterpolateMode.AREA]
         #     keys.append('seg')

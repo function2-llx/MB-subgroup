@@ -45,8 +45,8 @@ def get_args():
     return args
 
 class Runner(FinetunerBase):
-    def __init__(self, conf, folds):
-        super().__init__(conf, folds)
+    def __init__(self, args, folds):
+        super().__init__(args, folds)
         self.loss_fn = MSELoss()
 
     def get_grouped_parameters(self, model: nn.Module):

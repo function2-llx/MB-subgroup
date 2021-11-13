@@ -4,6 +4,9 @@ import torch.nn as nn
 
 __all__ = ["Backbone"]
 
+from transformers import TrainingArguments
+
+from utils.args import ModelArgs
 from utils.conf import Conf
 
 class Backbone(nn.Module, metaclass=ABCMeta):
@@ -38,14 +41,14 @@ class Backbone(nn.Module, metaclass=ABCMeta):
         """
         return 0
 
-    def finetune_parameters(self, conf: Conf):
+    def finetune_parameters(self, args: TrainingArguments):
         params = [(n, p) for n, p in self.named_parameters() if p.requires_grad]
         no_decay = ['bias', 'Norm.weight']
         grouped_parameters = [
-            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': conf.weight_decay,
-             'lr': conf.lr},
+            {'params': [p for n, p in params if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay,
+             'lr': args.learning_rate},
             {'params': [p for n, p in params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
-             'lr': conf.lr},
+             'lr': args.learning_rate},
         ]
         return grouped_parameters
 

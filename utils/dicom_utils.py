@@ -10,21 +10,21 @@ class Plane(Enum):
     Coronal = 1
     Axial = 2
 
-class ScanProtocolMeta(EnumMeta):
-    def __call__(cls, value):
-        if isinstance(value, str):
-            return cls.protocol_map[value.lower()]
-        return super().__call__(value)
+# class ScanProtocolMeta(EnumMeta):
+#     def __call__(cls, value):
+#         if isinstance(value, str):
+#             return cls.protocol_map[value.lower()]
+#         return super().__call__(value)
 
-class ScanProtocol(Enum, metaclass=ScanProtocolMeta):
+class ScanProtocol(Enum):
     T1 = auto()
     T1c = auto()
     T2 = auto()
 
-ScanProtocolMeta.protocol_map = {
-    protocol.name.lower(): protocol
-    for protocol in ScanProtocol
-}
+# ScanProtocolMeta.protocol_map = {
+#     protocol.name.lower(): protocol
+#     for protocol in ScanProtocol
+# }
 
 def get_plane(ds) -> Optional[Plane]:
     try:

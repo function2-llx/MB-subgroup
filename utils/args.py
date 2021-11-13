@@ -1,11 +1,13 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 import yaml
 from argparse import Namespace
 from transformers import HfArgumentParser, TrainingArguments
+
+from utils.dicom_utils import ScanProtocol
 
 @dataclass
 class DataTrainingArgs:
@@ -17,7 +19,8 @@ class DataTrainingArgs:
 @dataclass
 class ModelArgs:
     model: str = field(default=None)
-    resnet_shortcut: str = 'B'
+    model_name_or_path: str = field(default=None)
+    resnet_shortcut: str = field(default='B')
     conv1_t_size: int = 7
     model_depth: int = 34
     conv1_t_stride: int = 1
@@ -25,10 +28,34 @@ class ModelArgs:
     no_max_pool: bool = False
     cls_factor: float = None
     seg_factor: float = None
+    vae_factor: float = None
 
 @dataclass
 class PretrainArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
     pass
+
+_protocol_map = {
+    protocol.name.lower(): protocol
+    for protocol in ScanProtocol
+}
+
+@dataclass
+class FinetuneArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
+    img_dir: Path = field(default=None)
+    seg_dir: Path = field(default=None)
+    folds_file: Path = field(default=None)
+    protocols: List[Union[str, ScanProtocol]] = field(default_factory=list)
+    subgroups: List[str] = field(default=None)
+    segs: List[str] = field(default_factory=list)
+    num_pretrain_seg: int = field(default=None)
+    patience: int = field(default=0)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.folds_file = Path(self.folds_file)
+        self.img_dir = Path(self.img_dir)
+        self.seg_dir = Path(self.seg_dir)
+        self.protocols = list(map(lambda name: _protocol_map[name.lower()], self.protocols))
 
 class ArgumentParser(HfArgumentParser):
     def __init__(self, *args, use_conf=True, **kwargs):

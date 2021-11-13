@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import *
@@ -18,6 +20,7 @@ class Reporter:
         self.y_pred = []
         self.y_score = []
         self.results = []
+        self.meandices = []
 
     def get_auc(self):
         y_true = np.eye(len(self.target_names))[self.y_true]
@@ -48,26 +51,50 @@ class Reporter:
         plt.show()
 
     def report(self):
+        self.plot_roc()
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
+        meandices = torch.stack(self.meandices)
         report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
         all_auc = self.get_auc()
         for i, target_name in enumerate(self.target_names):
             report[target_name]['auc'] = all_auc[i]
-
         report['weighted avg']['accuracy'] = report.pop('accuracy')
-        pd.DataFrame(report).transpose().to_csv(os.path.join(self.report_dir, 'report.csv'))
-        pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names)\
-            .to_csv(self.report_dir / 'cm.csv')
+        pd.DataFrame(report).transpose().to_csv(self.report_dir / 'report.csv')
+        pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names).to_csv(self.report_dir / 'cm.csv')
+        pd.DataFrame({
+            **{
+                str(result[0]): {
+                    'AT': meandice[0].item(),
+                    'CT': meandice[1].item(),
+                }
+                for result, meandice in zip(self.results, meandices)
+            },
+            'average': {
+                'AT': meandices[:, 0].mean().item(),
+                'CT': meandices[:, 1].mean().item(),
+            },
+            'min': {
+                'AT': meandices[:, 0].min().item(),
+                'CT': meandices[:, 1].min().item(),
+            },
+            'max': {
+                'AT': meandices[:, 0].max().item(),
+                'CT': meandices[:, 1].max().item(),
+            }
+        }).transpose().to_csv(self.report_dir / 'meandice.csv')
 
-    def append(self, data, logit: torch.FloatTensor):
-        self.y_true.append(data['label'].item())
+    def append(self, data, logit: torch.FloatTensor, meandice: torch.FloatTensor):
+        patient = data['patient'][0]
+        label = data['label'].item()
+        self.y_true.append(label)
         pred = logit.argmax().item()
         self.y_pred.append(pred)
         output = torch.softmax(logit, dim=0)
         score = output.detach().cpu().numpy()
         self.y_score.append(score)
-        self.results.append((data['patient'], data['label'], pred, *score))
+        self.results.append((patient, label, pred, *score))
+        self.meandices.append(meandice)
 
     def append_pred(self, pred: int, label: int):
         self.y_true.append(label)

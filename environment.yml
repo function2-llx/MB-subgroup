@@ -7,6 +7,7 @@ dependencies:
   - pyyaml=6.0
 
   - pytorch::pytorch=1.10.0
+  - pytorch::ignite=0.4.7
   - pytorch::torchvision=0.11.1
   - defaults::cudatoolkit=11.3
 

@@ -1,0 +1,31 @@
+subgroups:
+  - SHH
+  - G3
+  - G4
+folds_file: folds-3.json
+protocols:
+  - T1
+  - T1c
+  - T2
+segs:
+  - AT
+  - CT
+sample_size: 224
+sample_slices: 16
+model: resnet
+model_name_or_path: output/pretrain/brats21/ep10/state.pth
+model_depth: 34
+batch_size: 8
+recons: false
+lr: 5e-5
+num_train_epochs: 10
+patience: 0
+aug:
+  - flip
+img_dir: utils/data/datasets/tiantan/stripped
+seg_dir: utils/data/datasets/tiantan/origin
+output_dir: output/SHHG34/brats21/ep10
+cls_factor: 0.1
+seg_factor: 1
+num_pretrain_seg: 3
+save_strategy: epoch

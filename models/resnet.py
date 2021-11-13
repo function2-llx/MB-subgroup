@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from monai.networks import blocks as monai_blocks
+from monai.networks.nets import ResNet
 
 from .utils import permute_img
 from .backbone import Backbone
@@ -136,6 +137,7 @@ class ResNet(Backbone):
         shortcut_type='B',
         widen_factor=1.0,
         n_classes=None,
+        num_pretrain_seg=None,
         num_seg=None,
         recons=False,
     ):
@@ -183,13 +185,14 @@ class ResNet(Backbone):
         self.num_seg = num_seg
         if num_seg:
             assert block == BasicBlock
+            num_cal_seg = num_seg if num_pretrain_seg is None else num_pretrain_seg
             self.seg = ResNet.Decoder(
                 self._get_bottom_layer(block_inplanes[3]),
                 self._get_up_layer(block_inplanes[3], block_inplanes[2], 2, False),
                 self._get_up_layer(block_inplanes[2], block_inplanes[1], 2, False),
                 self._get_up_layer(block_inplanes[1], block_inplanes[0], 2, False),
                 self._get_up_layer(block_inplanes[0], block_inplanes[0], 1, False),
-                self._get_up_layer(block_inplanes[0], num_seg, 2, True),
+                self._get_up_layer(block_inplanes[0], num_cal_seg, 2, True),
             )
         else:
             self.seg = None
@@ -347,7 +350,7 @@ class ResNet(Backbone):
             outputs['recons'] = permute_img(recons, inv=True)
 
         if self.seg is not None:
-            seg = self.seg(c1, c2, c3, c4, c5)
+            seg = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
             outputs['seg'] = permute_img(seg, inv=True)
 
         return outputs

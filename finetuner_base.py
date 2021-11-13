@@ -1,23 +1,26 @@
 import itertools
 from abc import abstractmethod
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict
 
 import torch
 from monai import transforms as monai_transforms
 
 from runner_base import RunnerBase
+from utils.args import FinetuneArgs
 from utils.conf import Conf
 from utils.data import MultimodalDataset
 from utils.report import Reporter
 
 class FinetunerBase(RunnerBase):
-    def __init__(self, conf: Conf, folds):
-        super().__init__(conf)
+    args: FinetuneArgs
+
+    def __init__(self, args: FinetuneArgs, folds):
+        super().__init__(args)
         self.folds = folds
         # if args.rank == 0:
-        self.reporters = {
-            test_name: Reporter(conf.output_dir / test_name, conf.subgroups)
+        self.reporters: Dict[str, Reporter] = {
+            test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups)
             for test_name in ['cross-val']
         }
 

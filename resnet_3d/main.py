@@ -49,11 +49,11 @@ def get_opt():
             opt.pretrain_path = opt.root_path / opt.pretrain_path
 
     if opt.pretrain_path is not None:
-        opt.n_finetune_classes = opt.n_classes
-        opt.n_classes = opt.n_pretrain_classes
+        opt.n_finetune_classes = opt.num_classes
+        opt.num_classes = opt.n_pretrain_classes
 
     if opt.output_topk <= 0:
-        opt.output_topk = opt.n_classes
+        opt.output_topk = opt.num_classes
 
     if opt.inference_batch_size == 0:
         opt.inference_batch_size = opt.batch_size

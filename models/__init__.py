@@ -1,15 +1,16 @@
 import logging
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
+from transformers import TrainingArguments
 
-from utils.args import ModelArgs
-from utils.conf import Conf
+from utils.args import ModelArgs, DataTrainingArgs
 from . import resnet, resnet2p1d, wide_resnet, resnext, pre_act_resnet, densenet
 from .args import parser, process_args
 from .backbone import Backbone
+from .segresnet import SegResNetVAE
 from .unet import UNet
 
 
@@ -39,7 +40,14 @@ def get_fine_tuning_parameters(model, ft_begin_module):
 
     return parameters
 
-def generate_model(args: ModelArgs, pretrain: bool = True, in_channels: int = 3, num_classes=2, num_seg: int = 0) -> Backbone:
+def generate_model(
+    args: Union[ModelArgs, TrainingArguments, DataTrainingArgs],
+    pretrain: bool = True,
+    in_channels: int = 3,
+    num_classes=None,
+    num_seg: int = 0,
+    num_pretrain_seg: int = None,
+) -> Backbone:
     if args.model == 'unet':
         model = UNet(
             dimensions=3,
@@ -48,7 +56,7 @@ def generate_model(args: ModelArgs, pretrain: bool = True, in_channels: int = 3,
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
             num_res_units=2,
-            n_classes=args.n_classes,
+            n_classes=num_classes,
         )
     elif args.model == 'resnet':
         model = resnet.generate_model(
@@ -61,7 +69,15 @@ def generate_model(args: ModelArgs, pretrain: bool = True, in_channels: int = 3,
             no_max_pool=args.no_max_pool,
             widen_factor=args.resnet_widen_factor,
             num_seg=num_seg,
+            num_pretrain_seg=num_pretrain_seg,
             # recons=conf.recons,
+        )
+    elif args.model == 'segresnet':
+        model = SegResNetVAE(
+            input_image_size=(args.sample_size, args.sample_size, args.sample_slices),
+            in_channels=in_channels,
+            out_channels=num_seg,
+            num_classes=num_classes,
         )
     elif args.model == 'resnet2p1d':
         model = resnet2p1d.generate_model(
@@ -119,12 +135,12 @@ def generate_model(args: ModelArgs, pretrain: bool = True, in_channels: int = 3,
         raise ValueError
 
     if pretrain:
-        assert args.pretrain_name is not None
-        pretrain_path = args.pretrain_root / args.pretrain_name / 'state.pth'
+        assert args.model_name_or_path is not None
+        # pretrain_path = args.pretrain_root / args.pretrain_name / 'state.pth'
         # pretrain loading wrapper
-        if args.rank == 0:
-            logging.info(f'load pre-trained weights from {pretrain_path}')
-        pretrained_state_dict: OrderedDict[str, Tensor] = torch.load(pretrain_path)['state_dict']
+        # if args.rank == 0:
+        logging.info(f'load pre-trained weights from {args.model_name_or_path}')
+        pretrained_state_dict: OrderedDict[str, Tensor] = torch.load(args.model_name_or_path)['state_dict']
         skip_keys = ['fc']
         update_state_dict = OrderedDict({
             key: weight for key, weight in pretrained_state_dict.items()
