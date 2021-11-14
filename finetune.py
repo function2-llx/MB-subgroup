@@ -7,7 +7,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
-import yaml
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from monai.data import DataLoader, decollate_batch
@@ -140,6 +139,7 @@ class Finetuner(FinetunerBase):
             ax.legend()
             fig.savefig(fold_output_dir / 'val-loss.pdf')
             plt.show()
+            plt.close()
         else:
             if self.args.do_train:
                 print('skip train')
@@ -226,6 +226,7 @@ class Finetuner(FinetunerBase):
                     ax[protocol].imshow(np.rot90(cur_seg_ref), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
                 fig.savefig(plot_dir / f"{data['patient'][0]}.pdf", dpi=300)
                 plt.show()
+                plt.close()
 
         ret.cls_loss /= step
         ret.seg_loss /= step

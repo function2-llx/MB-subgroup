@@ -19,7 +19,7 @@ model_depth: 18
 per_device_train_batch_size: 16
 recons: false
 learning_rate: 1.0e-4
-num_train_epochs: 20
+num_train_epochs: 30
 aug:
   - flip
 img_dir: utils/data/datasets/tiantan/stripped

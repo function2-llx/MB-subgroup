@@ -18,12 +18,12 @@ model_depth: 34
 per_device_train_batch_size: 16
 recons: false
 learning_rate: 1.0e-4
-num_train_epochs: 20
+num_train_epochs: 30
 aug:
   - flip
   - crop
 img_dir: utils/data/datasets/tiantan/stripped
 seg_dir: utils/data/datasets/tiantan/origin
-output_dir: output/SHHG34/baseline-onlyseg/bs8-res34-448
-cls_factor: 0.1
+output_dir: output/SHHG34/baseline-onlyseg/bs16-res34-448
+cls_factor: 0
 seg_factor: 1

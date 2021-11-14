@@ -49,6 +49,7 @@ class Reporter:
         fig.savefig(self.report_dir / 'roc.pdf')
         fig.savefig(self.report_dir / 'roc.png')
         plt.show()
+        plt.close()
 
     def report(self):
         self.plot_roc()

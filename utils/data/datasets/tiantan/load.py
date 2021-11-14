@@ -94,6 +94,7 @@ def load_cohort(args: FinetuneArgs, show_example=True):
                     ax[protocol].imshow(np.rot90(example[seg_t][0, :, :, idx]), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
 
             plt.show()
+            plt.close()
 
     if args.folds_file is not None:
         folds = json.load(open(dataset_root / args.folds_file))
