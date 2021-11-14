@@ -53,8 +53,6 @@ class FinetunerBase(RunnerBase):
         return train_set, self.prepare_val_fold(val_id)
 
     def run(self):
-        output_dir = Path(self.args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
         for val_id in range(len(self.folds)):
             torch.cuda.empty_cache()
             self.run_fold(val_id)

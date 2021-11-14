@@ -45,9 +45,7 @@ class RunnerBase(ABC):
         args = self.args
         handlers = [logging.StreamHandler()]
         if args.do_train:
-            output_dir = Path(args.output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            handlers.append(logging.FileHandler(output_dir / 'train.log', mode='a'))
+            handlers.append(logging.FileHandler(Path(args.output_dir) / 'train.log', mode='a'))
             logging.basicConfig(
                 format='%(asctime)s [%(levelname)s] %(message)s',
                 datefmt=logging.Formatter.default_time_format,

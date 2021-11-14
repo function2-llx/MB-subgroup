@@ -86,8 +86,10 @@ class ArgumentParser(HfArgumentParser):
             args = ['--output_dir', conf['output_dir']] + args
 
         args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
         args_dict = vars(args)
-        with open(Path(args.output_dir) / 'conf.yml', 'w') as f:
+        with open(output_dir / 'conf.yml', 'w') as f:
             yaml.safe_dump(args_dict, f)
         args = self.parse_dict(args_dict)
         return args

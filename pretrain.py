@@ -40,8 +40,6 @@ class Pretrainer(RunnerBase):
 
     def train(self):
         torch.backends.cudnn.benchmark = True
-        output_dir = Path(self.args.output_dir)
-        output_dir.mkdir(exist_ok=True, parents=True)
         loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
         optimizer = Adam(
             self.model.parameters(),
