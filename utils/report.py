@@ -88,8 +88,9 @@ class Reporter:
         meandices = torch.stack(self.meandices)
         report = self.get_report(y_pred, y_true)
         return {
+            'acc': report['weighted avg']['accuracy'],
             **{
-                f'{label}-{metric}': report[metric]
+                f'{label}-{metric}': report[label][metric]
                 for label in self.target_names for metric in metric_names
             },
             **{
@@ -98,7 +99,7 @@ class Reporter:
             }
         }
 
-    def get_report(self, y_pred, y_true):
+    def get_report(self, y_pred, y_true) -> Dict[str, Dict]:
         report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True, zero_division=0)
         all_auc = self.get_auc()
         for i, target_name in enumerate(self.target_names):
