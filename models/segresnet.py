@@ -27,9 +27,9 @@ from .backbone import Backbone
 
 @dataclass
 class SegResNetOutput:
-    cls: torch.FloatTensor
+    cls: torch.FloatTensor = None
     # cls_loss: torch.FloatTensor
-    seg: torch.Tensor
+    seg: torch.Tensor = None
     # seg_loss: torch.FloatTensor
     vae_loss: torch.FloatTensor = None
 
@@ -78,7 +78,7 @@ class SegResNet(Backbone):
         use_conv_final: bool = True,
         blocks_down: tuple = (1, 2, 2, 4),
         blocks_up: tuple = (1, 1, 1),
-        upsample_mode: Union[UpsampleMode, str] = UpsampleMode.NONTRAINABLE,
+        upsample_mode: Union[UpsampleMode, str] = UpsampleMode.DECONV,
         num_classes=None,
     ):
         super().__init__()

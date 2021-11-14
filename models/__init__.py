@@ -77,6 +77,9 @@ def generate_model(
             in_channels=in_channels,
             out_channels=num_seg,
             num_classes=num_classes,
+            init_filters=16,
+            dropout_prob=0.2,
+            # upsample_mode=
             blocks_down=(3, 4, 6, 3),
             blocks_up=(2, 2, 2),
         )

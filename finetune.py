@@ -1,11 +1,11 @@
 import logging
-import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -13,7 +13,6 @@ from monai.data import DataLoader, decollate_batch
 from monai.losses import DiceLoss
 from monai.metrics import compute_meandice
 from monai.transforms import Compose, EnsureType, Activations, AsDiscrete
-from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
@@ -21,10 +20,11 @@ from tqdm import tqdm
 from transformers import IntervalStrategy
 
 from finetuner_base import FinetunerBase
-from models import generate_model
+from models import generate_model, Backbone
 from models.segresnet import SegResNetOutput
 from utils.args import FinetuneArgs, ArgumentParser
 from utils.data import MultimodalDataset
+from utils.report import Reporter
 
 @dataclass
 class EvalOutput:
@@ -68,44 +68,48 @@ class Finetuner(FinetunerBase):
             best_loss = float('inf')
             step = 0
             val_outputs = []
-            for epoch in range(1, int(self.args.num_train_epochs) + 1):
-                model.train()
-                for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
-                    imgs = data['img'].to(self.args.device)
-                    labels = data['label'].to(self.args.device)
-                    seg_ref = data['seg'].to(self.args.device)
-                    outputs: SegResNetOutput = model.forward(imgs)
-                    # logits = outputs['linear']
-                    logits = outputs.cls
-                    cls_loss = cls_loss_fn(logits, labels)
-                    # seg_loss = seg_loss_fn(outputs['seg'], segs)
-                    seg_loss = seg_loss_fn(outputs.seg, seg_ref)
-                    combined_loss = self.combine_loss(cls_loss, seg_loss, outputs.vae_loss)
-                    # loss = self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
-                    # if self.conf.recons:
-                    #     recons_loss = recons_fn(imgs, outputs['recons'])
-                    # if self.is_world_master():
-                    # self.args.process_index
-                    writer.add_scalar('loss/train', combined_loss.item(), step)
-                    writer.add_scalar('cls-loss/train', cls_loss.item(), step)
-                    writer.add_scalar('seg-loss/train', seg_loss.item(), step)
-                    if outputs.vae_loss is not None:
-                        writer.add_scalar('vae-loss/train', outputs.vae_loss.item(), step)
-                    # if self.conf.recons:
-                    #     writer.add_scalar('recons/train', recons_loss.item(), step)
 
-                    optimizer.zero_grad()
-                    # if self.conf.recons:
-                    #     loss += recons_loss
-                    combined_loss.backward()
-                    optimizer.step()
-                    step += 1
-                # if self.is_world_master() == 0:
-                writer.flush()
+            for epoch in range(int(self.args.num_train_epochs) + 1):
+                if epoch > 0:
+                    model.train()
+                    for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
+                        imgs = data['img'].to(self.args.device)
+                        labels = data['label'].to(self.args.device)
+                        seg_ref = data['seg'].to(self.args.device)
+                        outputs: SegResNetOutput = model.forward(imgs, permute=True)
+                        # logits = outputs['linear']
+                        logits = outputs.cls
+                        cls_loss = cls_loss_fn(logits, labels)
+                        # seg_loss = seg_loss_fn(outputs['seg'], segs)
+                        seg_loss = seg_loss_fn(outputs.seg, seg_ref)
+                        combined_loss = self.combine_loss(cls_loss, seg_loss, outputs.vae_loss)
+                        # loss = self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
+                        # if self.conf.recons:
+                        #     recons_loss = recons_fn(imgs, outputs['recons'])
+                        # if self.is_world_master():
+                        # self.args.process_index
+                        writer.add_scalar('loss/train', combined_loss.item(), step)
+                        writer.add_scalar('cls-loss/train', cls_loss.item(), step)
+                        writer.add_scalar('seg-loss/train', seg_loss.item(), step)
+                        if outputs.vae_loss is not None:
+                            writer.add_scalar('vae-loss/train', outputs.vae_loss.item(), step)
+                        # if self.conf.recons:
+                        #     writer.add_scalar('recons/train', recons_loss.item(), step)
+
+                        optimizer.zero_grad()
+                        # if self.conf.recons:
+                        #     loss += recons_loss
+                        combined_loss.backward()
+                        optimizer.step()
+                        step += 1
+                    # if self.is_world_master() == 0:
+                    writer.flush()
+
                 checkpoint_save_dir = fold_output_dir / f'checkpoint-ep{epoch}'
-                val_output = self.run_eval(model, val_set, plot_dir=checkpoint_save_dir, plot_num=3)
+                val_output = self.run_eval(model, val_set, reporter=self.epoch_reporters[epoch]['cross-val'], plot_dir=checkpoint_save_dir, plot_num=3)
                 val_loss = self.combine_loss(val_output.cls_loss, val_output.seg_loss)
-                scheduler.step(val_loss)
+                if epoch > 0:
+                    scheduler.step(val_loss)
                 logging.info(f'cur loss:  {val_loss}')
                 logging.info(f'best loss: {best_loss}')
                 val_outputs.append(val_output)
@@ -126,13 +130,16 @@ class Finetuner(FinetunerBase):
                 torch.save(save_states, checkpoint_save_dir / 'states.pth')
                 logging.info(f'save checkpoint to {checkpoint_save_dir}\n')
 
+            pd.DataFrame({
+                f'epoch{epoch}': epoch_reporters['cross-val'].digest()
+                for epoch, epoch_reporters in self.epoch_reporters.items()
+            }).transpose().to_csv(Path(self.args.output_dir) / 'train-digest.csv')
             torch.save(model.state_dict(), fold_output_dir / 'checkpoint.pth.tar')
             fig, ax = plt.subplots()
             ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
             ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
             ax.plot([metric.meandice[:, 0].mean().item() for metric in val_outputs], label='AT mean DICE')
             ax.plot([metric.meandice[:, 1].mean().item() for metric in val_outputs], label='CT mean DICE')
-
             ax.legend()
             fig.savefig(fold_output_dir / 'val-loss.pdf')
             plt.show()
@@ -149,13 +156,13 @@ class Finetuner(FinetunerBase):
             num_pretrain_seg=self.args.num_pretrain_seg,
         )
         model.load_state_dict(torch.load(fold_output_dir / 'checkpoint.pth.tar'))
-        self.run_eval(model, val_set, 'cross-val', plot_num=3, plot_dir=fold_output_dir)
+        self.run_eval(model, val_set, self.reporters['cross-val'], plot_num=len(val_set), plot_dir=Path(self.args.output_dir) / 'seg-outputs')
 
     def run_eval(
         self,
-        model: nn.Module,
+        model: Backbone,
         eval_dataset: MultimodalDataset,
-        test_name: Optional[str] = None,
+        reporter: Optional[Reporter] = None,
         plot_num=0,
         plot_dir: Path = None,
     ) -> EvalOutput:
@@ -180,8 +187,8 @@ class Finetuner(FinetunerBase):
             for idx, data in enumerate(tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating')):
                 img = data['img'].to(self.args.device)
                 cls_label = data['label'].to(self.args.device)
-                seg_ref = data['seg'].to(self.args.device)
-                output: SegResNetOutput = model.forward(img)
+                seg_ref: torch.LongTensor = data['seg'].to(self.args.device)
+                output: SegResNetOutput = model.forward(img, permute=True)
                 logit = output.cls
                 seg_pred = torch.stack([post_trans(i) for i in decollate_batch(output.seg)])
                 cls_loss = cls_loss_fn(logit, cls_label)
@@ -189,8 +196,8 @@ class Finetuner(FinetunerBase):
                 ret.cls_loss += cls_loss.item()
                 ret.seg_loss += seg_loss.item()
                 meandice = compute_meandice(seg_pred, seg_ref)[0]
-                if test_name:
-                    self.reporters[test_name].append(data, logit[0], meandice)
+                if reporter is not None:
+                    reporter.append(data, logit[0], meandice)
                 meandices.append(meandice)
                 step += 1
 
@@ -203,9 +210,10 @@ class Finetuner(FinetunerBase):
                     for i, protocol in enumerate(self.args.protocols)
                 }
                 from utils.dicom_utils import ScanProtocol
+                idx = seg_ref[0].sum(dim=(0, 1, 2)).argmax().item()
                 for protocol in self.args.protocols:
                     img = data[protocol][0, 0]
-                    idx = img.shape[2] // 2
+                    # idx = img.shape[2] // 2
                     ax[protocol].imshow(np.rot90(img[:, :, idx]), cmap='gray')
                     seg_t = {
                         ScanProtocol.T2: 'AT',
@@ -225,6 +233,8 @@ class Finetuner(FinetunerBase):
         ret.cls_loss /= step
         ret.seg_loss /= step
         ret.meandice = torch.stack(meandices)
+        if reporter is not None:
+            reporter.report()
         return ret
 
 def finetune(args: FinetuneArgs, folds):

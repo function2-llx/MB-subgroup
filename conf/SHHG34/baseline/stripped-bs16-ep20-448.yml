@@ -16,11 +16,10 @@ sample_size: 448
 sample_slices: 16
 model: resnet
 model_depth: 18
-batch_size: 16
+per_device_train_batch_size: 16
 recons: false
-lr: 1e-4
-epochs: 20
-patience: 0
+learning_rate: 1.0e-4
+num_train_epochs: 20
 aug:
   - flip
 img_dir: utils/data/datasets/tiantan/stripped

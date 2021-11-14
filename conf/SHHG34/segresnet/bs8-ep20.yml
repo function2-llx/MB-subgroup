@@ -18,6 +18,7 @@ learning_rate: 1.0e-4
 num_train_epochs: 20
 aug:
   - flip
+  - crop
 img_dir: utils/data/datasets/tiantan/stripped
 seg_dir: utils/data/datasets/tiantan/origin
 output_dir: output/SHHG34/segresnet/bs8-ep20

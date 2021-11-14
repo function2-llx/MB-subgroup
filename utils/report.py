@@ -34,20 +34,20 @@ class Reporter:
     def plot_roc(self):
         y_true = np.eye(len(self.target_names))[self.y_true]
         y_score = np.array(self.y_score)
-        plt.figure()
+        fig, ax = plt.subplots()
         lw = 2
-        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        ax.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
         for i, name in enumerate(self.target_names):
             fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
-            plt.plot(fpr, tpr, lw=lw, label=f'{name}, AUC = %0.2f' % auc(fpr, tpr))
-            plt.xlim(0.0, 1.0)
-            plt.ylim(0.0, 1.05)
-            plt.xlabel('False Positive Rate')
-            plt.ylabel('True Positive Rate')
-            plt.title('ROC curves')
-            plt.legend(loc="lower right")
-        plt.savefig(self.report_dir / 'roc.pdf')
-        plt.savefig(self.report_dir / 'roc.png')
+            ax.plot(fpr, tpr, lw=lw, label=f'{name}, AUC = %0.2f' % auc(fpr, tpr))
+            ax.set_xlim(0.0, 1.0)
+            ax.set_ylim(0.0, 1.05)
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('ROC curves')
+            ax.legend(loc="lower right")
+        fig.savefig(self.report_dir / 'roc.pdf')
+        fig.savefig(self.report_dir / 'roc.png')
         plt.show()
 
     def report(self):
@@ -55,11 +55,7 @@ class Reporter:
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
         meandices = torch.stack(self.meandices)
-        report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
-        all_auc = self.get_auc()
-        for i, target_name in enumerate(self.target_names):
-            report[target_name]['auc'] = all_auc[i]
-        report['weighted avg']['accuracy'] = report.pop('accuracy')
+        report = self.get_report(y_pred, y_true)
         pd.DataFrame(report).transpose().to_csv(self.report_dir / 'report.csv')
         pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names).to_csv(self.report_dir / 'cm.csv')
         pd.DataFrame({
@@ -83,6 +79,30 @@ class Reporter:
                 'CT': meandices[:, 1].max().item(),
             }
         }).transpose().to_csv(self.report_dir / 'meandice.csv')
+
+    def digest(self):
+        y_true = np.array(self.y_true)
+        y_pred = np.array(self.y_pred)
+        meandices = torch.stack(self.meandices)
+        report = self.get_report(y_pred, y_true)
+        return {
+            **{
+                f'{label}-{metric}': value
+                for label in self.target_names for metric, value in report[label].items()
+            },
+            **{
+                'AT mDICE': meandices[:, 0].mean().item(),
+                'CT mDICE': meandices[:, 1].mean().item(),
+            }
+        }
+
+    def get_report(self, y_pred, y_true):
+        report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
+        all_auc = self.get_auc()
+        for i, target_name in enumerate(self.target_names):
+            report[target_name]['auc'] = all_auc[i]
+        report['weighted avg']['accuracy'] = report.pop('accuracy')
+        return report
 
     def append(self, data, logit: torch.FloatTensor, meandice: torch.FloatTensor):
         patient = data['patient'][0]

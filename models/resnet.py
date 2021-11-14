@@ -323,8 +323,9 @@ class ResNet(Backbone):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> SegResNetOutput:
-        x = permute_img(x)
+    def forward(self, x: torch.Tensor, permute: bool) -> SegResNetOutput:
+        if permute:
+            x = permute_img(x)
         outputs = {}
         c1 = self.conv1(x)
         c1 = self.bn1(c1)
@@ -341,23 +342,27 @@ class ResNet(Backbone):
         outputs['c4'] = c4
         outputs['c5'] = c5
 
+        ret = SegResNetOutput()
+
         if self.n_classes:
             linear = self.avgpool(c5)
             linear = linear.view(linear.size(0), -1)
-            outputs['linear'] = self.fc(linear)
+            ret.cls = self.fc(linear)
 
         if self.recons is not None:
             recons = self.recons(c1, c2, c3, c4, c5)
-            outputs['recons'] = permute_img(recons, inv=True)
+            if permute:
+                recons = permute_img(recons, inv=True)
+            # outputs['recons'] = permute_img(recons, inv=True)
+            outputs['recons'] = recons
 
         if self.seg is not None:
-            seg = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
-            outputs['seg'] = permute_img(seg, inv=True)
+            if permute:
+                ret.seg = permute_img(self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg], inv=True)
+            else:
+                ret.seg = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
 
-        return SegResNetOutput(
-            cls=outputs['linear'],
-            seg=outputs['seg'],
-        )
+        return ret
 
 def generate_model(model_depth, **kwargs):
     assert model_depth in [10, 18, 34, 50, 101, 152, 200]

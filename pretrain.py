@@ -13,7 +13,6 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from models import generate_model
-from models.utils import permute_img
 from runner_base import RunnerBase
 from utils.args import ArgumentParser, PretrainArgs
 from utils.data import MultimodalDataset
@@ -73,8 +72,8 @@ class Pretrainer(RunnerBase):
         for epoch in range(start_epoch, int(self.args.num_train_epochs) + 1):
             epoch_loss = 0
             for data in tqdm(loader, ncols=80, desc=f'epoch{epoch}'):
-                outputs = self.model.forward(permute_img(data['img'].to(self.args.device)))
-                loss = loss_fn(outputs['seg'], permute_img(data['seg'].to(self.args.device)))
+                outputs = self.model.forward(data['img'].to(self.args.device), permute=True)
+                loss = loss_fn(outputs.seg, data['seg'].to(self.args.device))
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()

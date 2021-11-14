@@ -5,7 +5,7 @@ from typing import List, Union
 
 import yaml
 from argparse import Namespace
-from transformers import HfArgumentParser, TrainingArguments
+from transformers import HfArgumentParser, TrainingArguments, IntervalStrategy
 
 from utils.dicom_utils import ScanProtocol
 
@@ -32,7 +32,9 @@ class ModelArgs:
 
 @dataclass
 class PretrainArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
-    pass
+    def __post_init__(self):
+        super().__post_init__()
+        self.save_strategy = IntervalStrategy.EPOCH
 
 _protocol_map = {
     protocol.name.lower(): protocol
@@ -52,6 +54,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
     lr_reduce_factor: float = field(default=0.2)
 
     def __post_init__(self):
+        self.save_strategy = IntervalStrategy.EPOCH
         super().__post_init__()
         self.folds_file = Path(self.folds_file)
         self.img_dir = Path(self.img_dir)
@@ -80,7 +83,7 @@ class ArgumentParser(HfArgumentParser):
         args = argv[2:]
         # 手动修复检查 required 不看 namespace 的问题
         if 'output_dir' in conf:
-            args.extend(['--output_dir', conf['output_dir']])
+            args = ['--output_dir', conf['output_dir']] + args
 
         args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
         return self.parse_dict(vars(args))

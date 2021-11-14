@@ -1,5 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 from abc import ABCMeta, abstractmethod
+
+import torch
 import torch.nn as nn
 
 __all__ = ["Backbone"]
@@ -18,7 +20,7 @@ class Backbone(nn.Module, metaclass=ABCMeta):
         super().__init__()
 
     @abstractmethod
-    def forward(self, x):
+    def forward(self, x: torch.Tensor, permute: bool):
         """
         Subclasses must override this method, but adhere to the same return type.
 

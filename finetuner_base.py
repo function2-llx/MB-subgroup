@@ -24,6 +24,13 @@ class FinetunerBase(RunnerBase):
             test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups)
             for test_name in ['cross-val']
         }
+        self.epoch_reporters: Dict[int, Dict[str, Reporter]] = {
+            i: {
+                test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.subgroups)
+                for test_name in ['cross-val']
+            }
+            for i in range(int(self.args.num_train_epochs) + 1)
+        }
 
     def prepare_val_fold(self, val_id: int) -> MultimodalDataset:
         val_fold = self.folds[val_id]
@@ -50,8 +57,8 @@ class FinetunerBase(RunnerBase):
             self.run_fold(val_id)
             # update results after every fold
             # if self.conf.rank == 0:
-            for reporter in self.reporters.values():
-                reporter.report()
+            # for reporter in self.reporters.values():
+            #     reporter.report()
 
     @abstractmethod
     def run_fold(self, val_id):
