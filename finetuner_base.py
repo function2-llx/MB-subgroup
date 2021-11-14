@@ -55,7 +55,7 @@ class FinetunerBase(RunnerBase):
     def run(self):
         output_dir = Path(self.args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        with open(output_dir / 'conf.yml') as f:
+        with open(output_dir / 'conf.yml', 'w') as f:
             yaml.safe_dump(self.args, f)
         for val_id in range(len(self.folds)):
             torch.cuda.empty_cache()

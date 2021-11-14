@@ -39,7 +39,7 @@ class Pretrainer(RunnerBase):
         return MultimodalDataset(data, [Lambda(loader)] + train_transforms, progress=True, cache_num=300)
 
     def train(self):
-        with open(Path(self.args.output_dir) / 'conf.yml') as f:
+        with open(Path(self.args.output_dir) / 'conf.yml', 'w') as f:
             yaml.safe_dump(self.args, f)
         torch.backends.cudnn.benchmark = True
         output_dir = Path(self.args.output_dir)
