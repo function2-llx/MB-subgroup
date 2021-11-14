@@ -4,6 +4,7 @@ from typing import Callable, Dict
 
 import numpy as np
 import torch
+import yaml
 from monai.data import DataLoader
 from monai.losses import DiceLoss
 from monai.transforms import LoadImageD, Lambda
@@ -38,6 +39,8 @@ class Pretrainer(RunnerBase):
         return MultimodalDataset(data, [Lambda(loader)] + train_transforms, progress=True, cache_num=300)
 
     def train(self):
+        with open(Path(self.args.output_dir) / 'conf.yml') as f:
+            yaml.safe_dump(self.args, f)
         torch.backends.cudnn.benchmark = True
         output_dir = Path(self.args.output_dir)
         output_dir.mkdir(exist_ok=True, parents=True)

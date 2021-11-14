@@ -7,6 +7,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from monai.data import DataLoader, decollate_batch
@@ -238,6 +239,8 @@ class Finetuner(FinetunerBase):
         return ret
 
 def finetune(args: FinetuneArgs, folds):
+    with open(Path(args.output_dir) / 'conf.yml') as f:
+        yaml.safe_dump(args, f)
     runner = Finetuner(args, folds)
     runner.run()
 

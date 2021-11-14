@@ -86,4 +86,5 @@ class ArgumentParser(HfArgumentParser):
             args = ['--output_dir', conf['output_dir']] + args
 
         args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
-        return self.parse_dict(vars(args))
+        args = self.parse_dict(vars(args))
+        return args
