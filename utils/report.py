@@ -80,15 +80,17 @@ class Reporter:
             }
         }).transpose().to_csv(self.report_dir / 'meandice.csv')
 
-    def digest(self):
+    def digest(self, metric_names: List[str] = None):
+        if metric_names is None:
+            metric_names = ['precision', 'recall', 'auc']
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
         meandices = torch.stack(self.meandices)
         report = self.get_report(y_pred, y_true)
         return {
             **{
-                f'{label}-{metric}': value
-                for label in self.target_names for metric, value in report[label].items()
+                f'{label}-{metric}': report[metric]
+                for label in self.target_names for metric in metric_names
             },
             **{
                 'AT mDICE': meandices[:, 0].mean().item(),
@@ -97,7 +99,7 @@ class Reporter:
         }
 
     def get_report(self, y_pred, y_true):
-        report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True)
+        report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True, zero_division=0)
         all_auc = self.get_auc()
         for i, target_name in enumerate(self.target_names):
             report[target_name]['auc'] = all_auc[i]

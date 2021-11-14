@@ -40,12 +40,8 @@ class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
         fold_output_dir = Path(self.args.output_dir) / f'val-{val_id}'
         fold_output_dir.mkdir(exist_ok=True, parents=True)
-        # output_path: Path = output_dir / f'checkpoint-{val_id}.pth.tar'
-        # plot_dir = output_dir / f'plot-fold{val_id}'
-        # plot_dir.mkdir(exist_ok=True, parents=True)
+
         if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / 'checkpoint.pth.tar').exists()):
-            # tmp_output_path: Path = output_dir / f'checkpoint-{val_id}-tmp.pth.tar'
-            # tmp_output_path: Path = output_dir / f'checkpoint-{val_id}/'
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
@@ -239,8 +235,6 @@ class Finetuner(FinetunerBase):
         return ret
 
 def finetune(args: FinetuneArgs, folds):
-    with open(Path(args.output_dir) / 'conf.yml') as f:
-        yaml.safe_dump(args, f)
     runner = Finetuner(args, folds)
     runner.run()
 
