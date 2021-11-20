@@ -10,7 +10,7 @@ protocols:
 segs:
   - AT
   - CT
-sample_size: 224
+sample_size: 448
 sample_slices: 16
 model: resnet
 model_name_or_path: output/pretrain/brats21-16/ep10/state.pth
@@ -18,13 +18,13 @@ model_depth: 34
 per_device_train_batch_size: 8
 recons: false
 learning_rate: 1.0e-4
-num_train_epochs: 0
+num_train_epochs: 30
 aug:
   - flip
   - crop
 img_dir: utils/data/datasets/tiantan/stripped
 seg_dir: utils/data/datasets/tiantan/origin
-output_dir: output/SHHG34/brats21-16/ep10/bs8-ep0
+output_dir: output/SHHG34/brats21-16/ep10/bs8-res34-448
 cls_factor: 0.1
 seg_factor: 1
 num_pretrain_seg: 3

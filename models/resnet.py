@@ -1,7 +1,5 @@
-from typing import Union, Sequence, TypedDict
-
-import math
 from functools import partial
+from typing import Union, Sequence
 
 import torch
 import torch.nn as nn
@@ -9,9 +7,9 @@ import torch.nn.functional as F
 from monai.networks import blocks as monai_blocks
 from monai.networks.nets import ResNet
 
+from .backbone import Backbone
 from .segresnet import SegResNetOutput
 from .utils import permute_img
-from .backbone import Backbone
 
 def get_inplanes():
     return [64, 128, 256, 512]

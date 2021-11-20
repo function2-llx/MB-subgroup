@@ -24,7 +24,7 @@ aug:
   - crop
 img_dir: utils/data/datasets/tiantan/stripped
 seg_dir: utils/data/datasets/tiantan/origin
-output_dir: output/SHHG34/brats21-16/ep10/bs8-ep20
+output_dir: output/SHHG34/brats21-16/ep10/bs8-res34
 cls_factor: 0.1
 seg_factor: 1
 num_pretrain_seg: 3
