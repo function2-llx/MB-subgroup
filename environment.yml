@@ -28,6 +28,7 @@ dependencies:
     - aenum==3.1.1
     - itk==5.2.1.post1
     - transformers==4.12.3
+    - git+https://github.com/FabianIsensee/hiddenlayer.git@more_plotted_details#egg=hiddenlayer
     - -e third-party/MONAI
     - -e third-party/HD-BET
     - -e third-party/nnUNet
