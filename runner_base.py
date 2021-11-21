@@ -6,11 +6,11 @@ from typing import Union, List
 
 import numpy as np
 import torch
-from transformers import TrainingArguments
-
 from monai import transforms as monai_transforms
 from monai.transforms import Transform
-from utils.args import DataTrainingArgs, ModelArgs, FinetuneArgs
+from transformers import TrainingArguments
+
+from utils.args import DataTrainingArgs, ModelArgs
 from utils.transforms import RandSampleSlicesD
 
 class RunnerBase(ABC):
@@ -99,7 +99,7 @@ class RunnerBase(ABC):
         return train_transforms
 
     @staticmethod
-    def get_inference_transforms(args: FinetuneArgs):
+    def get_inference_transforms(args):
         keys = ['img', 'seg']
         # resize_mode = [InterpolateMode.AREA]
         #     keys.append('seg')

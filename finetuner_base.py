@@ -1,17 +1,32 @@
 import itertools
 import logging
 from abc import abstractmethod
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 import torch
-import yaml
 from monai import transforms as monai_transforms
+from transformers import TrainingArguments, IntervalStrategy
 
 from runner_base import RunnerBase
-from utils.args import FinetuneArgs
+from utils.args import DataTrainingArgs, ModelArgs
 from utils.data import MultimodalDataset
+from utils.data.datasets.tiantan.args import MBArgs
 from utils.report import Reporter
+
+@dataclass
+class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
+    folds_file: Path = field(default=None)
+    num_pretrain_seg: int = field(default=None)
+    patience: int = field(default=0)
+    lr_reduce_factor: float = field(default=0.2)
+    n_folds: int = None
+
+    def __post_init__(self):
+        self.save_strategy = IntervalStrategy.EPOCH
+        super().__post_init__()
+        self.folds_file = Path(self.folds_file)
 
 class FinetunerBase(RunnerBase):
     args: FinetuneArgs
@@ -22,12 +37,12 @@ class FinetunerBase(RunnerBase):
         # if args.rank == 0:
         logging.info(f"Training/evaluation parameters {args}")
         self.reporters: Dict[str, Reporter] = {
-            test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups)
+            test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups, args.segs)
             for test_name in ['cross-val']
         }
         self.epoch_reporters: Dict[int, Dict[str, Reporter]] = {
             i: {
-                test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.subgroups)
+                test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.subgroups, args.segs)
                 for test_name in ['cross-val']
             }
             for i in range(int(self.args.num_train_epochs) + 1)

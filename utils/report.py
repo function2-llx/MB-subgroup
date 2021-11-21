@@ -11,10 +11,11 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import classification_report, roc_curve, auc, confusion_matrix
 
 class Reporter:
-    def __init__(self, report_dir, target_names: List[str]):
+    def __init__(self, report_dir, target_names: List[str], seg_names: List[str] = None):
         self.report_dir = Path(report_dir)
         self.report_dir.mkdir(parents=True, exist_ok=True)
         self.target_names = target_names
+        self.seg_names = seg_names
 
         self.y_true = []
         self.y_pred = []
@@ -62,23 +63,23 @@ class Reporter:
         pd.DataFrame({
             **{
                 str(result[0]): {
-                    'AT': meandice[0].item(),
-                    'CT': meandice[1].item(),
+                    seg_name: meandice[i].item()
+                    for i, seg_name in enumerate(self.seg_names)
                 }
                 for result, meandice in zip(self.results, meandices)
             },
             'average': {
-                'AT': meandices[:, 0].mean().item(),
-                'CT': meandices[:, 1].mean().item(),
+                seg_name: meandices[:, i].mean().item()
+                for i, seg_name in enumerate(self.seg_names)
             },
             'min': {
-                'AT': meandices[:, 0].min().item(),
-                'CT': meandices[:, 1].min().item(),
+                seg_name: meandices[:, i].min().item()
+                for i, seg_name in enumerate(self.seg_names)
             },
             'max': {
-                'AT': meandices[:, 0].max().item(),
-                'CT': meandices[:, 1].max().item(),
-            }
+                seg_name: meandices[:, i].max().item()
+                for i, seg_name in enumerate(self.seg_names)
+            },
         }).transpose().to_csv(self.report_dir / 'meandice.csv')
 
     def digest(self, metric_names: List[str] = None):
@@ -95,9 +96,9 @@ class Reporter:
                 for label in self.target_names for metric in metric_names
             },
             **{
-                'AT mDICE': meandices[:, 0].mean().item(),
-                'CT mDICE': meandices[:, 1].mean().item(),
-            }
+                f'{seg_name} mDice': meandices[:, i].mean().item()
+                for i, seg_name in enumerate(self.seg_names)
+            },
         }
 
     def get_report(self, y_pred, y_true) -> Dict[str, Dict]:

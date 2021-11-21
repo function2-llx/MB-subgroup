@@ -19,10 +19,10 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import IntervalStrategy
 
-from finetuner_base import FinetunerBase
+from finetuner_base import FinetunerBase, FinetuneArgs
 from models import generate_model, Backbone
 from models.segresnet import SegResNetOutput
-from utils.args import FinetuneArgs, ArgumentParser
+from utils.args import ArgumentParser
 from utils.data import MultimodalDataset
 from utils.report import Reporter
 
@@ -134,8 +134,8 @@ class Finetuner(FinetunerBase):
             fig, ax = plt.subplots()
             ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
             ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
-            ax.plot([metric.meandice[:, 0].mean().item() for metric in val_outputs], label='AT mean DICE')
-            ax.plot([metric.meandice[:, 1].mean().item() for metric in val_outputs], label='CT mean DICE')
+            for i, seg_name in enumerate(self.args.segs):
+                ax.plot([metric.meandice[:, i].mean().item() for metric in val_outputs], label=f'{seg_name} mean DICE')
             ax.legend()
             fig.savefig(fold_output_dir / 'val-loss.pdf')
             plt.show()
@@ -165,7 +165,7 @@ class Finetuner(FinetunerBase):
     ) -> EvalOutput:
         model.eval()
         post_trans = Compose(
-            [EnsureType(), Activations(sigmoid=True), AsDiscrete(threshold_values=True)]
+            [EnsureType(), Activations(sigmoid=True), AsDiscrete(threshold_values=0.5)]
         )
         plot_idx = random.sample(range(len(eval_dataset)), plot_num)
         if plot_num > 0:
@@ -216,7 +216,7 @@ class Finetuner(FinetunerBase):
                         ScanProtocol.T2: 'AT',
                         ScanProtocol.T1c: 'CT',
                     }.get(protocol, None)
-                    if seg_t is None:
+                    if seg_t is None or seg_t not in self.args.segs:
                         continue
                     seg_id = self.args.segs.index(seg_t)
                     from matplotlib.colors import ListedColormap

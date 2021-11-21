@@ -1,4 +1,5 @@
 from argparse import Namespace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict
 
@@ -12,11 +13,19 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from transformers import TrainingArguments, IntervalStrategy
 
 from models import generate_model
 from runner_base import RunnerBase
-from utils.args import ArgumentParser, PretrainArgs
+from utils.args import ArgumentParser, DataTrainingArgs, ModelArgs
 from utils.data import MultimodalDataset
+from utils.dicom_utils import ScanProtocol
+
+@dataclass
+class PretrainArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
+    def __post_init__(self):
+        super().__post_init__()
+        self.save_strategy = IntervalStrategy.EPOCH
 
 class Pretrainer(RunnerBase):
     def __init__(self, args: PretrainArgs):

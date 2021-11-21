@@ -1,13 +1,11 @@
 import json
+from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 import yaml
-from argparse import Namespace
-from transformers import HfArgumentParser, TrainingArguments, IntervalStrategy
-
-from utils.dicom_utils import ScanProtocol
+from transformers import HfArgumentParser
 
 @dataclass
 class DataTrainingArgs:
@@ -29,37 +27,6 @@ class ModelArgs:
     cls_factor: float = None
     seg_factor: float = None
     vae_factor: float = None
-
-@dataclass
-class PretrainArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
-    def __post_init__(self):
-        super().__post_init__()
-        self.save_strategy = IntervalStrategy.EPOCH
-
-_protocol_map = {
-    protocol.name.lower(): protocol
-    for protocol in ScanProtocol
-}
-
-@dataclass
-class FinetuneArgs(DataTrainingArgs, ModelArgs, TrainingArguments):
-    img_dir: Path = field(default=None)
-    seg_dir: Path = field(default=None)
-    folds_file: Path = field(default=None)
-    protocols: List[Union[str, ScanProtocol]] = field(default_factory=list)
-    subgroups: List[str] = field(default=None)
-    segs: List[str] = field(default_factory=list)
-    num_pretrain_seg: int = field(default=None)
-    patience: int = field(default=0)
-    lr_reduce_factor: float = field(default=0.2)
-
-    def __post_init__(self):
-        self.save_strategy = IntervalStrategy.EPOCH
-        super().__post_init__()
-        self.folds_file = Path(self.folds_file)
-        self.img_dir = Path(self.img_dir)
-        self.seg_dir = Path(self.seg_dir)
-        self.protocols = list(map(lambda name: _protocol_map[name.lower()], self.protocols))
 
 class ArgumentParser(HfArgumentParser):
     def __init__(self, *args, use_conf=True, **kwargs):

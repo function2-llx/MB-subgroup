@@ -5,13 +5,13 @@ from typing import Optional, Dict, List
 
 import numpy as np
 import torch
-
 import monai.transforms as monai_transforms
 import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
-from utils.args import FinetuneArgs
+from finetuner_base import FinetuneArgs
 # from .check_files import data_dir
+from utils.data.datasets.tiantan.args import MBArgs
 
 dataset_root = Path(__file__).parent
 
@@ -20,7 +20,7 @@ loader: Optional[monai_transforms.Compose] = None
 target_dict: Dict[str, int]
 _args: FinetuneArgs
 
-def load_info(info: pd.Series):
+def load_case(info: pd.Series) -> Dict:
     label = target_dict[info['subgroup']]
     patient = info['name(raw)']
     img_dir = _args.img_dir / patient
@@ -39,7 +39,8 @@ def load_info(info: pd.Series):
 cohort: Optional[List[Dict]] = None
 
 # return the cohort grouped by fold, return the flattened cohort if `n_folds` is None
-def load_cohort(args: FinetuneArgs, show_example=True):
+# for finetune
+def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
     global loader, target_dict, cohort, _args
 
     if cohort is None:
@@ -66,11 +67,11 @@ def load_cohort(args: FinetuneArgs, show_example=True):
             monai_transforms.CastToTypeD('seg', dtype=torch.int),
             # monai_transforms.SelectItemsD(['img', 'seg']),
             monai_transforms.ThresholdIntensityD('img', threshold=0),
+            monai_transforms.ThresholdIntensityD('img', threshold=1),
             monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
         ])
-        cohort = pd.read_excel(dataset_root / 'cohort.xlsx')
-        cohort = cohort[cohort['subgroup'].isin(args.subgroups)]
-        cohort = process_map(load_info, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80, max_workers=16)
+        cohort = read_cohort_info(args)
+        cohort = process_map(load_case, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80, max_workers=16)
         if show_example:
             import random
             from matplotlib import pyplot as plt
@@ -89,24 +90,22 @@ def load_cohort(args: FinetuneArgs, show_example=True):
                     ScanProtocol.T2: 'AT',
                     ScanProtocol.T1c: 'CT',
                 }.get(protocol, None)
-                if seg_t is not None:
+                if seg_t is not None and seg_t in args.segs:
                     from matplotlib.colors import ListedColormap
                     ax[protocol].imshow(np.rot90(example[seg_t][0, :, :, idx]), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
 
             plt.show()
             plt.close()
 
-    if args.folds_file is not None:
+    if split_folds:
         folds = json.load(open(dataset_root / args.folds_file))
         folds = list(map(set, folds))
         return [[sample for sample in cohort if sample['patient'] in fold] for fold in folds]
     else:
         return deepcopy(cohort)
 
-def main():
-    pass
-    # from utils.conf import get_conf
-    # load_cohort(get_conf())
-
-if __name__ == '__main__':
-    main()
+def read_cohort_info(args: MBArgs) -> pd.DataFrame:
+    global cohort
+    cohort = pd.read_excel(dataset_root / 'cohort.xlsx')
+    cohort = cohort[cohort['subgroup'].isin(args.subgroups)]
+    return cohort

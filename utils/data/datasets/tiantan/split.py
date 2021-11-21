@@ -6,14 +6,15 @@ import random
 import numpy as np
 import pandas as pd
 
-from utils.conf import get_conf
+from finetuner_base import FinetuneArgs
+from utils.args import ArgumentParser
 
 def main():
-    conf = get_conf()
-
-    n_folds = conf.n_folds
+    args, = ArgumentParser([FinetuneArgs]).parse_args_into_dataclasses()
+    args: FinetuneArgs
+    n_folds = args.n_folds
     folds = [[] for _ in range(n_folds)]
-    subgroups = conf.subgroups
+    subgroups = args.subgroups
     random.seed(2333)
     cohort = pd.read_excel('cohort.xlsx')
     # group by subtypes
@@ -36,7 +37,7 @@ def main():
 
     print([len(fold) for fold in folds])
 
-    json.dump(folds, open(conf.folds_file, 'w'), indent=4, ensure_ascii=False)
+    json.dump(folds, open(args.folds_file, 'w'), indent=4, ensure_ascii=False)
     # df = pd.DataFrame(counts, columns=[f'第{i}折' for i in range(1, 4)], index=subgroups)
 
 if __name__ == '__main__':
