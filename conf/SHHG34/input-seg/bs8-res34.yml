@@ -2,20 +2,20 @@ subgroups:
   - SHH
   - G3
   - G4
-n_folds: 5
-folds_file: folds-5.json
+n_folds: 3
+folds_file: folds-3.json
 protocols:
   - T1
   - T1c
   - T2
 segs:
   - AT
-sample_size: 448
+  - CT
+sample_size: 224
 sample_slices: 16
 model: resnet
-model_name_or_path: null
 model_depth: 34
-per_device_train_batch_size: 16
+per_device_train_batch_size: 8
 recons: false
 learning_rate: 1.0e-4
 num_train_epochs: 30
@@ -24,8 +24,7 @@ aug:
   - crop
 img_dir: utils/data/datasets/tiantan/stripped
 seg_dir: utils/data/datasets/tiantan/origin
-output_dir: output/nnunet/bs16-res34-448-AT
-cls_factor: 0
-seg_factor: 1
-num_pretrain_seg: 3
-save_strategy: epoch
+output_dir: output/SHHG34/input-seg/bs8-res34
+cls_factor: 0.1
+seg_factor: 0
+seg_inputs: []

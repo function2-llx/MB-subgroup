@@ -45,6 +45,7 @@ class Finetuner(FinetunerBase):
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
                 self.args,
+                in_channels=len(self.args.protocols) + len(self.args.seg_inputs),
                 pretrain=self.args.model_name_or_path is not None,
                 num_seg=len(self.args.segs),
                 num_classes=len(self.args.subgroups),
@@ -147,6 +148,7 @@ class Finetuner(FinetunerBase):
 
         model = generate_model(
             self.args,
+            in_channels=len(self.args.protocols) + len(self.args.seg_inputs),
             pretrain=False,
             num_seg=len(self.args.segs),
             num_classes=len(self.args.subgroups),

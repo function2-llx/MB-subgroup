@@ -22,6 +22,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
     patience: int = field(default=0)
     lr_reduce_factor: float = field(default=0.2)
     n_folds: int = None
+    seg_inputs: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         self.save_strategy = IntervalStrategy.EPOCH

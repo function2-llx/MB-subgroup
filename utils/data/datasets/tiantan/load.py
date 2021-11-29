@@ -6,6 +6,7 @@ from typing import Optional, Dict, List
 import numpy as np
 import torch
 import monai.transforms as monai_transforms
+import monai
 import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
@@ -49,26 +50,28 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
             subgroup: label
             for label, subgroup in enumerate(args.subgroups)
         }
+        img_keys = args.protocols + args.seg_inputs
 
         from monai.utils import InterpolateMode
         loader = monai_transforms.Compose([
-            monai_transforms.LoadImageD(args.protocols + args.segs),
-            monai_transforms.AddChannelD(args.protocols + args.segs),
-            monai_transforms.OrientationD(args.protocols + args.segs, 'LAS'),
-            monai_transforms.SpatialCropD(args.protocols + args.segs, roi_slices=[slice(None), slice(None), slice(0, args.sample_slices)]),
-            monai_transforms.ResizeD(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
-            monai_transforms.ResizeD(
+            monai.transforms.LoadImageD(args.protocols + args.segs),
+            monai.transforms.AddChannelD(args.protocols + args.segs),
+            monai.transforms.OrientationD(args.protocols + args.segs, 'LAS'),
+            monai.transforms.SpatialCropD(
+                args.protocols + args.segs,
+                roi_slices=[slice(None), slice(None), slice(0, args.sample_slices)],
+            ),
+            monai.transforms.ResizeD(args.protocols, spatial_size=(args.sample_size, args.sample_size, -1)),
+            monai.transforms.ResizeD(
                 args.segs,
                 spatial_size=(args.sample_size, args.sample_size, -1),
                 mode=InterpolateMode.NEAREST,
             ),
-            monai_transforms.ConcatItemsD(args.protocols, 'img'),
-            monai_transforms.ConcatItemsD(args.segs, 'seg'),
-            monai_transforms.CastToTypeD('seg', dtype=torch.int),
-            # monai_transforms.SelectItemsD(['img', 'seg']),
-            monai_transforms.ThresholdIntensityD('img', threshold=0),
-            monai_transforms.ThresholdIntensityD('img', threshold=1),
-            monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
+            monai.transforms.ThresholdIntensityD(args.protocols, threshold=0),
+            monai.transforms.NormalizeIntensityD(args.protocols),
+            monai.transforms.ThresholdIntensityD(args.segs, threshold=1, above=False, cval=1),
+            monai.transforms.ConcatItemsD(img_keys, 'img'),
+            monai.transforms.ConcatItemsD(args.segs, 'seg'),
         ])
         cohort = read_cohort_info(args)
         cohort = process_map(load_case, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80, max_workers=16)

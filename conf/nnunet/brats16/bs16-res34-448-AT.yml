@@ -13,7 +13,7 @@ segs:
 sample_size: 448
 sample_slices: 16
 model: resnet
-model_name_or_path: null
+model_name_or_path: output/pretrain/brats21-16/ep20/state.pth
 model_depth: 34
 per_device_train_batch_size: 16
 recons: false

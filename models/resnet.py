@@ -141,7 +141,7 @@ class ResNet(Backbone):
         recons=False,
     ):
         super().__init__()
-        assert n_input_channels == 3
+        # assert n_input_channels == 3
         assert conv1_t_size == 7
         assert conv1_t_stride == 1
 
