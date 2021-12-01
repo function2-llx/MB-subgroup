@@ -11,7 +11,6 @@ import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from finetuner_base import FinetuneArgs
-# from .check_files import data_dir
 from utils.data.datasets.tiantan.args import MBArgs
 
 dataset_root = Path(__file__).parent
@@ -50,7 +49,6 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
             subgroup: label
             for label, subgroup in enumerate(args.subgroups)
         }
-        img_keys = args.protocols + args.seg_inputs
 
         from monai.utils import InterpolateMode
         loader = monai_transforms.Compose([
@@ -70,7 +68,7 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
             monai.transforms.ThresholdIntensityD(args.protocols, threshold=0),
             monai.transforms.NormalizeIntensityD(args.protocols),
             monai.transforms.ThresholdIntensityD(args.segs, threshold=1, above=False, cval=1),
-            monai.transforms.ConcatItemsD(img_keys, 'img'),
+            monai.transforms.ConcatItemsD(args.protocols + args.seg_inputs, 'img'),
             monai.transforms.ConcatItemsD(args.segs, 'seg'),
         ])
         cohort = read_cohort_info(args)
