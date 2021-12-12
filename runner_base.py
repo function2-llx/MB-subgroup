@@ -4,6 +4,7 @@ from abc import ABC
 from pathlib import Path
 from typing import Union, List
 
+import monai
 import numpy as np
 import torch
 from monai import transforms as monai_transforms
@@ -53,64 +54,3 @@ class RunnerBase(ABC):
                 handlers=handlers,
                 force=True,
             )
-
-    @staticmethod
-    def get_train_transforms(args: DataTrainingArgs) -> List[Transform]:
-        from monai.utils import InterpolateMode
-
-        keys = ['img', 'seg']
-        resize_mode = [InterpolateMode.AREA, InterpolateMode.NEAREST]
-        # train_transforms = []
-        train_transforms = [
-            RandSampleSlicesD(keys=keys, num_slices=args.sample_slices),
-        ]
-        if 'crop' in args.aug:
-            train_transforms.extend([
-                monai_transforms.RandSpatialCropD(
-                    keys=keys,
-                    roi_size=(args.sample_size, args.sample_size, args.sample_slices),
-                    random_center=False,
-                    random_size=True,
-                ),
-            ])
-        if 'flip' in args.aug:
-            train_transforms.extend([
-                monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=0),
-                monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=1),
-                monai_transforms.RandFlipd(keys=keys, prob=0.5, spatial_axis=2),
-                monai_transforms.RandRotate90d(keys=keys, prob=0.5, max_k=1),
-            ])
-        if 'voxel' in args.aug:
-            # seg won't be affected
-            train_transforms.extend([
-                monai_transforms.RandScaleIntensityd(keys='img', factors=0.1, prob=0.5),
-                monai_transforms.RandShiftIntensityd(keys='img', offsets=0.1, prob=0.5),
-            ])
-        # train_transforms.append(monai_transforms.ToTensorD(keys))
-        train_transforms.extend([
-            monai_transforms.ResizeD(
-                keys=keys,
-                spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
-                mode=resize_mode,
-            ),
-            monai_transforms.ToTensorD(keys=keys),
-        ])
-
-        return train_transforms
-
-    @staticmethod
-    def get_inference_transforms(args):
-        keys = ['img', 'seg']
-        # resize_mode = [InterpolateMode.AREA]
-        #     keys.append('seg')
-            # resize_mode.append(InterpolateMode.NEAREST)
-
-        return [
-            # SampleSlicesD(keys, 2, args.sample_slices),
-            # monai_transforms.ResizeD(
-            #     keys,
-            #     spatial_size=(args.sample_size, args.sample_size, args.sample_slices),
-            #     mode=resize_mode,
-            # ),
-            monai_transforms.ToTensorD(keys),
-        ]

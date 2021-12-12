@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, Dict, List
 
+import monai
 import torch
-from monai import transforms as monai_transforms
 from transformers import TrainingArguments, IntervalStrategy
 
 from runner_base import RunnerBase
@@ -28,6 +28,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
         self.save_strategy = IntervalStrategy.EPOCH
         super().__post_init__()
         self.folds_file = Path(self.folds_file)
+        assert set(self.seg_inputs).issubset(set(self.segs))
 
 class FinetunerBase(RunnerBase):
     args: FinetuneArgs
@@ -53,7 +54,7 @@ class FinetunerBase(RunnerBase):
         val_fold = self.folds[val_id]
         val_set = MultimodalDataset(
             val_fold,
-            monai_transforms.Compose(RunnerBase.get_inference_transforms(self.args)),
+            monai.transforms.Compose(self.get_inference_transforms(self.args)),
             len(self.args.subgroups),
         )
         return val_set
@@ -63,7 +64,7 @@ class FinetunerBase(RunnerBase):
 
         train_set = MultimodalDataset(
             train_folds,
-            monai_transforms.Compose(RunnerBase.get_train_transforms(self.args)),
+            monai.transforms.Compose(FinetunerBase.get_train_transforms(self.args)),
             len(self.args.subgroups),
         )
         return train_set, self.prepare_val_fold(val_id)
@@ -76,6 +77,42 @@ class FinetunerBase(RunnerBase):
             # if self.conf.rank == 0:
             # for reporter in self.reporters.values():
             #     reporter.report()
+
+    @classmethod
+    def get_train_transforms(cls, args: FinetuneArgs) -> List[monai.transforms.Transform]:
+        all_keys = args.protocols + args.segs + ['fg_mask']
+        ret: List[monai.transforms.Transform] = []
+
+        if 'flip' in args.aug:
+            ret.extend([
+                monai.transforms.RandFlipD(all_keys, prob=0.5, spatial_axis=0),
+                monai.transforms.RandFlipD(all_keys, prob=0.5, spatial_axis=1),
+                monai.transforms.RandFlipD(all_keys, prob=0.5, spatial_axis=2),
+                monai.transforms.RandRotate90D(all_keys, prob=0.5, max_k=1),
+            ])
+        if 'noise' in args.aug:
+            ret.extend([
+                monai.transforms.RandScaleIntensityD(args.protocols, factors=0.1, prob=1),
+                monai.transforms.RandShiftIntensityD(args.protocols, offsets=0.1, prob=1),
+            ])
+        if 'blur' in args.aug:
+            ret.append(monai.transforms.RandGaussianSmoothD(args.protocols, prob=0.5))
+
+        return ret + cls.get_inference_transforms(args)
+
+    @classmethod
+    def get_inference_transforms(cls, args: FinetuneArgs) -> List[monai.transforms.Transform]:
+        ret: List[monai.transforms.Transform] = []
+        img_keys = args.protocols + args.seg_inputs
+        if args.input_fg_mask:
+            img_keys.append('fg_mask')
+        ret.extend([
+            monai.transforms.ConcatItemsD(img_keys, 'img'),
+            monai.transforms.ConcatItemsD(args.segs, 'seg'),
+            monai.transforms.ToTensorD(['img', 'seg']),
+        ])
+
+        return ret
 
     @abstractmethod
     def run_fold(self, val_id):

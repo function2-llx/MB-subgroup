@@ -1,7 +1,8 @@
 import json
+from collections.abc import Mapping, Hashable
 from copy import deepcopy
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 import monai
 import monai.transforms as monai_transforms
@@ -10,6 +11,16 @@ import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from finetuner_base import FinetuneArgs
+
+class CreateForegroundMaskD(monai.transforms.MapTransform):
+    def __init__(self, keys, mask_key):
+        super().__init__(keys)
+        self.mask_key = mask_key
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        d[self.mask_key] = (sum([data[key] for key in self.key_iterator(d)]) > 0).astype(int)
+        return d
 
 dataset_root = Path(__file__).parent
 
@@ -47,10 +58,9 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
             subgroup: label
             for label, subgroup in enumerate(args.subgroups)
         }
-        img_keys = args.protocols + args.seg_inputs
 
         from monai.utils import InterpolateMode
-        loader = monai_transforms.Compose([
+        loader = monai.transforms.Compose([
             monai.transforms.LoadImageD(args.protocols + args.segs),
             monai.transforms.AddChannelD(args.protocols + args.segs),
             monai.transforms.OrientationD(args.protocols + args.segs, 'LAS'),
@@ -65,13 +75,18 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
                 mode=InterpolateMode.NEAREST,
             ),
             monai.transforms.ThresholdIntensityD(args.protocols, threshold=0),
-            monai.transforms.NormalizeIntensityD(args.protocols),
+            CreateForegroundMaskD(args.protocols, mask_key='fg_mask'),
+            monai.transforms.NormalizeIntensityD(args.protocols, nonzero=True) if args.input_fg_mask else
+            monai.transforms.NormalizeIntensityD(args.protocols, nonzero=False),
             monai.transforms.ThresholdIntensityD(args.segs, threshold=1, above=False, cval=1),
-            monai.transforms.ConcatItemsD(img_keys, 'img'),
-            monai.transforms.ConcatItemsD(args.segs, 'seg'),
+            # monai.transforms.ConcatItemsD(args.protocols, 'img'),
+            # monai.transforms.ConcatItemsD(args.segs, 'seg'),
         ])
-        cohort = read_cohort_info(args)
-        cohort = process_map(load_case, [info for _, info in cohort.iterrows()], desc='loading cohort', ncols=80, max_workers=16)
+        cohort_info = read_cohort_info(args.subgroups)
+        cohort = []
+        for _, info in cohort_info.iterrows():
+            cohort.append(load_case(info))
+        # cohort = process_map(load_case, [info for _, info in cohort_info.iterrows()], desc='loading cohort', ncols=80, max_workers=16)
         if show_example:
             import random
             from matplotlib import pyplot as plt

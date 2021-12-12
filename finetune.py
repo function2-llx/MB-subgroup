@@ -39,13 +39,16 @@ class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
         fold_output_dir = Path(self.args.output_dir) / f'val-{val_id}'
         fold_output_dir.mkdir(exist_ok=True, parents=True)
+        in_channels = len(self.args.protocols) + len(self.args.seg_inputs)
+        if self.args.input_fg_mask:
+            in_channels += 1
 
         if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / 'checkpoint.pth.tar').exists()):
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
                 self.args,
-                in_channels=len(self.args.protocols) + len(self.args.seg_inputs),
+                in_channels=in_channels,
                 pretrain=self.args.model_name_or_path is not None,
                 num_seg=len(self.args.segs),
                 num_classes=len(self.args.subgroups),
@@ -148,7 +151,7 @@ class Finetuner(FinetunerBase):
 
         model = generate_model(
             self.args,
-            in_channels=len(self.args.protocols) + len(self.args.seg_inputs),
+            in_channels=in_channels,
             pretrain=False,
             num_seg=len(self.args.segs),
             num_classes=len(self.args.subgroups),
