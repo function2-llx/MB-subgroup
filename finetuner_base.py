@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Tuple, Dict, List
 
 import monai
+import numpy as np
 import torch
 from transformers import TrainingArguments, IntervalStrategy
 
@@ -109,6 +110,8 @@ class FinetunerBase(RunnerBase):
         ret.extend([
             monai.transforms.ConcatItemsD(img_keys, 'img'),
             monai.transforms.ConcatItemsD(args.segs, 'seg'),
+            monai.transforms.CastToTypeD('img', np.float32),
+            monai.transforms.CastToTypeD('seg', np.int),
             monai.transforms.ToTensorD(['img', 'seg']),
         ])
 

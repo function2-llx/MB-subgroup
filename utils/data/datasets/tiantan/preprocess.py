@@ -6,12 +6,13 @@ from collections.abc import Mapping, Hashable
 from pathlib import Path
 from typing import Dict
 
-import monai.transforms
 import numpy as np
 import pandas as pd
-from monai.config import KeysCollection
-from monai.utils import InterpolateMode, Method
 from tqdm.contrib.concurrent import process_map
+import monai.transforms
+from monai.config import KeysCollection
+from monai.transforms.spatial.dictionary import InterpolateModeSequence
+from monai.utils import InterpolateMode, Method
 
 from utils.dicom_utils import ScanProtocol
 
@@ -25,6 +26,16 @@ seg_ref = {
 img_keys = list(ScanProtocol)
 seg_keys = list(seg_ref)
 all_keys = img_keys + seg_keys
+
+class AlignShapeD(monai.transforms.MapTransform):
+    def __init__(self, keys: KeysCollection, ref_key: str, mode: InterpolateModeSequence, allow_missing_keys: bool = False):
+        super().__init__(keys, allow_missing_keys)
+        self.ref_key = ref_key
+        self.mode = mode
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        resizer = monai.transforms.ResizeD(self.keys, spatial_size=data[self.ref_key].shape[1:], mode=self.mode)
+        return resizer(data)
 
 class SquareWithPadOrCrop(monai.transforms.Transform):
     def __init__(self, trans: bool = False):
@@ -61,13 +72,8 @@ loader = monai.transforms.Compose([
     monai.transforms.LoadImageD(all_keys),
     monai.transforms.AddChannelD(all_keys),
     monai.transforms.OrientationD(all_keys, 'LAS'),
-    monai.transforms.Lambda(lambda data: {
-        **data,
-        **{
-            seg_type: monai.transforms.Resize(data[img_ref].shape[1:], mode=InterpolateMode.NEAREST)(data[seg_type])
-            for seg_type, img_ref in seg_ref.items()
-        }
-    }),
+    AlignShapeD(img_keys, ScanProtocol.T2, InterpolateMode.AREA),
+    AlignShapeD(seg_keys, ScanProtocol.T2, InterpolateMode.NEAREST),
     monai.transforms.CropForegroundD(all_keys, source_key=ScanProtocol.T2),
     SquareWithPadOrCropD(all_keys),
 ])
