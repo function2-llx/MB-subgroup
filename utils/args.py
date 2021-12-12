@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
-import yaml
+from ruamel.yaml import YAML
 from transformers import HfArgumentParser
+
+yaml = YAML()
 
 @dataclass
 class DataTrainingArgs:
@@ -39,12 +41,8 @@ class ArgumentParser(HfArgumentParser):
         if not self.use_conf:
             return super().parse_args_into_dataclasses(**kwargs)
         conf_path = Path(argv[1])
-        if conf_path.suffix in ['.yml', '.yaml']:
-            with open(conf_path) as f:
-                conf = yaml.safe_load(f)
-        elif conf_path.suffix == '.json':
-            with open(conf_path) as f:
-                conf = json.load(f)
+        if conf_path.suffix in ['.yml', '.yaml', '.json']:
+            conf = yaml.load(conf_path)
         else:
             raise ValueError(f'不支持的参数配置格式：{conf_path.suffix}')
         args = argv[2:]
@@ -57,6 +55,6 @@ class ArgumentParser(HfArgumentParser):
         output_dir.mkdir(parents=True, exist_ok=True)
         args_dict = vars(args)
         with open(output_dir / 'conf.yml', 'w') as f:
-            yaml.safe_dump(args_dict, f)
+            yaml.dump(args_dict, output_dir / 'conf.yml')
         args = self.parse_dict(args_dict)
         return args

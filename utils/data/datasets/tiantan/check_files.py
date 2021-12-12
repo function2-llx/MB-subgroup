@@ -7,7 +7,7 @@ from monai.transforms import LoadImage
 
 from utils.dicom_utils import ScanProtocol
 
-data_dir = Path(__file__).parent / 'origin'
+data_dir = Path(__file__).parent / 'stripped'
 loader = LoadImage()
 
 results = {}

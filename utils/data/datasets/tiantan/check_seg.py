@@ -9,8 +9,9 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent, KeyEvent
 from matplotlib.colors import ListedColormap
 
-from utils.data.datasets.tiantan.check_files import data_dir
 from utils.dicom_utils import ScanProtocol
+
+data_dir = Path(__file__).parent / 'preprocessed'
 
 class IndexTracker:
     def __init__(self, ax: Axes):
@@ -26,7 +27,7 @@ class IndexTracker:
         self.seg_visible = True
         rows, cols, self.n_slices = img.shape
         # self.ind = np.argmax(seg.sum(axis=(0, 1)))
-        self.ind = 0
+        self.ind = 5
         self.ax_img = self.ax.imshow(self.img[:, :, self.ind], cmap='gray', vmax=1000)
         self.ax_seg = self.ax.imshow(self.seg[:, :, self.ind], cmap=ListedColormap(['none', 'green']), alpha=0.5, vmin=0, vmax=1, interpolation='nearest')
         self.update()
@@ -65,7 +66,7 @@ class Explorer:
         self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
 
-        self.set_patient(13)
+        self.set_patient(0)
 
     def on_key_press(self, event: KeyEvent):
         if event.key == 'left':
@@ -156,7 +157,7 @@ loader = monai_transforms.Compose([
 
 
 def main():
-    results = pd.read_excel('results.xlsx', index_col=0)
+    results = pd.read_excel('cohort.xlsx').set_index('name(raw)')
     explorer = Explorer(data_dir, results)
     plt.show()
     # for patient, row in results.iterrows():

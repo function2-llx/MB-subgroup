@@ -10,7 +10,6 @@ import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from finetuner_base import FinetuneArgs
-from utils.data.datasets.tiantan.args import MBArgs
 
 dataset_root = Path(__file__).parent
 
@@ -105,8 +104,9 @@ def load_cohort(args: FinetuneArgs, show_example=True, split_folds=True):
     else:
         return deepcopy(cohort)
 
-def read_cohort_info(args: MBArgs) -> pd.DataFrame:
+def read_cohort_info(subgroups: Optional[List[str]] = None) -> pd.DataFrame:
     global cohort
     cohort = pd.read_excel(dataset_root / 'cohort.xlsx')
-    cohort = cohort[cohort['subgroup'].isin(args.subgroups)]
+    if subgroups is not None:
+        cohort = cohort[cohort['subgroup'].isin(subgroups)]
     return cohort

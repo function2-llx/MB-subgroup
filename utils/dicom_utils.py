@@ -1,8 +1,11 @@
-# from enum import unique, Enum, auto, EnumMeta
 from typing import Optional
 
 import numpy as np
-from aenum import Enum, unique, auto, EnumMeta
+from aenum import unique, Enum, StrEnum, auto
+
+class SameStrEnum(StrEnum):
+    def _generate_next_value_(name, *args):
+        return name
 
 @unique
 class Plane(Enum):
@@ -16,7 +19,7 @@ class Plane(Enum):
 #             return cls.protocol_map[value.lower()]
 #         return super().__call__(value)
 
-class ScanProtocol(Enum):
+class ScanProtocol(SameStrEnum):
     T1 = auto()
     T1c = auto()
     T2 = auto()

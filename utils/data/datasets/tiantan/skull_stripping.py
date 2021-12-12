@@ -28,7 +28,7 @@ def main():
         for protocol in ScanProtocol:
             input_fname = input_dir / patient / info[protocol.name]
             mri_fnames.append(str(input_fname))
-            output_fname = output_dir / patient / f'{protocol.name}.nii.gz'
+            output_fname = output_dir / patient / info[protocol.name]
             output_fname.parent.mkdir(parents=True, exist_ok=True)
             out_fnames.append(str(output_fname))
     print('total:', len(mri_fnames))
