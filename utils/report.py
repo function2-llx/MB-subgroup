@@ -59,14 +59,19 @@ class Reporter:
         meandices = torch.stack(self.meandices)
         report = self.get_report(y_pred, y_true)
         pd.DataFrame(report).transpose().to_csv(self.report_dir / 'report.csv')
+        pd.DataFrame.from_records(
+            self.results,
+            columns=['patient', 'ref', 'pred', *self.target_names],
+        ).to_csv(self.report_dir / 'cls.csv', index=False)
+
         pd.DataFrame(confusion_matrix(y_true, y_pred), index=self.target_names, columns=self.target_names).to_csv(self.report_dir / 'cm.csv')
         pd.DataFrame({
             **{
-                str(result[0]): {
+                str(patient): {
                     seg_name: meandice[i].item()
                     for i, seg_name in enumerate(self.seg_names)
                 }
-                for result, meandice in zip(self.results, meandices)
+                for (patient, *_), meandice in zip(self.results, meandices)
             },
             'average': {
                 seg_name: meandices[:, i].mean().item()
@@ -118,7 +123,7 @@ class Reporter:
         output = torch.softmax(logit, dim=0)
         score = output.detach().cpu().numpy()
         self.y_score.append(score)
-        self.results.append((patient, label, pred, *score))
+        self.results.append((patient, self.target_names[label], self.target_names[pred], *score))
         self.meandices.append(meandice)
 
     def append_pred(self, pred: int, label: int):

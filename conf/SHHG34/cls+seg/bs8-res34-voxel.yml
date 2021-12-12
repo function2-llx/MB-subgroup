@@ -17,16 +17,15 @@ model_depth: 34
 per_device_train_batch_size: 8
 recons: false
 learning_rate: 1e-5
-num_train_epochs: 40
+num_train_epochs: 200
 aug:
   - flip
-#  - noise
-#  - blur
+  - noise
+  - blur
 img_dir: utils/data/datasets/tiantan/preprocessed
 seg_dir: utils/data/datasets/tiantan/preprocessed
-output_dir: output/SHHG34/input-seg/bs8-res34
+output_dir: output/SHHG34/cls+seg/bs8-res34-voxel
 cls_factor: 1
-seg_factor: 0
+seg_factor: 10
 input_fg_mask: true
-seg_inputs:
-  - AT
+seg_inputs: []

@@ -39,6 +39,7 @@ class Finetuner(FinetunerBase):
     def run_fold(self, val_id: int):
         fold_output_dir = Path(self.args.output_dir) / f'val-{val_id}'
         fold_output_dir.mkdir(exist_ok=True, parents=True)
+        best_checkpoint_link = fold_output_dir / 'checkpoint-best'
         in_channels = len(self.args.protocols) + len(self.args.seg_inputs)
         if self.args.input_fg_mask:
             in_channels += 1
@@ -56,7 +57,7 @@ class Finetuner(FinetunerBase):
             )
             from torch.optim import AdamW
             optimizer = AdamW(model.finetune_parameters(self.args))
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.lr_reduce_factor, patience=3, verbose=True)
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.lr_reduce_factor, patience=5, verbose=True)
             train_set, val_set = self.prepare_fold(val_id)
             logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
             # model = nn.DataParallel(model)
@@ -67,6 +68,7 @@ class Finetuner(FinetunerBase):
             # recons_fn = nn.MSELoss()
             best_loss = float('inf')
             step = 0
+            plot_skip_first = True
             val_outputs = []
 
             for epoch in range(int(self.args.num_train_epochs) + 1):
@@ -112,15 +114,18 @@ class Finetuner(FinetunerBase):
                     scheduler.step(val_loss)
                 logging.info(f'cur loss:  {val_loss}')
                 logging.info(f'best loss: {best_loss}')
-                val_outputs.append(val_output)
+                if not plot_skip_first or epoch > 0:
+                    val_outputs.append(val_output)
 
                 # if self.args.patience == 0:
-                if val_loss < best_loss:
-                    best_loss = val_loss
                 if self.args.save_strategy is IntervalStrategy.EPOCH:
                     checkpoint_save_dir = fold_output_dir / f'checkpoint-ep{epoch}'
                 else:
                     raise ValueError
+                if val_loss < best_loss:
+                    best_loss = val_loss
+                    best_checkpoint_link.unlink(missing_ok=True)
+                    best_checkpoint_link.symlink_to(checkpoint_save_dir)
                 checkpoint_save_dir.mkdir(parents=True, exist_ok=True)
                 save_states = {
                     'state_dict': model.state_dict(),
@@ -134,7 +139,6 @@ class Finetuner(FinetunerBase):
                 f'epoch{epoch}': epoch_reporters['cross-val'].digest()
                 for epoch, epoch_reporters in self.epoch_reporters.items()
             }).transpose().to_csv(Path(self.args.output_dir) / 'train-digest.csv')
-            torch.save(model.state_dict(), fold_output_dir / 'checkpoint.pth.tar')
             fig, ax = plt.subplots()
             ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
             ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
@@ -157,7 +161,7 @@ class Finetuner(FinetunerBase):
             num_classes=len(self.args.subgroups),
             num_pretrain_seg=self.args.num_pretrain_seg,
         )
-        model.load_state_dict(torch.load(fold_output_dir / 'checkpoint.pth.tar'))
+        model.load_state_dict(torch.load(best_checkpoint_link / 'state.pth')['state_dict'])
         self.run_eval(model, val_set, self.reporters['cross-val'], plot_num=len(val_set), plot_dir=Path(self.args.output_dir) / 'seg-outputs')
 
     def run_eval(

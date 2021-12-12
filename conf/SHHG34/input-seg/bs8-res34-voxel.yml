@@ -24,7 +24,7 @@ aug:
 #  - blur
 img_dir: utils/data/datasets/tiantan/preprocessed
 seg_dir: utils/data/datasets/tiantan/preprocessed
-output_dir: output/SHHG34/input-seg/bs8-res34-weak
+output_dir: output/SHHG34/input-seg/bs8-res34-voxel
 cls_factor: 1
 seg_factor: 0
 input_fg_mask: true
