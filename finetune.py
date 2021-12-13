@@ -44,7 +44,7 @@ class Finetuner(FinetunerBase):
         if self.args.input_fg_mask:
             in_channels += 1
 
-        if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / 'checkpoint.pth.tar').exists()):
+        if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / f'checkpoint-ep{int(self.args.num_train_epochs)}').exists()):
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
@@ -125,7 +125,7 @@ class Finetuner(FinetunerBase):
                 if val_loss < best_loss:
                     best_loss = val_loss
                     best_checkpoint_link.unlink(missing_ok=True)
-                    best_checkpoint_link.symlink_to(checkpoint_save_dir)
+                    best_checkpoint_link.symlink_to(f'checkpoint-ep{epoch}')
                 checkpoint_save_dir.mkdir(parents=True, exist_ok=True)
                 save_states = {
                     'state_dict': model.state_dict(),
@@ -161,7 +161,7 @@ class Finetuner(FinetunerBase):
             num_classes=len(self.args.subgroups),
             num_pretrain_seg=self.args.num_pretrain_seg,
         )
-        model.load_state_dict(torch.load(best_checkpoint_link / 'state.pth')['state_dict'])
+        model.load_state_dict(torch.load(best_checkpoint_link / 'states.pth')['state_dict'])
         self.run_eval(model, val_set, self.reporters['cross-val'], plot_num=len(val_set), plot_dir=Path(self.args.output_dir) / 'seg-outputs')
 
     def run_eval(
