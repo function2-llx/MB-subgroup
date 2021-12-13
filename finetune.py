@@ -4,16 +4,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import monai.transforms
 import numpy as np
 import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from monai.data import DataLoader, decollate_batch, write_nifti, NiftiSaver
+from monai.data import DataLoader, decollate_batch, NiftiSaver
 from monai.losses import DiceLoss, DiceFocalLoss
 from monai.metrics import compute_meandice
 from monai.transforms import Compose, EnsureType, Activations, AsDiscrete
+from monai.utils import ImageMetaKey
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
@@ -215,7 +215,7 @@ class Finetuner(FinetunerBase):
                 if idx not in plot_idx:
                     continue
                 patient_plot_dir = plot_dir / data['patient'][0]
-                patient_plot_dir.mkdir()
+                patient_plot_dir.mkdir(exist_ok=True)
                 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
                 fig: Figure
                 ax = {
@@ -260,8 +260,10 @@ class Finetuner(FinetunerBase):
                 for i, seg in enumerate(self.args.segs):
                     cur_seg_pred = seg_pred[0, [seg_id]].int().cpu().numpy()
                     seg_ref_key = seg_ref_keys[seg]
-                    saver.save(cur_seg_pred, data[f'{str(seg_ref_key)}_meta_dict'])
-
+                    saver.save(cur_seg_pred, {
+                        ImageMetaKey.FILENAME_OR_OBJ: seg,
+                        'affine': data[f'{str(seg_ref_key)}_meta_dict']['affine'][0],
+                    })
         ret.cls_loss /= step
         ret.seg_loss /= step
         ret.meandice = torch.stack(meandices)

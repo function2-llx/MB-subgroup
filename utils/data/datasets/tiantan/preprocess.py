@@ -98,6 +98,7 @@ def process_patient(info):
         output_dir=output_dir / patient,
         output_postfix='',
         separate_folder=False,
+        print_log=False,
     )
     saver(data)
 
