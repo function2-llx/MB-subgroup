@@ -4,12 +4,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import monai.transforms
 import numpy as np
 import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from monai.data import DataLoader, decollate_batch
+from monai.data import DataLoader, decollate_batch, write_nifti, NiftiSaver
 from monai.losses import DiceLoss, DiceFocalLoss
 from monai.metrics import compute_meandice
 from monai.transforms import Compose, EnsureType, Activations, AsDiscrete
@@ -24,6 +25,7 @@ from models import generate_model, Backbone
 from models.segresnet import SegResNetOutput
 from utils.args import ArgumentParser
 from utils.data import MultimodalDataset
+from utils.dicom_utils import ScanProtocol
 from utils.report import Reporter
 
 @dataclass
@@ -133,7 +135,7 @@ class Finetuner(FinetunerBase):
                 save_states = {
                     'state_dict': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict()
+                    'scheduler': scheduler.state_dict(),
                 }
                 torch.save(save_states, checkpoint_save_dir / 'states.pth')
                 logging.info(f'save checkpoint to {checkpoint_save_dir}\n')
@@ -212,13 +214,16 @@ class Finetuner(FinetunerBase):
 
                 if idx not in plot_idx:
                     continue
+                patient_plot_dir = plot_dir / data['patient'][0]
+                patient_plot_dir.mkdir()
                 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
                 fig: Figure
                 ax = {
                     protocol: ax[i]
                     for i, protocol in enumerate(self.args.protocols)
                 }
-                from utils.dicom_utils import ScanProtocol
+
+                # select a slice to plot segmentation result
                 idx = seg_ref[0].sum(dim=(0, 1, 2)).argmax().item()
                 for protocol in self.args.protocols:
                     img = data[protocol][0, 0]
@@ -236,9 +241,26 @@ class Finetuner(FinetunerBase):
                     cur_seg_pred = seg_pred[0, seg_id, :, :, idx].int().cpu().numpy()
                     ax[protocol].imshow(np.rot90(cur_seg_pred), vmin=0, vmax=1, cmap=ListedColormap(['none', 'red']), alpha=0.5)
                     ax[protocol].imshow(np.rot90(cur_seg_ref), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
-                fig.savefig(plot_dir / f"{data['patient'][0]}.pdf", dpi=300)
+                fig.savefig(patient_plot_dir / 'plot.pdf', dpi=300)
                 plt.show()
                 plt.close()
+
+                saver = NiftiSaver(
+                    output_dir=patient_plot_dir,
+                    output_postfix='',
+                    output_dtype=np.int8,
+                    resample=False,
+                    separate_folder=False,
+                    print_log=False,
+                )
+                seg_ref_keys = {
+                    'AT': ScanProtocol.T2,
+                    'CT': ScanProtocol.T1c,
+                }
+                for i, seg in enumerate(self.args.segs):
+                    cur_seg_pred = seg_pred[0, [seg_id]].int().cpu().numpy()
+                    seg_ref_key = seg_ref_keys[seg]
+                    saver.save(cur_seg_pred, data[f'{str(seg_ref_key)}_meta_dict'])
 
         ret.cls_loss /= step
         ret.seg_loss /= step

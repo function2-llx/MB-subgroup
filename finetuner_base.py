@@ -103,19 +103,16 @@ class FinetunerBase(RunnerBase):
 
     @classmethod
     def get_inference_transforms(cls, args: FinetuneArgs) -> List[monai.transforms.Transform]:
-        ret: List[monai.transforms.Transform] = []
         img_keys = args.protocols + args.seg_inputs
         if args.input_fg_mask:
             img_keys.append('fg_mask')
-        ret.extend([
+        return [
             monai.transforms.ConcatItemsD(img_keys, 'img'),
             monai.transforms.ConcatItemsD(args.segs, 'seg'),
             monai.transforms.CastToTypeD('img', np.float32),
             monai.transforms.CastToTypeD('seg', np.int),
             monai.transforms.ToTensorD(['img', 'seg']),
-        ])
-
-        return ret
+        ]
 
     @abstractmethod
     def run_fold(self, val_id):
