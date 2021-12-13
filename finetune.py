@@ -10,7 +10,7 @@ import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from monai.data import DataLoader, decollate_batch
-from monai.losses import DiceLoss
+from monai.losses import DiceLoss, DiceFocalLoss
 from monai.metrics import compute_meandice
 from monai.transforms import Compose, EnsureType, Activations, AsDiscrete
 from torch.nn import CrossEntropyLoss
@@ -64,7 +64,10 @@ class Finetuner(FinetunerBase):
             train_loader = DataLoader(train_set, batch_size=self.args.train_batch_size, shuffle=True)
             # loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.conf.weight_strategy).to(self.conf.device))
             cls_loss_fn = CrossEntropyLoss()
-            seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
+            if self.args.use_focal:
+                seg_loss_fn = DiceFocalLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
+            else:
+                seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
             # recons_fn = nn.MSELoss()
             best_loss = float('inf')
             step = 0

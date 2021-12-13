@@ -16,6 +16,7 @@ class DataTrainingArgs:
     aug: List[str] = field(default=None)
     subjects: int = field(default=None)
     input_fg_mask: bool = field(default=False)
+    use_focal: bool = field(default=False)
 
 @dataclass
 class ModelArgs:
