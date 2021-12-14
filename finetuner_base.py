@@ -8,6 +8,7 @@ from typing import Tuple, Dict, List
 import monai
 import numpy as np
 import torch
+from ruamel.yaml import YAML
 from transformers import TrainingArguments, IntervalStrategy
 
 from runner_base import RunnerBase
@@ -20,13 +21,14 @@ from utils.report import Reporter
 class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
     folds_file: Path = field(default=None)
     num_pretrain_seg: int = field(default=None)
-    patience: int = field(default=0)
+    patience: int = field(default=5)
     lr_reduce_factor: float = field(default=0.2)
     n_folds: int = None
     seg_inputs: List[str] = field(default_factory=list)
+    n_runs: int = field(default=5)
 
     def __post_init__(self):
-        self.save_strategy = IntervalStrategy.EPOCH
+        self.save_strategy = IntervalStrategy.EPOCH.value
         super().__post_init__()
         self.folds_file = Path(self.folds_file)
         assert set(self.seg_inputs).issubset(set(self.segs))

@@ -13,7 +13,6 @@ from sklearn.metrics import classification_report, roc_curve, auc, confusion_mat
 class Reporter:
     def __init__(self, report_dir, target_names: List[str], seg_names: List[str] = None):
         self.report_dir = Path(report_dir)
-        self.report_dir.mkdir(parents=True, exist_ok=True)
         self.target_names = target_names
         self.seg_names = seg_names
 
@@ -53,6 +52,7 @@ class Reporter:
         plt.close()
 
     def report(self):
+        self.report_dir.mkdir(parents=True, exist_ok=True)
         self.plot_roc()
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)

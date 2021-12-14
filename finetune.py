@@ -19,7 +19,6 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-from transformers import IntervalStrategy
 
 from finetuner_base import FinetunerBase, FinetuneArgs
 from models import generate_model, Backbone
@@ -47,8 +46,10 @@ class Finetuner(FinetunerBase):
         in_channels = len(self.args.protocols) + len(self.args.seg_inputs)
         if self.args.input_fg_mask:
             in_channels += 1
-
-        if self.args.do_train and (self.args.overwrite_output_dir or not (fold_output_dir / f'checkpoint-ep{int(self.args.num_train_epochs)}').exists()):
+        if self.args.do_train:
+            latest_checkpoint = None
+            if not self.args.overwrite_output_dir and latest_checkpoint_path.exists():
+                latest_checkpoint = torch.load(latest_checkpoint_path)
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
             logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
@@ -61,7 +62,21 @@ class Finetuner(FinetunerBase):
             )
             from torch.optim import AdamW
             optimizer = AdamW(model.finetune_parameters(self.args))
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.args.lr_reduce_factor, patience=5, verbose=True)
+            scheduler = lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                factor=self.args.lr_reduce_factor,
+                patience=self.args.patience, verbose=True,
+            )
+            if latest_checkpoint is None:
+                epoch = 0
+                logging.info('start training')
+            else:
+                model.load_state_dict(latest_checkpoint['model'])
+                optimizer.load_state_dict(latest_checkpoint['optimizer'])
+                scheduler.load_state_dict(latest_checkpoint['scheduler'])
+                epoch = scheduler.last_epoch
+                logging.info(f'resume training at epoch={epoch}')
+
             train_set, val_set = self.prepare_fold(val_id)
             logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
             # model = nn.DataParallel(model)
@@ -78,7 +93,8 @@ class Finetuner(FinetunerBase):
             plot_skip_first = True
             val_outputs = []
 
-            for epoch in range(int(self.args.num_train_epochs) + 1):
+            for epoch in range(epoch, int(self.args.num_train_epochs) + 1):
+                # evaluate zero-shot performance when epoch = 0
                 if epoch > 0:
                     model.train()
                     for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
@@ -86,28 +102,16 @@ class Finetuner(FinetunerBase):
                         labels = data['label'].to(self.args.device)
                         seg_ref = data['seg'].to(self.args.device)
                         outputs: SegResNetOutput = model.forward(imgs, permute=True)
-                        # logits = outputs['linear']
                         logits = outputs.cls
                         cls_loss = cls_loss_fn(logits, labels)
-                        # seg_loss = seg_loss_fn(outputs['seg'], segs)
                         seg_loss = seg_loss_fn(outputs.seg, seg_ref)
                         combined_loss = self.combine_loss(cls_loss, seg_loss, outputs.vae_loss)
-                        # loss = self.args.cls_factor * cls_loss + self.args.seg_factor * seg_loss
-                        # if self.conf.recons:
-                        #     recons_loss = recons_fn(imgs, outputs['recons'])
-                        # if self.is_world_master():
-                        # self.args.process_index
                         writer.add_scalar('loss/train', combined_loss.item(), step)
                         writer.add_scalar('cls-loss/train', cls_loss.item(), step)
                         writer.add_scalar('seg-loss/train', seg_loss.item(), step)
                         if outputs.vae_loss is not None:
                             writer.add_scalar('vae-loss/train', outputs.vae_loss.item(), step)
-                        # if self.conf.recons:
-                        #     writer.add_scalar('recons/train', recons_loss.item(), step)
-
                         optimizer.zero_grad()
-                        # if self.conf.recons:
-                        #     loss += recons_loss
                         combined_loss.backward()
                         optimizer.step()
                         step += 1
@@ -119,7 +123,7 @@ class Finetuner(FinetunerBase):
                     val_set,
                     reporter=self.epoch_reporters[epoch]['cross-val'],
                     plot_dir=self.epoch_reporters[epoch]['cross-val'].report_dir,
-                    plot_num=3
+                    plot_num=3,
                 )
                 val_loss = self.combine_loss(val_output.cls_loss, val_output.seg_loss)
                 if epoch > 0:
@@ -130,7 +134,7 @@ class Finetuner(FinetunerBase):
                     val_outputs.append(val_output)
 
                 save_states = {
-                    'state_dict': model.state_dict(),
+                    'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict(),
                 }
@@ -146,8 +150,10 @@ class Finetuner(FinetunerBase):
                 for epoch, epoch_reporters in self.epoch_reporters.items()
             }).transpose().to_csv(Path(self.args.output_dir) / 'train-digest.csv')
             fig, ax = plt.subplots()
-            ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
-            ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
+            if self.args.cls_factor != 0:
+                ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
+            if self.args.seg_factor != 0:
+                ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
             for i, seg_name in enumerate(self.args.segs):
                 ax.plot([metric.meandice[:, i].mean().item() for metric in val_outputs], label=f'{seg_name} mean DICE')
             ax.legend()
@@ -155,10 +161,9 @@ class Finetuner(FinetunerBase):
             plt.show()
             plt.close()
         else:
-            if self.args.do_train:
-                print('skip train')
             val_set = self.prepare_val_fold(val_id)
 
+        logging.info('run validation')
         model = generate_model(
             self.args,
             in_channels=in_channels,
@@ -167,7 +172,7 @@ class Finetuner(FinetunerBase):
             num_classes=len(self.args.subgroups),
             num_pretrain_seg=self.args.num_pretrain_seg,
         )
-        model.load_state_dict(torch.load(best_checkpoint_path)['state_dict'])
+        model.load_state_dict(torch.load(best_checkpoint_path)['model'])
         self.run_eval(
             model,
             val_set,
@@ -281,17 +286,21 @@ class Finetuner(FinetunerBase):
             reporter.report()
         return ret
 
-def finetune(args: FinetuneArgs, folds):
-    runner = Finetuner(args, folds)
-    runner.run()
 
 def main():
     from utils.data.datasets.tiantan.load import load_cohort
     # conf = get_conf()
     parser = ArgumentParser([FinetuneArgs])
     args, = parser.parse_args_into_dataclasses()
-    # conf.force_retrain = True
-    finetune(args, load_cohort(args))
+    args: FinetuneArgs
+    cohort_folds = load_cohort(args, split_folds=True)
+    output_dir = Path(args.output_dir)
+    rng = np.random.RandomState(args.seed)
+    for run in range(args.n_runs):
+        args.output_dir = str(output_dir / f'run-{run}')
+        args.seed = rng.randint(23333)
+        runner = Finetuner(args, cohort_folds)
+        runner.run()
 
 if __name__ == '__main__':
     main()

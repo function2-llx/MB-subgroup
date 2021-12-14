@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from monai import transforms as monai_transforms
 from monai.transforms import Transform
+from ruamel.yaml import YAML
 from transformers import TrainingArguments
 
 from utils.args import DataTrainingArgs, ModelArgs
@@ -18,6 +19,11 @@ class RunnerBase(ABC):
     def __init__(self, args: Union[TrainingArguments, DataTrainingArgs, ModelArgs]):
         self.args = args
         self.setup_logging()
+        output_dir = Path(self.args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        # yaml = YAML()
+        # yaml.dump(vars(self.args), output_dir / 'conf.yml')
+
         if args.do_train:
             self.set_determinism()
 
@@ -28,10 +34,10 @@ class RunnerBase(ABC):
         return ret
 
     def set_determinism(self):
-        seed = 2333
         # harm the speed
         # monai.utils.set_determinism(seed)
         # if self.is_world_master():
+        seed = self.args.seed
         logging.info(f'set random seed of {seed}\n')
         random.seed(seed)
         np.random.seed(seed)
