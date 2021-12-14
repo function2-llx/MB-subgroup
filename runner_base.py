@@ -18,9 +18,9 @@ from utils.transforms import RandSampleSlicesD
 class RunnerBase(ABC):
     def __init__(self, args: Union[TrainingArguments, DataTrainingArgs, ModelArgs]):
         self.args = args
-        self.setup_logging()
-        output_dir = Path(self.args.output_dir)
+        output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        self.setup_logging()
         # yaml = YAML()
         # yaml.dump(vars(self.args), output_dir / 'conf.yml')
 

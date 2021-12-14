@@ -39,6 +39,7 @@ class Finetuner(FinetunerBase):
     args: FinetuneArgs
 
     def run_fold(self, val_id: int):
+        logging.info(f'run cross validation on fold {val_id}')
         fold_output_dir = Path(self.args.output_dir) / f'val-{val_id}'
         fold_output_dir.mkdir(exist_ok=True, parents=True)
         best_checkpoint_path = fold_output_dir / 'checkpoint-best.pth.tar'
@@ -51,7 +52,6 @@ class Finetuner(FinetunerBase):
             if not self.args.overwrite_output_dir and latest_checkpoint_path.exists():
                 latest_checkpoint = torch.load(latest_checkpoint_path)
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
-            logging.info(f'run cross validation on fold {val_id}')
             model = generate_model(
                 self.args,
                 in_channels=in_channels,
@@ -65,8 +65,11 @@ class Finetuner(FinetunerBase):
             scheduler = lr_scheduler.ReduceLROnPlateau(
                 optimizer,
                 factor=self.args.lr_reduce_factor,
-                patience=self.args.patience, verbose=True,
+                patience=self.args.patience,
+                verbose=True,
             )
+            val_outputs = []
+            best_loss = float('inf')
             if latest_checkpoint is None:
                 epoch = 0
                 logging.info('start training')
@@ -74,11 +77,13 @@ class Finetuner(FinetunerBase):
                 model.load_state_dict(latest_checkpoint['model'])
                 optimizer.load_state_dict(latest_checkpoint['optimizer'])
                 scheduler.load_state_dict(latest_checkpoint['scheduler'])
-                epoch = scheduler.last_epoch
-                logging.info(f'resume training at epoch={epoch}')
+                best_loss = scheduler.best
+                val_outputs, self.epoch_reporters, self.reporters = latest_checkpoint['results']
+                logging.info(f'resume training at epoch {scheduler.last_epoch}')
+                epoch = scheduler.last_epoch + 1
 
             train_set, val_set = self.prepare_fold(val_id)
-            logging.info(f'''{torch.cuda.device_count()} GPUs available\n''')
+            logging.info(f'{torch.cuda.device_count()} GPUs available\n')
             # model = nn.DataParallel(model)
             train_loader = DataLoader(train_set, batch_size=self.args.train_batch_size, shuffle=True)
             # loss_fn = CrossEntropyLoss(weight=train_set.get_weight(self.conf.weight_strategy).to(self.conf.device))
@@ -88,10 +93,8 @@ class Finetuner(FinetunerBase):
             else:
                 seg_loss_fn = DiceLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
             # recons_fn = nn.MSELoss()
-            best_loss = float('inf')
             step = 0
             plot_skip_first = True
-            val_outputs = []
 
             for epoch in range(epoch, int(self.args.num_train_epochs) + 1):
                 # evaluate zero-shot performance when epoch = 0
@@ -137,9 +140,10 @@ class Finetuner(FinetunerBase):
                     'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict(),
+                    'results': (val_outputs, self.epoch_reporters, self.reporters)
                 }
                 torch.save(save_states, latest_checkpoint_path)
-                logging.info(f'save latest checkpoint to {latest_checkpoint_path}\n')
+                logging.info(f'epoch {epoch}: save latest checkpoint to {latest_checkpoint_path}\n')
                 if val_loss < best_loss:
                     best_loss = val_loss
                     shutil.copy2(latest_checkpoint_path, best_checkpoint_path)
@@ -285,7 +289,6 @@ class Finetuner(FinetunerBase):
         if reporter is not None:
             reporter.report()
         return ret
-
 
 def main():
     from utils.data.datasets.tiantan.load import load_cohort
