@@ -27,6 +27,13 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
     seg_inputs: List[str] = field(default_factory=list)
     n_runs: int = field(default=5)
 
+    @property
+    def in_channels(self) -> int:
+        ret = len(self.protocols) + len(self.seg_inputs)
+        if self.input_fg_mask:
+            ret += 1
+        return ret
+
     def __post_init__(self):
         self.save_strategy = IntervalStrategy.EPOCH.value
         super().__post_init__()
@@ -113,7 +120,7 @@ class FinetunerBase(RunnerBase):
             monai.transforms.ConcatItemsD(args.segs, 'seg'),
             monai.transforms.CastToTypeD('img', np.float32),
             monai.transforms.CastToTypeD('seg', np.int),
-            monai.transforms.ToTensorD(['img', 'seg']),
+            monai.transforms.ToTensorD(['img', 'seg'], device=args.device),
         ]
 
     @abstractmethod

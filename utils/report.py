@@ -114,14 +114,13 @@ class Reporter:
         report['weighted avg']['accuracy'] = report.pop('accuracy')
         return report
 
-    def append(self, data, logit: torch.FloatTensor, meandice: torch.FloatTensor):
+    def append(self, data, prob_pred: torch.FloatTensor, meandice: torch.FloatTensor):
         patient = data['patient'][0]
         label = data['label'].item()
         self.y_true.append(label)
-        pred = logit.argmax().item()
+        pred = prob_pred.argmax().item()
         self.y_pred.append(pred)
-        output = torch.softmax(logit, dim=0)
-        score = output.detach().cpu().numpy()
+        score = prob_pred.detach().cpu().numpy()
         self.y_score.append(score)
         self.results.append((patient, self.target_names[label], self.target_names[pred], *score))
         self.meandices.append(meandice)

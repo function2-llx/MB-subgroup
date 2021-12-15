@@ -27,9 +27,9 @@ from .backbone import Backbone
 
 @dataclass
 class SegResNetOutput:
-    cls: torch.FloatTensor = None
+    cls_logit: torch.FloatTensor = None
     # cls_loss: torch.FloatTensor
-    seg: torch.Tensor = None
+    seg_logit: torch.Tensor = None
     # seg_loss: torch.FloatTensor
     vae_loss: torch.FloatTensor = None
 

@@ -345,7 +345,7 @@ class ResNet(Backbone):
         if self.n_classes:
             linear = self.avgpool(c5)
             linear = linear.view(linear.size(0), -1)
-            ret.cls = self.fc(linear)
+            ret.cls_logit = self.fc(linear)
 
         if self.recons is not None:
             recons = self.recons(c1, c2, c3, c4, c5)
@@ -356,9 +356,9 @@ class ResNet(Backbone):
 
         if self.seg is not None:
             if permute:
-                ret.seg = permute_img(self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg], inv=True)
+                ret.seg_logit = permute_img(self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg], inv=True)
             else:
-                ret.seg = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
+                ret.seg_logit = self.seg(c1, c2, c3, c4, c5)[:, :self.num_seg]
 
         return ret
 

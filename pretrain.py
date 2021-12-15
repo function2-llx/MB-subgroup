@@ -81,7 +81,7 @@ class Pretrainer(RunnerBase):
             epoch_loss = 0
             for data in tqdm(loader, ncols=80, desc=f'epoch{epoch}'):
                 outputs = self.model.forward(data['img'].to(self.args.device), permute=True)
-                loss = loss_fn(outputs.seg, data['seg'].to(self.args.device))
+                loss = loss_fn(outputs.seg_logit, data['seg'].to(self.args.device))
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()

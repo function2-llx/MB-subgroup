@@ -1,19 +1,20 @@
 import logging
 import random
 import shutil
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union, List
 
+import monai.transforms
 import numpy as np
 import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from monai.data import DataLoader, decollate_batch, NiftiSaver
+from monai.data import DataLoader, NiftiSaver
 from monai.losses import DiceLoss, DiceFocalLoss
 from monai.metrics import compute_meandice
-from monai.transforms import Compose, EnsureType, Activations, AsDiscrete
 from monai.utils import ImageMetaKey
 from torch.nn import CrossEntropyLoss
 from torch.optim import lr_scheduler
@@ -44,9 +45,7 @@ class Finetuner(FinetunerBase):
         fold_output_dir.mkdir(exist_ok=True, parents=True)
         best_checkpoint_path = fold_output_dir / 'checkpoint-best.pth.tar'
         latest_checkpoint_path = fold_output_dir / 'checkpoint-latest.pth.tar'
-        in_channels = len(self.args.protocols) + len(self.args.seg_inputs)
-        if self.args.input_fg_mask:
-            in_channels += 1
+
         if self.args.do_train:
             latest_checkpoint = None
             if not self.args.overwrite_output_dir and latest_checkpoint_path.exists():
@@ -54,7 +53,7 @@ class Finetuner(FinetunerBase):
             writer = SummaryWriter(log_dir=str(Path(f'runs') / f'fold{val_id}' / fold_output_dir))
             model = generate_model(
                 self.args,
-                in_channels=in_channels,
+                in_channels=self.args.in_channels,
                 pretrain=self.args.model_name_or_path is not None,
                 num_seg=len(self.args.segs),
                 num_classes=len(self.args.subgroups),
@@ -101,13 +100,13 @@ class Finetuner(FinetunerBase):
                 if epoch > 0:
                     model.train()
                     for data in tqdm(train_loader, desc=f'training: epoch {epoch}', ncols=80):
-                        imgs = data['img'].to(self.args.device)
-                        labels = data['label'].to(self.args.device)
-                        seg_ref = data['seg'].to(self.args.device)
+                        imgs = data['img']
+                        labels = data['label']
+                        seg_ref = data['seg']
                         outputs: SegResNetOutput = model.forward(imgs, permute=True)
-                        logits = outputs.cls
+                        logits = outputs.cls_logit
                         cls_loss = cls_loss_fn(logits, labels)
-                        seg_loss = seg_loss_fn(outputs.seg, seg_ref)
+                        seg_loss = seg_loss_fn(outputs.seg_logit, seg_ref)
                         combined_loss = self.combine_loss(cls_loss, seg_loss, outputs.vae_loss)
                         writer.add_scalar('loss/train', combined_loss.item(), step)
                         writer.add_scalar('cls-loss/train', cls_loss.item(), step)
@@ -170,7 +169,7 @@ class Finetuner(FinetunerBase):
         logging.info('run validation')
         model = generate_model(
             self.args,
-            in_channels=in_channels,
+            in_channels=self.args.in_channels,
             pretrain=False,
             num_seg=len(self.args.segs),
             num_classes=len(self.args.subgroups),
@@ -188,17 +187,32 @@ class Finetuner(FinetunerBase):
 
     def run_eval(
         self,
-        model: Backbone,
+        models: Union[Backbone, List[Backbone]],
         eval_dataset: MultimodalDataset,
         reporter: Optional[Reporter] = None,
         plot_num=0,
         plot_dir: Path = None,
         save_dir: Path = None,
     ) -> EvalOutput:
-        model.eval()
-        post_trans = Compose(
-            [EnsureType(), Activations(sigmoid=True), AsDiscrete(threshold_values=0.5)]
-        )
+        if not isinstance(models, list):
+            models = [models]
+        for model in models:
+            model.eval()
+
+        cls_post_trans = monai.transforms.Compose([
+            monai.transforms.EnsureType(),
+            # Activations(softmax=True),
+            monai.transforms.MeanEnsemble(),
+        ])
+        applied_labels = 1 if len(self.args.segs) == 1 else range(len(self.args.segs))
+        seg_post_trans = monai.transforms.Compose([
+            monai.transforms.EnsureType(),
+            monai.transforms.Activations(sigmoid=True),
+            monai.transforms.MeanEnsemble(),
+            monai.transforms.AsDiscrete(threshold=0.5),
+            monai.transforms.KeepLargestConnectedComponent(applied_labels=applied_labels),
+            monai.transforms.FillHoles(applied_labels=applied_labels),
+        ])
         plot_idx = random.sample(range(len(eval_dataset)), plot_num)
         if plot_num > 0:
             assert plot_dir is not None
@@ -214,22 +228,24 @@ class Finetuner(FinetunerBase):
         with torch.no_grad():
             step = 0
             for idx, data in enumerate(tqdm(DataLoader(eval_dataset, batch_size=1, shuffle=False), ncols=80, desc='evaluating')):
+                patient = data['patient'][0]
                 img = data['img'].to(self.args.device)
                 cls_label = data['label'].to(self.args.device)
                 seg_ref: torch.LongTensor = data['seg'].to(self.args.device)
-                output: SegResNetOutput = model.forward(img, permute=True)
-                logit = output.cls
-                seg_pred = torch.stack([post_trans(i) for i in decollate_batch(output.seg)])
-                cls_loss = cls_loss_fn(logit, cls_label)
-                seg_loss = seg_loss_fn(output.seg, seg_ref)
-                ret.cls_loss += cls_loss.item()
-                ret.seg_loss += seg_loss.item()
+                outputs: List[SegResNetOutput] = [model.forward(img, permute=True) for model in models]
+                cls_prob = cls_post_trans(torch.stack([
+                    torch.softmax(output.cls_logit[0], dim=0) for output in outputs
+                ]))[None]
+                seg_pred = seg_post_trans(torch.stack([output.seg_logit[0] for output in outputs]))[None]
+                for output in outputs:
+                    ret.cls_loss += cls_loss_fn(output.cls_logit, cls_label).item()
+                    ret.seg_loss += seg_loss_fn(output.seg_logit, seg_ref)
+
                 meandice = compute_meandice(seg_pred, seg_ref)[0]
                 if reporter is not None:
-                    reporter.append(data, logit[0], meandice)
+                    reporter.append(data, cls_prob[0], meandice)
                 meandices.append(meandice)
                 step += 1
-                patient = data['patient'][0]
                 if idx in plot_idx:
                     patient_plot_dir = plot_dir / patient
                     patient_plot_dir.mkdir(exist_ok=True)
@@ -300,10 +316,37 @@ def main():
     output_dir = Path(args.output_dir)
     rng = np.random.RandomState(args.seed)
     for run in range(args.n_runs):
-        args.output_dir = str(output_dir / f'run-{run}')
-        args.seed = rng.randint(23333)
-        runner = Finetuner(args, cohort_folds)
+        run_args = deepcopy(args)
+        run_args.output_dir = str(output_dir / f'run-{run}')
+        run_args.seed = rng.randint(23333)
+        runner = Finetuner(run_args, cohort_folds)
         runner.run()
+    ensemble_runner = Finetuner(args, cohort_folds)
+    for val_id in range(len(cohort_folds)):
+        val_set = ensemble_runner.prepare_val_fold(val_id)
+        models = []
+        for run in range(args.n_runs):
+            model = generate_model(
+                args,
+                in_channels=args.in_channels,
+                pretrain=False,
+                num_seg=len(args.segs),
+                num_classes=len(args.subgroups),
+                num_pretrain_seg=args.num_pretrain_seg,
+            )
+            model.load_state_dict(
+                torch.load(output_dir / f'run-{run}' / f'val-{val_id}' / 'checkpoint-best.pth.tar')['model']
+            )
+            models.append(model)
+
+        ensemble_runner.run_eval(
+            models=models,
+            eval_dataset=val_set,
+            reporter=ensemble_runner.reporters['cross-val'],
+            plot_num=len(val_set),
+            plot_dir=output_dir / 'seg-outputs',
+            save_dir=output_dir / 'seg-outputs',
+        )
 
 if __name__ == '__main__':
     main()
