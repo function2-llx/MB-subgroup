@@ -118,16 +118,16 @@ class Pretrainer(RunnerBase):
 
         start_epoch = 1
         if not self.args.overwrite_output_dir:
-            states = None
+            checkpoint = None
             for epoch in range(1, int(self.args.num_train_epochs) + 1):
-                save_path: Path = output_dir / f'checkpoint-ep{epoch}.pth.tar'
-                if save_path.exists():
-                    states = torch.load(save_path)
+                checkpoint_path: Path = output_dir / f'checkpoint-ep{epoch}.pth.tar'
+                if checkpoint_path.exists():
+                    checkpoint = torch.load(checkpoint_path)
                     start_epoch = epoch + 1
-            if states is not None:
-                self.model.load_state_dict(states['state_dict'])
-                optimizer.load_state_dict(states['optimizer'])
-                scheduler.load_state_dict(states['scheduler'])
+            if checkpoint is not None:
+                self.model.load_state_dict(checkpoint['model'])
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                scheduler.load_state_dict(checkpoint['scheduler'])
 
         for epoch in range(start_epoch, int(self.args.num_train_epochs) + 1):
             epoch_loss = 0
@@ -144,13 +144,13 @@ class Pretrainer(RunnerBase):
                 writer.add_scalar('loss', epoch_loss / len(loader), epoch)
                 # if epoch % self.args.save_strategy == 0:
                 save_states = {
-                    'state_dict': self.model.state_dict(),
+                    'state': self.model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
                 }
-                save_path: Path = output_dir / f'ep{epoch}' / f'state.pth'
-                save_path.parent.mkdir(exist_ok=True)
-                torch.save(save_states, save_path)
+                checkpoint_path: Path = output_dir / f'checkpoint-ep{epoch}.pth.tar'
+                checkpoint_path.parent.mkdir(exist_ok=True)
+                torch.save(save_states, checkpoint_path)
 
 def get_loader(dataset) -> Callable[[Namespace], MultimodalDataset]:
     import utils.data.datasets as datasets
