@@ -144,7 +144,7 @@ class Pretrainer(RunnerBase):
                 writer.add_scalar('loss', epoch_loss / len(loader), epoch)
                 # if epoch % self.args.save_strategy == 0:
                 save_states = {
-                    'state': self.model.state_dict(),
+                    'model': self.model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
                 }
