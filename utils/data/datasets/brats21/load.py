@@ -8,12 +8,12 @@ from utils.args import DataTrainingArgs
 
 data_dir = Path(__file__).parent / 'processed'
 
-def load_subject(subject):
-    subject, info = subject
-    data = dict(np.load(str(data_dir / f'{subject}/data.npz')))
-    assert 'img' in data and 'seg' in data
-    data['label'] = info['MGMT']
-    return data
+# def load_subject(subject):
+#     subject, info = subject
+#     data = dict(np.load(str(data_dir / subject' / 'data.npz')))
+#     assert 'img' in data and 'seg' in data
+#     data['label'] = info['MGMT']
+#     return data
 
 # load data for pre-training
 def load_all(args: DataTrainingArgs) -> List[Dict]:
@@ -30,6 +30,7 @@ def load_all(args: DataTrainingArgs) -> List[Dict]:
     # subjects = list(.items())
     # if args.subjects is not None:
     #     subjects = subjects[:args.subjects]
+    # RAM supports you, say thank you, RAM
     # data = process_map(
     #     load_subject,
     #     subjects,

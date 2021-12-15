@@ -120,7 +120,7 @@ class FinetunerBase(RunnerBase):
             monai.transforms.ConcatItemsD(args.segs, 'seg'),
             monai.transforms.CastToTypeD('img', np.float32),
             monai.transforms.CastToTypeD('seg', np.int),
-            monai.transforms.ToTensorD(['img', 'seg'], device=args.device),
+            monai.transforms.ToTensorD(['img', 'seg', 'label'], device=args.device),
         ]
 
     @abstractmethod

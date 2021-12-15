@@ -12,9 +12,10 @@ from tqdm.contrib.concurrent import process_map
 import monai.transforms
 from monai.config import KeysCollection
 from monai.transforms.spatial.dictionary import InterpolateModeSequence
-from monai.utils import InterpolateMode, Method
+from monai.utils import InterpolateMode
 
 from utils.dicom_utils import ScanProtocol
+from utils.transforms import SquareWithPadOrCropD
 
 output_dir = Path('preprocessed')
 
@@ -36,37 +37,6 @@ class AlignShapeD(monai.transforms.MapTransform):
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         resizer = monai.transforms.ResizeD(self.keys, spatial_size=data[self.ref_key].shape[1:], mode=self.mode)
         return resizer(data)
-
-class SquareWithPadOrCrop(monai.transforms.Transform):
-    def __init__(self, trans: bool = False):
-        self.ref_dim = 0
-        self.change_dim = 1
-        if trans:
-            self.ref_dim, self.change_dim = self.change_dim, self.ref_dim
-
-    def __call__(self, data: np.ndarray) -> np.ndarray:
-        size = data.shape[self.ref_dim + 1]
-        roi_slices = [slice(None) for _ in range(data.ndim - 1)]
-        roi_slices[self.change_dim] = slice(0, size)
-        cropper = monai.transforms.SpatialCrop(roi_slices=roi_slices)
-        data = cropper(data)
-        pad_size = list(data.shape[1:])
-        pad_size[self.change_dim] = size
-        padder = monai.transforms.SpatialPad(spatial_size=pad_size, method=Method.END)
-        return padder(data)
-
-class SquareWithPadOrCropD(monai.transforms.MapTransform):
-    backend = SquareWithPadOrCrop.backend
-
-    def __init__(self, keys: KeysCollection, trans: bool = False, allow_missing_keys: bool = False):
-        super().__init__(keys, allow_missing_keys)
-        self.squarer = SquareWithPadOrCrop(trans)
-
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
-        d = dict(data)
-        for key in self.key_iterator(d):
-            d[key] = self.squarer(d[key])
-        return d
 
 loader = monai.transforms.Compose([
     monai.transforms.LoadImageD(all_keys),

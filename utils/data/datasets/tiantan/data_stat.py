@@ -9,7 +9,7 @@ from tqdm.contrib.concurrent import process_map
 from utils.data.datasets.tiantan.load import read_cohort_info
 from utils.dicom_utils import ScanProtocol
 
-data_dir = Path(__file__).parent / Path('cropped')
+data_dir = Path(__file__).parent / Path('preprocessed')
 seg_ref = {
     'AT': ScanProtocol.T2,
     'CT': ScanProtocol.T1c,
@@ -34,6 +34,7 @@ def stat_patient(info: pd.Series) -> Tuple[str, Dict]:
     src_key = ScanProtocol.T2
     for i, dim in enumerate('HWD'):
         ret[dim] = data[src_key].shape[i + 1]
+        ret[f'{dim}-s'] = data[f'{src_key}_meta_dict']['pixdim'][i + 1]
     for seg_key in seg_keys:
         seg_sum = np.sum(data[seg_key], axis=(0, 1, 2))
         last = 0
@@ -51,6 +52,7 @@ def main():
     # for _, info in cohort.iterrows():
     #     results.append(stat_patient(info))
     pd.DataFrame(dict(results)).transpose().to_excel('stat.xlsx')
+    pd.DataFrame(dict(results)).transpose().to_csv('stat.csv')
 
 if __name__ == '__main__':
     main()

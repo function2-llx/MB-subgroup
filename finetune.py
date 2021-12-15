@@ -163,27 +163,27 @@ class Finetuner(FinetunerBase):
             fig.savefig(fold_output_dir / 'val-loss.pdf')
             plt.show()
             plt.close()
-        else:
-            val_set = self.prepare_val_fold(val_id)
 
-        logging.info('run validation')
-        model = generate_model(
-            self.args,
-            in_channels=self.args.in_channels,
-            pretrain=False,
-            num_seg=len(self.args.segs),
-            num_classes=len(self.args.subgroups),
-            num_pretrain_seg=self.args.num_pretrain_seg,
-        )
-        model.load_state_dict(torch.load(best_checkpoint_path)['model'])
-        self.run_eval(
-            model,
-            val_set,
-            self.reporters['cross-val'],
-            plot_num=len(val_set),
-            plot_dir=Path(self.args.output_dir) / 'seg-outputs',
-            save_dir=Path(self.args.output_dir) / 'seg-outputs',
-        )
+        if self.args.do_eval:
+            val_set = self.prepare_val_fold(val_id)
+            logging.info('run validation')
+            model = generate_model(
+                self.args,
+                in_channels=self.args.in_channels,
+                pretrain=False,
+                num_seg=len(self.args.segs),
+                num_classes=len(self.args.subgroups),
+                num_pretrain_seg=self.args.num_pretrain_seg,
+            )
+            model.load_state_dict(torch.load(best_checkpoint_path)['model'])
+            self.run_eval(
+                model,
+                val_set,
+                self.reporters['cross-val'],
+                plot_num=len(val_set),
+                plot_dir=Path(self.args.output_dir) / 'seg-outputs',
+                save_dir=Path(self.args.output_dir) / 'seg-outputs',
+            )
 
     def run_eval(
         self,
@@ -239,7 +239,7 @@ class Finetuner(FinetunerBase):
                 seg_pred = seg_post_trans(torch.stack([output.seg_logit[0] for output in outputs]))[None]
                 for output in outputs:
                     ret.cls_loss += cls_loss_fn(output.cls_logit, cls_label).item()
-                    ret.seg_loss += seg_loss_fn(output.seg_logit, seg_ref)
+                    ret.seg_loss += seg_loss_fn(output.seg_logit, seg_ref).item()
 
                 meandice = compute_meandice(seg_pred, seg_ref)[0]
                 if reporter is not None:
@@ -321,32 +321,33 @@ def main():
         run_args.seed = rng.randint(23333)
         runner = Finetuner(run_args, cohort_folds)
         runner.run()
-    ensemble_runner = Finetuner(args, cohort_folds)
-    for val_id in range(len(cohort_folds)):
-        val_set = ensemble_runner.prepare_val_fold(val_id)
-        models = []
-        for run in range(args.n_runs):
-            model = generate_model(
-                args,
-                in_channels=args.in_channels,
-                pretrain=False,
-                num_seg=len(args.segs),
-                num_classes=len(args.subgroups),
-                num_pretrain_seg=args.num_pretrain_seg,
-            )
-            model.load_state_dict(
-                torch.load(output_dir / f'run-{run}' / f'val-{val_id}' / 'checkpoint-best.pth.tar')['model']
-            )
-            models.append(model)
+    if args.do_ensemble:
+        ensemble_runner = Finetuner(args, cohort_folds)
+        for val_id in range(len(cohort_folds)):
+            val_set = ensemble_runner.prepare_val_fold(val_id)
+            models = []
+            for run in range(args.n_runs):
+                model = generate_model(
+                    args,
+                    in_channels=args.in_channels,
+                    pretrain=False,
+                    num_seg=len(args.segs),
+                    num_classes=len(args.subgroups),
+                    num_pretrain_seg=args.num_pretrain_seg,
+                )
+                model.load_state_dict(
+                    torch.load(output_dir / f'run-{run}' / f'val-{val_id}' / 'checkpoint-best.pth.tar')['model']
+                )
+                models.append(model)
 
-        ensemble_runner.run_eval(
-            models=models,
-            eval_dataset=val_set,
-            reporter=ensemble_runner.reporters['cross-val'],
-            plot_num=len(val_set),
-            plot_dir=output_dir / 'seg-outputs',
-            save_dir=output_dir / 'seg-outputs',
-        )
+            ensemble_runner.run_eval(
+                models=models,
+                eval_dataset=val_set,
+                reporter=ensemble_runner.reporters['cross-val'],
+                plot_num=len(val_set),
+                plot_dir=output_dir / 'seg-outputs',
+                save_dir=output_dir / 'seg-outputs',
+            )
 
 if __name__ == '__main__':
     main()

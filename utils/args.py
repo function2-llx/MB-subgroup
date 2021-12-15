@@ -2,10 +2,12 @@ import json
 from argparse import Namespace
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from ruamel.yaml import YAML
 from transformers import HfArgumentParser
+
+from utils.dicom_utils import ScanProtocol
 
 yaml = YAML()
 
@@ -15,8 +17,10 @@ class DataTrainingArgs:
     sample_slices: int = field(default=None)
     aug: List[str] = field(default=None)
     subjects: int = field(default=None)
+    protocols: List[Union[str, ScanProtocol]] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
     input_fg_mask: bool = field(default=False)
     use_focal: bool = field(default=False)
+    do_ensemble: bool = field(default=False)
 
 @dataclass
 class ModelArgs:

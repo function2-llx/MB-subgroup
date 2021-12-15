@@ -10,7 +10,7 @@ protocols:
   - T2
 segs:
   - AT
-sample_size: 224
+sample_size: 320
 sample_slices: 16
 model: resnet
 model_depth: 34
@@ -24,8 +24,8 @@ aug:
 #  - blur
 img_dir: utils/data/datasets/tiantan/preprocessed
 seg_dir: utils/data/datasets/tiantan/preprocessed
-output_dir: output/SHHG34/onlycls/bs8-res34
-cls_factor: 0.1
+output_dir: output/SHHG34/onlycls/bs8-res34-320-nofg
+cls_factor: 1
 seg_factor: 0
-input_fg_mask: true
+input_fg_mask: false
 seg_inputs: []

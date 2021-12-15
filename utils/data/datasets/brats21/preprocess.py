@@ -1,13 +1,14 @@
 import json
 from pathlib import Path
 
+import monai
 import numpy as np
 from monai import transforms as monai_transforms
 import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
+from utils.transforms import SquareWithPadOrCrop, CreateForegroundMaskD
 from utils.dicom_utils import ScanProtocol
-from utils.transforms import ConvertToMultiChannelBasedOnBratsClassesd
 
 labels = pd.read_csv('origin/train_labels.csv', dtype={'BraTS21ID': str})
 labels.set_index('BraTS21ID', inplace=True)
@@ -45,15 +46,17 @@ def main():
         subjects.append(subject)
 
     global loader
-    loader = monai_transforms.Compose([
-        monai_transforms.LoadImaged(list(ScanProtocol) + ['seg']),
-        monai_transforms.AddChanneld(list(ScanProtocol) + ['seg']),
-        monai_transforms.Orientationd(list(ScanProtocol) + ['seg'], 'LAS'),
-        monai_transforms.ConcatItemsd(list(ScanProtocol), 'img'),
-        monai_transforms.SelectItemsd(['img', 'seg']),
-        monai_transforms.ThresholdIntensityD('img', threshold=0),
-        monai_transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
-        ConvertToMultiChannelBasedOnBratsClassesd('seg'),
+    all_keys = [*ScanProtocol, 'seg']
+    loader = monai.transforms.Compose([
+        monai.transforms.LoadImaged(all_keys),
+        monai.transforms.AddChanneld(all_keys),
+        monai.transforms.Orientationd(all_keys, 'LAS'),
+        monai.transforms.ConcatItemsd([*ScanProtocol], 'img'),
+        monai.transforms.ThresholdIntensityD('img', threshold=0),
+        monai.transforms.CropForegroundD(['img', 'seg'], source_key='img'),
+        # monai.transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=True),
+        monai.transforms.ConvertToMultiChannelBasedOnBratsClassesD('seg'),
+        monai.transforms.SelectItemsd(['img', 'seg']),
     ])
     subjects = {
         subject: info

@@ -1,42 +1,14 @@
-from typing import Union, Mapping, Hashable, Sequence
+from typing import Union, Mapping, Hashable, Sequence, Dict
 
+import monai
+import monai.transforms
 import monai.transforms as monai_transforms
 import numpy as np
 import torch
 from monai.config import KeysCollection
 from monai.transforms import ToTensor, ToTensord, MapTransform, Transform, RandomizableTransform, RandSpatialCropd
 from monai.transforms.utility.array import PILImageImage
-from monai.utils import fall_back_tuple
-
-class ToTensorDevice(ToTensor):
-    """
-    Converts the input image to a tensor without applying any other transformations and to device.
-    """
-
-    def __init__(self, device: torch.device = 'cuda'):
-        self.device = device
-
-    def __call__(self, img: Union[np.ndarray, torch.Tensor, PILImageImage]) -> torch.Tensor:
-        """
-        Apply the transform to `img` and make it contiguous and on device.
-        """
-        return super().__call__(img).to(self.device)
-
-
-class ToTensorDeviced(ToTensord):
-    """
-    Dictionary-based wrapper of :py:class:`monai.transforms.ToTensor`.
-    """
-
-    def __init__(self, keys: KeysCollection, device: torch.device = 'cuda', allow_missing_keys: bool = False) -> None:
-        """
-        Args:
-            keys: keys of the corresponding items to be transformed.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            allow_missing_keys: don't raise exception if key is missing.
-        """
-        super().__init__(keys, allow_missing_keys)
-        self.converter = ToTensorDevice(device)
+from monai.utils import fall_back_tuple, Method
 
 class SampleSlices(Transform):
     def __init__(self, start: int, num_slices: int):
@@ -50,20 +22,20 @@ class SampleSlices(Transform):
         ret = data[..., slices]
         return ret
 
-class SampleSlicesd(MapTransform):
-    def __init__(self, keys: KeysCollection, start: int, num_slices: int):
-        super().__init__(keys)
-        self.sample_slices = SampleSlices(start, num_slices)
-
-    def __call__(self, data: Mapping[Hashable, np.ndarray]):
-        d = dict(data)
-        # sample_slices = SampleSlices(self._start, self.num_slices)
-        for key in self.key_iterator(d):
-            d[key] = self.sample_slices(d[key])
-
-        return d
-
-SampleSlicesD = SampleSlicesd
+# class SampleSlicesd(MapTransform):
+#     def __init__(self, keys: KeysCollection, start: int, num_slices: int):
+#         super().__init__(keys)
+#         self.sample_slices = SampleSlices(start, num_slices)
+#
+#     def __call__(self, data: Mapping[Hashable, np.ndarray]):
+#         d = dict(data)
+#         # sample_slices = SampleSlices(self._start, self.num_slices)
+#         for key in self.key_iterator(d):
+#             d[key] = self.sample_slices(d[key])
+#
+#         return d
+#
+# SampleSlicesD = SampleSlicesd
 
 # class RandSampleSlicesd(MapTransform, RandomizableTransform):
 #     def __init__(self, keys: KeysCollection, sample_slices: int, spacing: int):
@@ -133,30 +105,43 @@ class RandSpatialCropWithRatiod(RandSpatialCropd):
         self.roi_size = [int(size * ratio) for size, ratio in zip(img_size, ratios)]
         super().randomize(img_size)
 
-class ConvertToMultiChannelBasedOnBratsClassesd(monai_transforms.MapTransform):
-    """
-    Convert labels to multi channels based on brats classes:
-        - the GD-enhancing tumor (ET — label 4)
-        - the peritumoral edema (ED — label 2)
-        - and the necrotic and non-enhancing tumor core (NCR/NET — label 1)
+class SquareWithPadOrCrop(monai.transforms.Transform):
+    def __init__(self, trans: bool = False):
+        self.ref_dim = 0
+        self.change_dim = 1
+        if trans:
+            self.ref_dim, self.change_dim = self.change_dim, self.ref_dim
 
-    # label 1 is the peritumoral edema
-    # label 2 is the GD-enhancing tumor
-    # label 3 is the necrotic and non-enhancing tumor core
-    # The possible classes are TC (Tumor core), WT (Whole tumor)
-    # and ET (Enhancing tumor).
+    def __call__(self, data: np.ndarray) -> np.ndarray:
+        size = data.shape[self.ref_dim + 1]
+        roi_slices = [slice(None) for _ in range(data.ndim - 1)]
+        roi_slices[self.change_dim] = slice(0, size)
+        cropper = monai.transforms.SpatialCrop(roi_slices=roi_slices)
+        data = cropper(data)
+        pad_size = list(data.shape[1:])
+        pad_size[self.change_dim] = size
+        padder = monai.transforms.SpatialPad(spatial_size=pad_size, method=Method.END)
+        return padder(data)
 
-    """
+class SquareWithPadOrCropD(monai.transforms.MapTransform):
+    backend = SquareWithPadOrCrop.backend
 
-    def __call__(self, data):
+    def __init__(self, keys: KeysCollection, trans: bool = False, allow_missing_keys: bool = False):
+        super().__init__(keys, allow_missing_keys)
+        self.squarer = SquareWithPadOrCrop(trans)
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d = dict(data)
-        for key in self.keys:
-            result = []
-            # merge labels 1, 2 and 4 to construct WT
-            result.append(d[key] != 0)
-            # merge label 1 and label 4 to construct TC
-            result.append((d[key] == 1) | (d[key] == 4))
-            # label 4 is AT
-            result.append(d[key] == 4)
-            d[key] = np.concatenate(result, axis=0).astype(np.float32)
+        for key in self.key_iterator(d):
+            d[key] = self.squarer(d[key])
+        return d
+
+class CreateForegroundMaskD(monai.transforms.MapTransform):
+    def __init__(self, keys, mask_key):
+        super().__init__(keys)
+        self.mask_key = mask_key
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        d[self.mask_key] = np.logical_or.reduce([d[key] > 0 for key in self.key_iterator(d)]).astype(np.uint8)
         return d

@@ -6,11 +6,11 @@ from monai.transforms import Transform
 
 class MultimodalDataset(CacheDataset):
     def __init__(
-            self,
-            data: List[Dict],
-            transform: Union[Sequence[Callable], Callable],
-            num_classes: Optional[int] = None,
-            **kwargs,
+        self,
+        data: List[Dict],
+        transform: Union[Sequence[Callable], Callable],
+        num_classes: Optional[int] = None,
+        **kwargs,
     ):
         if issubclass(MultimodalDataset, CacheDataset):
             super().__init__(data, transform, **kwargs)

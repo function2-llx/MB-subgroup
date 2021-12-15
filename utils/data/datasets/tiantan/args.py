@@ -9,7 +9,6 @@ class MBArgs:
     img_dir: Path = field(default=None)
     seg_dir: Path = field(default=None)
     segs: List[str] = field(default_factory=list)
-    protocols: List[Union[str, ScanProtocol]] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
     subgroups: List[str] = field(default=None)
 
     def __post_init__(self):
