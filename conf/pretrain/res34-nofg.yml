@@ -9,4 +9,4 @@ aug:
   - flip
   - crop
 output_dir: output/pretrain/res34
-input_fg_mask: true
+input_fg_mask: false

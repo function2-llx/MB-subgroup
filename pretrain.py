@@ -33,7 +33,12 @@ class Pretrainer(RunnerBase):
         self.args = args
 
         assert args.model == 'resnet'
-        self.model = generate_model(args, pretrain=False, num_seg=3).to(self.args.device)
+        self.model = generate_model(
+            args,
+            pretrain=False,
+            in_channels=args.in_channels,
+            num_seg=3,
+        ).to(self.args.device)
 
     @classmethod
     def get_train_transforms(cls, args: PretrainArgs) -> List[monai.transforms.Transform]:
@@ -45,7 +50,8 @@ class Pretrainer(RunnerBase):
         def loader(data):
             data = dict(data)
             data_path = data.pop('data')
-            return {**data, **np.load(data_path)}
+            data = {**data, **np.load(data_path)}
+            return data
 
         ret: List[monai.transforms.Transform] = [
             monai.transforms.Lambda(loader),

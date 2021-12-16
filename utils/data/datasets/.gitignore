@@ -1,4 +1,4 @@
 # no slash at end, it might be a softlink
 */origin
-*/processed*
+*/*processed*
 *.xlsx

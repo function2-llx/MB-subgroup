@@ -6,7 +6,7 @@ import numpy as np
 
 from utils.args import DataTrainingArgs
 
-data_dir = Path(__file__).parent / 'processed'
+data_dir = Path(__file__).parent / 'preprocessed'
 
 # def load_subject(subject):
 #     subject, info = subject

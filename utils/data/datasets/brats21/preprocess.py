@@ -21,15 +21,17 @@ def parse_modality(modality):
         'seg': 'seg',
     }[modality]
 
+output_dir = Path('preprocessed')
+
 def load_subject(subject: str):
     subject_path = Path('origin') / subject
-    output_dir = Path('processed') / subject
-    output_dir.mkdir(parents=True, exist_ok=True)
+    subject_output_dir = output_dir / subject
+    subject_output_dir.mkdir(parents=True, exist_ok=True)
     data = loader({
         parse_modality(modality): str(subject_path / f'{subject}_{modality}.nii.gz')
         for modality in ['t1', 't1ce', 't2', 'seg']
     })
-    np.savez(output_dir / 'data.npz', **data)
+    np.savez(subject_output_dir / 'data.npz', **data)
     subject_info = {'MGMT': -100}
     if subject[-5:] in labels.index:
         subject_info['MGMT'] = int(labels.loc[subject[-5:], 'MGMT_value'])
@@ -65,8 +67,8 @@ def main():
             process_map(load_subject, subjects, ncols=80, max_workers=16),
         )
     }
-    json.dump(subjects, open('processed/subjects.json', 'w'), indent=4, ensure_ascii=False)
-    pd.DataFrame(subjects).transpose().to_excel('processed/subjects.xlsx')
+    json.dump(subjects, open(output_dir / 'subjects.json', 'w'), indent=4, ensure_ascii=False)
+    pd.DataFrame(subjects).transpose().to_excel(output_dir / 'subjects.xlsx')
 
 if __name__ == "__main__":
     main()

@@ -18,9 +18,16 @@ class DataTrainingArgs:
     aug: List[str] = field(default=None)
     subjects: int = field(default=None)
     protocols: List[Union[str, ScanProtocol]] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
-    input_fg_mask: bool = field(default=False)
+    input_fg_mask: bool = field(default=True)
     use_focal: bool = field(default=False)
     do_ensemble: bool = field(default=False)
+
+    @property
+    def in_channels(self) -> int:
+        ret = len(self.protocols)
+        if self.input_fg_mask:
+            ret += 1
+        return ret
 
 @dataclass
 class ModelArgs:

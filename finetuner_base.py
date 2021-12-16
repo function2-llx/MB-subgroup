@@ -29,10 +29,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
 
     @property
     def in_channels(self) -> int:
-        ret = len(self.protocols) + len(self.seg_inputs)
-        if self.input_fg_mask:
-            ret += 1
-        return ret
+        return super().in_channels + len(self.seg_inputs)
 
     def __post_init__(self):
         self.save_strategy = IntervalStrategy.EPOCH.value
