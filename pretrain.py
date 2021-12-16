@@ -71,11 +71,11 @@ class Pretrainer(RunnerBase):
             ))
         if 'noise' in args.aug:
             ret.extend([
-                monai.transforms.RandScaleIntensityD(args.protocols, factors=0.1, prob=1),
-                monai.transforms.RandShiftIntensityD(args.protocols, offsets=0.1, prob=1),
+                monai.transforms.RandScaleIntensityD('img', factors=0.1, prob=1),
+                monai.transforms.RandShiftIntensityD('img', offsets=0.1, prob=1),
             ])
         if 'blur' in args.aug:
-            ret.append(monai.transforms.RandGaussianSmoothD(args.protocols, prob=0.5))
+            ret.append(monai.transforms.RandGaussianSmoothD('img', prob=0.5))
 
         ret.extend([
             monai.transforms.ResizeD('img', spatial_size=(args.sample_size, args.sample_size, -1)),
