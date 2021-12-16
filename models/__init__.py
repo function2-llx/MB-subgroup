@@ -144,7 +144,7 @@ def generate_model(
         # pretrain loading wrapper
         # if args.rank == 0:
         logging.info(f'load pre-trained weights from {args.model_name_or_path}')
-        pretrained_state_dict: OrderedDict[str, Tensor] = torch.load(args.model_name_or_path)['state_dict']
+        pretrained_state_dict: OrderedDict[str, Tensor] = torch.load(args.model_name_or_path)['model']
         skip_keys = ['fc']
         update_state_dict = OrderedDict({
             key: weight for key, weight in pretrained_state_dict.items()
