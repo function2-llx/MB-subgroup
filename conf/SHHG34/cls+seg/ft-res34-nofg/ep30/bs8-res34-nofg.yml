@@ -24,9 +24,10 @@ aug:
 #  - blur
 img_dir: utils/data/datasets/tiantan/preprocessed
 seg_dir: utils/data/datasets/tiantan/preprocessed
-output_dir: output/SHHG34/seg/bs8-res34-focal
-cls_factor: 0
+output_dir: output/SHHG34/cls+seg/ft-res34-nofg/ep30/bs8-res34-nofg
+cls_factor: 0.1
 seg_factor: 1
-input_fg_mask: true
+input_fg_mask: false
 seg_inputs: []
-use_focal: true
+model_name_or_path: output/pretrain/res34-nofg/checkpoint-ep30.pth.tar
+num_pretrain_seg: 3

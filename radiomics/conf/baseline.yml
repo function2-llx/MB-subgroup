@@ -1,0 +1,5 @@
+img_dir: ../utils/data/datasets/tiantan/preprocessed
+seg_dir: ../utils/data/datasets/tiantan/preprocessed
+protocol: T2
+seg: AT
+output_dir: output/baseline

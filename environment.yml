@@ -21,7 +21,8 @@ dependencies:
 
   - pydicom=2.2.2
   - nibabel=3.2.1
-  - SimpleITK::SimpleITK=2.1.1
+  # work around for: https://github.com/SimpleITK/SimpleITK/issues/1433, waiting for ITK 5.3
+  - SimpleITK::SimpleITK=2.0.2
 
   - pip=21.3.1
   - pip:

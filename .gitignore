@@ -132,7 +132,6 @@ dmypy.json
 .idea/
 runs*/
 *.zip
-output/
 plot/
 report/
 examples/
