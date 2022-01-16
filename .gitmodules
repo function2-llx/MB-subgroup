@@ -3,7 +3,7 @@
 	url = git@github.com:MIC-DKFZ/nnUNet.git
 [submodule "third-party/MONAI"]
 	path = third-party/MONAI
-	url = git@github.com:Project-MONAI/MONAI.git
+	url = git@github.com:function2-llx/MONAI.git
 [submodule "third-party/HD-BET"]
 	path = third-party/HD-BET
 	url = git@github.com:MIC-DKFZ/HD-BET.git
