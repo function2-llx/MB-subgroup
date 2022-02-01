@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Union, Tuple, Optional
+from collections.abc import Sequence
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+
 from monai.networks.blocks.convolutions import Convolution, ResidualUnit
 from monai.networks.layers.factories import Act, Norm
 from monai.utils import SkipMode
-from monai.networks.nets import UNet
 
 from . import Backbone
 
@@ -52,7 +53,7 @@ class DoubleSkipConnection(nn.Module):
         self.dim = dim
         self.mode = SkipMode(mode).value
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden, y = self.submodule(x)
         y = {
             'cat': lambda: torch.cat([x, y], dim=self.dim),
