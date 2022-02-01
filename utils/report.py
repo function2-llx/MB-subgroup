@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import *
 
 import numpy as np
 import pandas as pd
@@ -11,7 +10,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import classification_report, roc_curve, auc, confusion_matrix
 
 class Reporter:
-    def __init__(self, report_dir, target_names: List[str], seg_names: List[str] = None):
+    def __init__(self, report_dir, target_names: list[str], seg_names: list[str] = None):
         self.report_dir = Path(report_dir)
         self.target_names = target_names
         self.seg_names = seg_names
@@ -87,7 +86,7 @@ class Reporter:
             },
         }).transpose().to_csv(self.report_dir / 'meandice.csv')
 
-    def digest(self, metric_names: List[str] = None):
+    def digest(self, metric_names: list[str] = None):
         if metric_names is None:
             metric_names = ['precision', 'recall', 'auc']
         y_true = np.array(self.y_true)
@@ -106,7 +105,7 @@ class Reporter:
             },
         }
 
-    def get_report(self, y_pred, y_true) -> Dict[str, Dict]:
+    def get_report(self, y_pred, y_true) -> dict[str, dict]:
         report = classification_report(y_true, y_pred, target_names=self.target_names, output_dict=True, zero_division=0)
         all_auc = self.get_auc()
         for i, target_name in enumerate(self.target_names):
@@ -131,7 +130,7 @@ class Reporter:
         self.y_score.append(np.eye(len(self.target_names))[pred])
 
 class Reported2d(Reporter):
-    def __init__(self, report_dir, target_names: List[str]):
+    def __init__(self, report_dir, target_names: list[str]):
         super().__init__(self, report_dir, target_names)
         self.patients = {}
 

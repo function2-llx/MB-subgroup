@@ -1,71 +1,32 @@
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-import ctypes
+from dataclasses import dataclass
 import os
 
-
-
-from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from utils.gpu_affinity import set_affinity
-from utils.logger import LoggingCallback
-from utils.utils import make_empty_dir, set_cuda_devices, verify_ckpt_path
 
-from utils.args import get_main_args
+from cls_unet import ClsUNet, ClsUNetArgs
+from utils.argparse import ArgParser
+from utils.args import TrainingArgs
+from utils.data import KFoldDataModule
+from utils.data.datasets.tiantan.load import load_cohort
 
-from cls_unet import ClsUNet
+@dataclass
+class Args(ClsUNetArgs, TrainingArgs):
+    pass
 
 def main():
-    args = get_main_args()
+    parser = ArgParser((Args, ))
+    args: Args = parser.parse_args_into_dataclasses()[0]
 
-    if args.affinity != "disabled":
-        set_affinity(int(os.getenv("LOCAL_RANK", "0")), args.gpus, mode=args.affinity)
+    load_cohort
 
-    # Limit number of CPU threads
-    os.environ["OMP_NUM_THREADS"] = "1"
-    # Set device limit on the current device cudaLimitMaxL2FetchGranularity = 0x05
-    _libcudart = ctypes.CDLL("libcudart.so")
-    pValue = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
-    _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
-    _libcudart.cudaDeviceGetLimit(pValue, ctypes.c_int(0x05))
-    assert pValue.contents.value == 128
-
-    set_cuda_devices(args)
-    seed_everything(args.seed)
-    data_module = DataModule(args)
-    data_module.prepare_data()
-    data_module.setup()
-    ckpt_path = verify_ckpt_path(args)
+    trainer = Trainer.from_argparse_args(args)
+    model = ClsUNet(args)
+    data_module = KFoldDataModule(args, )
 
     callbacks = None
     model_ckpt = None
-    if args.benchmark:
-        model = NNUnet(args)
-        batch_size = args.batch_size if args.exec_mode == "train" else args.val_batch_size
-        filnename = args.logname if args.logname is not None else "perf1.json"
-        callbacks = [
-            LoggingCallback(
-                log_dir=args.results,
-                filnename=filnename,
-                global_batch_size=batch_size * args.gpus,
-                mode=args.exec_mode,
-                warmup=args.warmup,
-                dim=args.dim,
-            )
-        ]
-    elif args.exec_mode == "train":
+    if args.exec_mode == "train":
         model = NNUnet(args)
         early_stopping = EarlyStopping(monitor="dice_mean", patience=args.patience, verbose=True, mode="max")
         callbacks = [early_stopping]
@@ -81,13 +42,10 @@ def main():
             model = NNUnet(args)
 
     trainer = Trainer(
-        logger=False,
-        gpus=args.gpus,
         precision=16 if args.amp else 32,
         benchmark=True,
         deterministic=False,
-        min_epochs=args.epochs,
-        max_epochs=args.epochs,
+        max_epochs=int(args.num_train_epochs),
         sync_batchnorm=args.sync_batchnorm,
         gradient_clip_val=args.gradient_clip_val,
         callbacks=callbacks,

@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 import random
 import shutil
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional
 
 import monai.transforms
 import numpy as np
@@ -24,7 +26,7 @@ from tqdm import tqdm
 from finetuner_base import FinetunerBase, FinetuneArgs
 from models import generate_model, Backbone
 from models.segresnet import SegResNetOutput
-from utils.args import ArgumentParser
+from utils.argparse import ArgParser
 from utils.data import MultimodalDataset
 from utils.dicom_utils import ScanProtocol
 from utils.report import Reporter
@@ -187,7 +189,7 @@ class Finetuner(FinetunerBase):
 
     def run_eval(
         self,
-        models: Union[Backbone, List[Backbone]],
+        models: Backbone | list[Backbone],
         eval_dataset: MultimodalDataset,
         reporter: Optional[Reporter] = None,
         plot_num=0,
@@ -232,7 +234,7 @@ class Finetuner(FinetunerBase):
                 img = data['img'].to(self.args.device)
                 cls_label = data['label'].to(self.args.device)
                 seg_ref: torch.LongTensor = data['seg'].to(self.args.device)
-                outputs: List[SegResNetOutput] = [model.forward(img, permute=True) for model in models]
+                outputs: list[SegResNetOutput] = [model.forward(img, permute=True) for model in models]
                 cls_prob = cls_post_trans(torch.stack([
                     torch.softmax(output.cls_logit[0], dim=0) for output in outputs
                 ]))[None]
@@ -269,11 +271,11 @@ class Finetuner(FinetunerBase):
                         if seg_t is None or seg_t not in self.args.segs:
                             continue
                         seg_id = self.args.segs.index(seg_t)
-                        from matplotlib.colors import ListedColormap
+                        from matplotlib.colors import listedColormap
                         cur_seg_ref = seg_ref[0, seg_id, :, :, idx].cpu().numpy()
                         cur_seg_pred = seg_pred[0, seg_id, :, :, idx].int().cpu().numpy()
-                        ax[protocol].imshow(np.rot90(cur_seg_pred), vmin=0, vmax=1, cmap=ListedColormap(['none', 'red']), alpha=0.5)
-                        ax[protocol].imshow(np.rot90(cur_seg_ref), vmin=0, vmax=1, cmap=ListedColormap(['none', 'green']), alpha=0.5)
+                        ax[protocol].imshow(np.rot90(cur_seg_pred), vmin=0, vmax=1, cmap=listedColormap(['none', 'red']), alpha=0.5)
+                        ax[protocol].imshow(np.rot90(cur_seg_ref), vmin=0, vmax=1, cmap=listedColormap(['none', 'green']), alpha=0.5)
                     fig.savefig(patient_plot_dir / 'plot.pdf', dpi=300)
                     plt.show()
                     plt.close()
@@ -309,7 +311,7 @@ class Finetuner(FinetunerBase):
 def main():
     from utils.data.datasets.tiantan.load import load_cohort
     # conf = get_conf()
-    parser = ArgumentParser([FinetuneArgs])
+    parser = ArgParser([FinetuneArgs])
     args, = parser.parse_args_into_dataclasses()
     args: FinetuneArgs
     cohort_folds = load_cohort(args, split_folds=True)

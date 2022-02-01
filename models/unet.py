@@ -9,6 +9,7 @@ import torch.nn as nn
 from monai.networks.blocks.convolutions import Convolution, ResidualUnit
 from monai.networks.layers.factories import Act, Norm
 from monai.utils import SkipMode
+from monai.networks.nets import UNet
 
 from . import Backbone
 

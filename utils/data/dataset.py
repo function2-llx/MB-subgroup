@@ -1,14 +1,17 @@
-from typing import List, Dict, Optional, Union, Sequence, Callable
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Optional
 
 import torch
-from monai.data import CacheDataset, Dataset
-from monai.transforms import Transform
+
+from monai.data import CacheDataset
 
 class MultimodalDataset(CacheDataset):
     def __init__(
         self,
-        data: List[Dict],
-        transform: Union[Sequence[Callable], Callable],
+        data: list[dict],
+        transform: Sequence[Callable] | Callable,
         num_classes: Optional[int] = None,
         **kwargs,
     ):

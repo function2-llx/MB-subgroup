@@ -1,7 +1,7 @@
 from argparse import Namespace
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List
 
 import monai
 import numpy as np
@@ -17,7 +17,8 @@ from transformers import TrainingArguments, IntervalStrategy
 
 from models import generate_model
 from runner_base import RunnerBase
-from utils.args import ArgumentParser, DataTrainingArgs, ModelArgs
+from utils.args import DataTrainingArgs, ModelArgs
+from utils.argparse import ArgParser
 from utils.data import MultimodalDataset
 from utils.transforms import CreateForegroundMaskD, RandSampleSlicesD
 
@@ -41,7 +42,7 @@ class Pretrainer(RunnerBase):
         ).to(self.args.device)
 
     @classmethod
-    def get_train_transforms(cls, args: PretrainArgs) -> List[monai.transforms.Transform]:
+    def get_train_transforms(cls, args: PretrainArgs) -> list[monai.transforms.Transform]:
         all_keys = ['img', 'seg', 'fg_mask']
         img_keys = ['img']
         if args.input_fg_mask:
@@ -53,7 +54,7 @@ class Pretrainer(RunnerBase):
             data = {**data, **np.load(data_path)}
             return data
 
-        ret: List[monai.transforms.Transform] = [
+        ret: list[monai.transforms.Transform] = [
             monai.transforms.Lambda(loader),
             CreateForegroundMaskD('img', 'fg_mask'),
             monai.transforms.NormalizeIntensityD('img', channel_wise=True, nonzero=args.input_fg_mask),
@@ -166,7 +167,7 @@ def get_loader(dataset) -> Callable[[Namespace], MultimodalDataset]:
     return loader
 
 def main():
-    parser = ArgumentParser([PretrainArgs])
+    parser = ArgParser([PretrainArgs])
     args, = parser.parse_args_into_dataclasses()
     trainer = Pretrainer(args)
     trainer.train()

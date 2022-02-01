@@ -1,13 +1,14 @@
 import logging
 from collections import OrderedDict
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import Tensor, nn
 from transformers import TrainingArguments
 
+from utils import Intersection
 from utils.args import ModelArgs, DataTrainingArgs
-from . import resnet, resnet2p1d, wide_resnet, resnext, pre_act_resnet, densenet
+from . import resnet
 from .backbone import Backbone
 from .segresnet import SegResNet
 from .unet import UNet
@@ -40,7 +41,7 @@ def get_fine_tuning_parameters(model, ft_begin_module):
     return parameters
 
 def generate_model(
-    args: Union[ModelArgs, TrainingArguments, DataTrainingArgs],
+    args: Intersection[ModelArgs, TrainingArguments, DataTrainingArgs],
     pretrain: bool = True,
     in_channels: int = 3,
     num_classes=None,

@@ -1,49 +1,57 @@
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
-from typing import Tuple, List
+from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
-import torch
-import torch.nn as nn
-from data_loading.data_module import get_data_path, get_test_fnames
 from scipy.special import expit, softmax
 from skimage.transform import resize
-from utils.logger import DLLogger
-from utils.utils import get_config_file, print0
+import torch
+import torch.nn as nn
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import DynUNet
 from monai.optimizers.lr_scheduler import WarmupCosineSchedule
-
+from utils import Intersection
 from .args import ClsUNetArgs
 
+def get_params(
+    patch_size: tuple[int, ...],
+    spacing: tuple[float, ...],
+    min_fmap: int,
+    depth: Optional[int] = None,
+) -> tuple[list[tuple[int, ...]], list[tuple[int, ...]], tuple[float, ...]]:
+    strides, kernels, sizes = [], [], patch_size[:]
+    while True:
+        spacing_ratio = [s / min(spacing) for s in spacing]
+        stride = tuple(
+            2 if ratio <= 2 and size >= 2 * min_fmap else 1 for (ratio, size) in zip(spacing_ratio, sizes)
+        )
+        kernel = tuple(3 if ratio <= 2 else 1 for ratio in spacing_ratio)
+        if all(s == 1 for s in stride):
+            break
+        sizes = [i / j for i, j in zip(sizes, stride)]
+        spacing = [i * j for i, j in zip(spacing, stride)]
+        kernels.append(kernel)
+        strides.append(stride)
+        if depth is not None and len(strides) == depth:
+            break
+    strides.insert(0, len(spacing) * (1,))
+    kernels.append(len(spacing) * (3,))
+    return kernels, strides, tuple(sizes)
+
 class ClsUNet(pl.LightningModule):
-    def __init__(self, args: ClsUNetArgs, data_dir=None):
+    def __init__(self, args: Intersection[ClsUNetArgs], data_dir=None):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
-        if data_dir is not None:
-            self.args.data = data_dir
+        # if data_dir is not None:
+        #     self.args.data = data_dir
 
-        kernels, strides = self.get_unet_params()
+        kernels, strides, bottleneck_size = get_params(args.patch_size, args.spacing, args.min_fmap)
 
         self.model = DynUNet(
             self.args.dim,
-            in_channels=args.num_input_modalities,
+            in_channels=args.num_input_channels,
             cls_out_channels=args.num_cls_classes,
             seg_out_channels=args.num_seg_classes,
             kernel_size=kernels,
@@ -52,53 +60,25 @@ class ClsUNet(pl.LightningModule):
             filters=self.args.filters,
             norm_name=("INSTANCE", {"affine": True}),
             act_name=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-            deep_supervision=self.args.deep_supervision,
             deep_supr_num=self.args.deep_supr_num,
             res_block=self.args.res_block,
             trans_bias=True,
         )
-        print0(f"Filters: {self.model.filters},\nKernels: {kernels}\nStrides: {strides}")
 
         if self.args.dim == 2:
             self.tta_flips = [[2], [3], [2, 3]]
         else:
             self.tta_flips = [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
-        # self.dice = Dice(self.n_class, self.args.brats)
-        # if self.args.exec_mode in ["train", "evaluate"] and not self.args.benchmark:
-        #     self.dllogger = DLLogger(args.results)
 
-    def get_unet_params(self) -> Tuple[List[List[int]], List[List[int]]]:
-        # config = get_config_file(self.args)
-        patch_size, spacings = config["patch_size"], config["spacings"]
-        strides, kernels, sizes = [], [], patch_size[:]
-        while True:
-            spacing_ratio = [spacing / min(spacings) for spacing in spacings]
-            stride = [
-                2 if ratio <= 2 and size >= 2 * self.args.min_fmap else 1 for (ratio, size) in zip(spacing_ratio, sizes)
-            ]
-            kernel = [3 if ratio <= 2 else 1 for ratio in spacing_ratio]
-            if all(s == 1 for s in stride):
-                break
-            sizes = [i / j for i, j in zip(sizes, stride)]
-            spacings = [i * j for i, j in zip(spacings, stride)]
-            kernels.append(kernel)
-            strides.append(stride)
-            if len(strides) == self.args.depth:
-                break
-        strides.insert(0, len(spacings) * [1])
-        kernels.append(len(spacings) * [3])
-        return kernels, strides
-        # return config["in_channels"], config["n_class"], kernels, strides, patch_size
+    # def forward(self, img):
+    #     return torch.argmax(self.model(img), 1)
 
-    def forward(self, img):
-        return torch.argmax(self.model(img), 1)
-
-    def _forward(self, img):
-        if self.args.benchmark:
-            if self.args.dim == 2 and self.args.data2d_dim == 3:
-                img = layout_2d(img, None)
-            return self.model(img)
-        return self.tta_inference(img) if self.args.tta else self.do_inference(img)
+    # def _forward(self, img):
+    #     if self.args.benchmark:
+    #         if self.args.dim == 2 and self.args.data2d_dim == 3:
+    #             img = layout_2d(img, None)
+    #         return self.model(img)
+    #     return self.tta_inference(img) if self.args.tta else self.do_inference(img)
 
     def compute_loss(self, preds, label):
         if self.args.deep_supervision:

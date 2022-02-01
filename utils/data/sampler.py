@@ -1,5 +1,6 @@
+from collections.abc import Iterator
 import random
-from typing import Optional, Iterator
+from typing import Optional
 
 from torch.utils.data import Sampler
 from torch.utils.data.sampler import T_co

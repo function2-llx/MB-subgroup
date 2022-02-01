@@ -2,16 +2,16 @@ import logging
 import random
 from abc import ABC
 from pathlib import Path
-from typing import Union
 
 import numpy as np
 import torch
 from transformers import TrainingArguments
 
+from utils import Intersection
 from utils.args import DataTrainingArgs, ModelArgs
 
 class RunnerBase(ABC):
-    def __init__(self, args: Union[TrainingArguments, DataTrainingArgs, ModelArgs]):
+    def __init__(self, args: Intersection[TrainingArguments, DataTrainingArgs, ModelArgs]):
         self.args = args
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)

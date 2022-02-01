@@ -1,15 +1,13 @@
-import itertools
-import logging
 from abc import abstractmethod
 from dataclasses import dataclass, field
+import itertools
+import logging
 from pathlib import Path
-from typing import Tuple, Dict, List
 
-import monai
 import numpy as np
 import torch
-from ruamel.yaml import YAML
-from transformers import TrainingArguments, IntervalStrategy
+from transformers import IntervalStrategy, TrainingArguments
+import monai
 
 from runner_base import RunnerBase
 from utils.args import DataTrainingArgs, ModelArgs
@@ -24,7 +22,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
     patience: int = field(default=5)
     lr_reduce_factor: float = field(default=0.2)
     n_folds: int = None
-    seg_inputs: List[str] = field(default_factory=list)
+    seg_inputs: list[str] = field(default_factory=list)
     n_runs: int = field(default=5)
 
     @property
@@ -45,11 +43,11 @@ class FinetunerBase(RunnerBase):
         self.folds = folds
         # if args.rank == 0:
         logging.info(f"Training/evaluation parameters {args}")
-        self.reporters: Dict[str, Reporter] = {
+        self.reporters: dict[str, Reporter] = {
             test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups, args.segs)
             for test_name in ['cross-val']
         }
-        self.epoch_reporters: Dict[int, Dict[str, Reporter]] = {
+        self.epoch_reporters: dict[int, dict[str, Reporter]] = {
             i: {
                 test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.subgroups, args.segs)
                 for test_name in ['cross-val']
@@ -66,7 +64,7 @@ class FinetunerBase(RunnerBase):
         )
         return val_set
 
-    def prepare_fold(self, val_id: int) -> Tuple[MultimodalDataset, MultimodalDataset]:
+    def prepare_fold(self, val_id: int) -> tuple[MultimodalDataset, MultimodalDataset]:
         train_folds = list(itertools.chain(*[fold for fold_id, fold in enumerate(self.folds) if fold_id != val_id]))
 
         train_set = MultimodalDataset(
@@ -86,9 +84,9 @@ class FinetunerBase(RunnerBase):
             #     reporter.report()
 
     @classmethod
-    def get_train_transforms(cls, args: FinetuneArgs) -> List[monai.transforms.Transform]:
+    def get_train_transforms(cls, args: FinetuneArgs) -> list[monai.transforms.Transform]:
         all_keys = args.protocols + args.segs + ['fg_mask']
-        ret: List[monai.transforms.Transform] = []
+        ret: list[monai.transforms.Transform] = []
 
         if 'flip' in args.aug:
             ret.extend([
@@ -108,7 +106,7 @@ class FinetunerBase(RunnerBase):
         return ret + cls.get_inference_transforms(args)
 
     @classmethod
-    def get_inference_transforms(cls, args: FinetuneArgs) -> List[monai.transforms.Transform]:
+    def get_inference_transforms(cls, args: FinetuneArgs) -> list[monai.transforms.Transform]:
         img_keys = args.protocols + args.seg_inputs
         if args.input_fg_mask:
             img_keys.append('fg_mask')

@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 
 from finetuner_base import FinetuneArgs
-from utils.args import ArgumentParser
+from utils.argparse import ArgParser
 
 def main():
-    args, = ArgumentParser([FinetuneArgs]).parse_args_into_dataclasses()
+    args, = ArgParser([FinetuneArgs]).parse_args_into_dataclasses()
     args: FinetuneArgs
     n_folds = args.n_folds
     folds = [[] for _ in range(n_folds)]

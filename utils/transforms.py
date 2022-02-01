@@ -1,21 +1,22 @@
-from typing import Union, Mapping, Hashable, Sequence, Dict
+from __future__ import annotations
 
-import monai
-import monai.transforms
-import monai.transforms as monai_transforms
+from collections.abc import Hashable, Mapping, Sequence
+
 import numpy as np
 import torch
+
+import monai
 from monai.config import KeysCollection
-from monai.transforms import ToTensor, ToTensord, MapTransform, Transform, RandomizableTransform, RandSpatialCropd
-from monai.transforms.utility.array import PILImageImage
-from monai.utils import fall_back_tuple, Method
+import monai.transforms
+from monai.transforms import MapTransform, RandSpatialCropd, RandomizableTransform, Transform
+from monai.utils import Method, fall_back_tuple
 
 class SampleSlices(Transform):
     def __init__(self, start: int, num_slices: int):
         self.start = start
         self.num_slices = num_slices
 
-    def __call__(self, data: Union[np.ndarray, torch.Tensor]):
+    def __call__(self, data: np.ndarray | torch.Tensor):
         # assert self.end <= data.shape[-1]
         img_slices = data.shape[-1]
         slices = [self.start + i * img_slices // self.num_slices for i in range(self.num_slices)]
@@ -95,12 +96,18 @@ class RandSampleSlicesd(MapTransform, RandomizableTransform):
 RandSampleSlicesD = RandSampleSlicesd
 
 class RandSpatialCropWithRatiod(RandSpatialCropd):
-    def __init__(self, keys: KeysCollection, roi_ratio: Union[Sequence[float], float], random_center: bool = True, random_size: bool = True,
-                 allow_missing_keys: bool = False) -> None:
+    def __init__(
+        self,
+        keys: KeysCollection,
+        roi_ratio: Sequence[float] | float,
+        random_center: bool = True,
+        random_size: bool = True,
+        allow_missing_keys: bool = False,
+    ):
         super().__init__(keys, -1, random_center, random_size, allow_missing_keys)
         self.roi_ratio = roi_ratio
 
-    def randomize(self, img_size: Sequence[int]) -> None:
+    def randomize(self, img_size: Sequence[int]):
         ratios = fall_back_tuple(self.roi_ratio, [1] * len(img_size))
         self.roi_size = [int(size * ratio) for size, ratio in zip(img_size, ratios)]
         super().randomize(img_size)
@@ -130,7 +137,7 @@ class SquareWithPadOrCropD(monai.transforms.MapTransform):
         super().__init__(keys, allow_missing_keys)
         self.squarer = SquareWithPadOrCrop(trans)
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> dict[Hashable, np.ndarray]:
         d = dict(data)
         for key in self.key_iterator(d):
             d[key] = self.squarer(d[key])
@@ -141,7 +148,7 @@ class CreateForegroundMaskD(monai.transforms.MapTransform):
         super().__init__(keys)
         self.mask_key = mask_key
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> dict[Hashable, np.ndarray]:
         d = dict(data)
         d[self.mask_key] = np.logical_or.reduce([d[key] > 0 for key in self.key_iterator(d)]).astype(np.uint8)
         return d

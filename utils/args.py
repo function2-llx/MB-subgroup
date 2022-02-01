@@ -1,23 +1,24 @@
-import json
-from argparse import Namespace
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Union
+from __future__ import annotations
 
-from ruamel.yaml import YAML
-from transformers import HfArgumentParser
+from dataclasses import dataclass, field
+
+import transformers
 
 from utils.dicom_utils import ScanProtocol
 
-yaml = YAML()
+@dataclass
+class TrainingArgs(transformers.TrainingArguments):
+    patience: int = field(default=5)
+    num_folds: int = field(default=3, metadata={'help': 'number of folds for cross-validation'})
+    sync_batchnorm: bool = field(default=False, metadata={'help': 'Enable synchronized batchnorm'})
 
 @dataclass
 class DataTrainingArgs:
     sample_size: int = field(default=None)
     sample_slices: int = field(default=None)
-    aug: List[str] = field(default=None)
+    aug: list[str] = field(default=None)
     subjects: int = field(default=None)
-    protocols: List[Union[str, ScanProtocol]] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
+    protocols: list[str | ScanProtocol] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
     input_fg_mask: bool = field(default=True)
     use_focal: bool = field(default=False)
     do_ensemble: bool = field(default=False)
@@ -42,34 +43,3 @@ class ModelArgs:
     cls_factor: float = None
     seg_factor: float = None
     vae_factor: float = None
-
-class ArgumentParser(HfArgumentParser):
-    def __init__(self, *args, use_conf=True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.use_conf = use_conf
-
-    def parse_args_into_dataclasses(self, **kwargs):
-        from sys import argv
-
-        if not self.use_conf:
-            return super().parse_args_into_dataclasses(**kwargs)
-        conf_path = Path(argv[1])
-        if conf_path.suffix in ['.yml', '.yaml', '.json']:
-            conf = yaml.load(conf_path)
-        else:
-            raise ValueError(f'不支持的参数配置格式：{conf_path.suffix}')
-        args = argv[2:]
-        # 手动修复检查 required 不看 namespace 的问题
-        if 'output_dir' in conf:
-            args = ['--output_dir', conf['output_dir']] + args
-
-        args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        args_dict = vars(args)
-        for k, v in args_dict.items():
-            if isinstance(v, Path):
-                args_dict[k] = str(v)
-        yaml.dump(args_dict, output_dir / 'conf.yml')
-        args = self.parse_dict(args_dict)
-        return args

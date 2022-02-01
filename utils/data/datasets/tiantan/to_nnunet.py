@@ -7,12 +7,12 @@ from nnunet.dataset_conversion.utils import generate_dataset_json
 from nnunet.paths import nnUNet_raw_data
 from tqdm.contrib.concurrent import process_map
 
-from utils.args import ArgumentParser
+from utils.argparse import ArgParser
 from utils.data.datasets.tiantan.args import MBArgs
 from utils.data.datasets.tiantan.load import read_cohort_info
 from utils.dicom_utils import ScanProtocol
 
-args, = ArgumentParser([MBArgs], use_conf=False).parse_args_into_dataclasses()
+args, = ArgParser([MBArgs], use_conf=False).parse_args_into_dataclasses()
 args: MBArgs
 
 task_id = '500'

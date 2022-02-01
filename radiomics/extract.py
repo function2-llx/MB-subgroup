@@ -8,7 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from utils.args import ArgumentParser
+from utils.argparse import ArgParser
 from utils.data.datasets.tiantan.load import read_cohort_info
 from utils.dicom_utils import ScanProtocol
 
@@ -46,7 +46,7 @@ def setup_logging():
 
 def main():
     global args, extractor
-    parser = ArgumentParser([RadiomicsArgs])
+    parser = ArgParser([RadiomicsArgs])
     args, = parser.parse_args_into_dataclasses()
     setup_logging()
     extractor = RadiomicsFeatureExtractor('params/baseline.yml')

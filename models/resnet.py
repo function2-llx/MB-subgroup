@@ -1,5 +1,7 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
 from functools import partial
-from typing import Union, Sequence
 
 import torch
 import torch.nn as nn
@@ -217,7 +219,7 @@ class ResNet(Backbone):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def _get_up_layer(self, in_channels: int, out_channels: int, strides: Union[Sequence[int], int], is_top: bool) -> nn.Module:
+    def _get_up_layer(self, in_channels: int, out_channels: int, strides: Sequence[int] | int, is_top: bool) -> nn.Module:
         """
         Args:
             in_channels: number of input channels.
@@ -251,7 +253,7 @@ class ResNet(Backbone):
                 )
             )
         else:
-            conv: Union[monai_blocks.Convolution, nn.Sequential]
+            conv: monai_blocks.Convolution | nn.Sequential
             conv = monai_blocks.Convolution(
                 3,
                 in_channels,

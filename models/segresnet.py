@@ -8,13 +8,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple, Union
+from __future__ import annotations
 
-import numpy as np
+from dataclasses import dataclass
+from typing import Optional
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from monai.networks.blocks.segresnet_block import ResBlock, get_conv_layer, get_upsample_layer
 from monai.networks.layers.factories import Dropout
@@ -71,14 +71,14 @@ class SegResNet(Backbone):
         in_channels: int = 1,
         out_channels: int = 2,
         dropout_prob: Optional[float] = None,
-        act: Union[Tuple, str] = ("RELU", {"inplace": True}),
-        norm: Union[Tuple, str] = ("GROUP", {"num_groups": 8}),
+        act: tuple | str = ("RELU", {"inplace": True}),
+        norm: tuple | str = ("GROUP", {"num_groups": 8}),
         norm_name: str = "",
         num_groups: int = 8,
         use_conv_final: bool = True,
         blocks_down: tuple = (1, 2, 2, 4),
         blocks_up: tuple = (1, 1, 1),
-        upsample_mode: Union[UpsampleMode, str] = UpsampleMode.DECONV,
+        upsample_mode: UpsampleMode | str = UpsampleMode.DECONV,
         num_classes=None,
     ):
         super().__init__()
@@ -114,7 +114,7 @@ class SegResNet(Backbone):
             self.dropout = Dropout[Dropout.DROPOUT, spatial_dims](dropout_prob)
 
     def _make_down_layers(self):
-        down_layers = nn.ModuleList()
+        down_layers = nn.Modulelist()
         blocks_down, spatial_dims, filters, norm = (self.blocks_down, self.spatial_dims, self.init_filters, self.norm)
         for i in range(len(blocks_down)):
             layer_in_channels = filters * 2 ** i
@@ -130,7 +130,7 @@ class SegResNet(Backbone):
         return down_layers
 
     def _make_up_layers(self):
-        up_layers, up_samples = nn.ModuleList(), nn.ModuleList()
+        up_layers, up_samples = nn.Modulelist(), nn.Modulelist()
         upsample_mode, blocks_up, spatial_dims, filters, norm = (
             self.upsample_mode,
             self.blocks_up,
@@ -163,7 +163,7 @@ class SegResNet(Backbone):
             get_conv_layer(self.spatial_dims, self.init_filters, out_channels, kernel_size=1, bias=True),
         )
 
-    def encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         x = self.convInit(x)
         if self.dropout_prob is not None:
             x = self.dropout(x)
@@ -176,7 +176,7 @@ class SegResNet(Backbone):
 
         return x, down_x
 
-    def decode(self, x: torch.Tensor, down_x: List[torch.Tensor]) -> torch.Tensor:
+    def decode(self, x: torch.Tensor, down_x: list[torch.Tensor]) -> torch.Tensor:
         for i, (up, upl) in enumerate(zip(self.up_samples, self.up_layers)):
             x = up(x) + down_x[i + 1]
             x = upl(x)
