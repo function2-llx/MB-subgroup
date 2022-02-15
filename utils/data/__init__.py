@@ -1,3 +1,3 @@
 from .dataset import MultimodalDataset
 from .sampler import BalancedSampler
-from .module import KFoldDataModule
+from .data_module import KFoldDataModule

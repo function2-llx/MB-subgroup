@@ -57,8 +57,8 @@ class Finetuner(FinetunerBase):
                 self.args,
                 in_channels=self.args.in_channels,
                 pretrain=self.args.model_name_or_path is not None,
-                num_seg=len(self.args.segs),
-                num_classes=len(self.args.subgroups),
+                num_seg=len(self.args.seg_labels),
+                num_classes=len(self.args.cls_labels),
                 num_pretrain_seg=self.args.num_pretrain_seg,
             )
             from torch.optim import AdamW
@@ -159,7 +159,7 @@ class Finetuner(FinetunerBase):
                 ax.plot([metric.cls_loss for metric in val_outputs], label='cls loss')
             if self.args.seg_factor != 0:
                 ax.plot([metric.seg_loss for metric in val_outputs], label='seg loss')
-            for i, seg_name in enumerate(self.args.segs):
+            for i, seg_name in enumerate(self.args.seg_labels):
                 ax.plot([metric.meandice[:, i].mean().item() for metric in val_outputs], label=f'{seg_name} mean DICE')
             ax.legend()
             fig.savefig(fold_output_dir / 'val-loss.pdf')
@@ -173,8 +173,8 @@ class Finetuner(FinetunerBase):
                 self.args,
                 in_channels=self.args.in_channels,
                 pretrain=False,
-                num_seg=len(self.args.segs),
-                num_classes=len(self.args.subgroups),
+                num_seg=len(self.args.seg_labels),
+                num_classes=len(self.args.cls_labels),
                 num_pretrain_seg=self.args.num_pretrain_seg,
             )
             model.load_state_dict(torch.load(best_checkpoint_path)['model'])
@@ -206,7 +206,7 @@ class Finetuner(FinetunerBase):
             # Activations(softmax=True),
             monai.transforms.MeanEnsemble(),
         ])
-        applied_labels = 1 if len(self.args.segs) == 1 else range(len(self.args.segs))
+        applied_labels = 1 if len(self.args.seg_labels) == 1 else range(len(self.args.seg_labels))
         seg_post_trans = monai.transforms.Compose([
             monai.transforms.EnsureType(),
             monai.transforms.Activations(sigmoid=True),
@@ -255,12 +255,12 @@ class Finetuner(FinetunerBase):
                     fig: Figure
                     ax = {
                         protocol: ax[i]
-                        for i, protocol in enumerate(self.args.protocols)
+                        for i, protocol in enumerate(self.args.modalities)
                     }
 
                     # select a slice to plot segmentation result
                     idx = seg_ref[0].sum(dim=(0, 1, 2)).argmax().item()
-                    for protocol in self.args.protocols:
+                    for protocol in self.args.modalities:
                         img = data[protocol][0, 0]
                         # idx = img.shape[2] // 2
                         ax[protocol].imshow(np.rot90(img[:, :, idx]), cmap='gray')
@@ -268,9 +268,9 @@ class Finetuner(FinetunerBase):
                             ScanProtocol.T2: 'AT',
                             ScanProtocol.T1c: 'CT',
                         }.get(protocol, None)
-                        if seg_t is None or seg_t not in self.args.segs:
+                        if seg_t is None or seg_t not in self.args.seg_labels:
                             continue
-                        seg_id = self.args.segs.index(seg_t)
+                        seg_id = self.args.seg_labels.index(seg_t)
                         from matplotlib.colors import listedColormap
                         cur_seg_ref = seg_ref[0, seg_id, :, :, idx].cpu().numpy()
                         cur_seg_pred = seg_pred[0, seg_id, :, :, idx].int().cpu().numpy()
@@ -294,7 +294,7 @@ class Finetuner(FinetunerBase):
                         'AT': ScanProtocol.T2,
                         'CT': ScanProtocol.T1c,
                     }
-                    for i, seg in enumerate(self.args.segs):
+                    for i, seg in enumerate(self.args.seg_labels):
                         cur_seg_pred = seg_pred[0, [seg_id]].int().cpu().numpy()
                         seg_ref_key = seg_ref_keys[seg]
                         saver.save(cur_seg_pred, {
@@ -333,8 +333,8 @@ def main():
                     args,
                     in_channels=args.in_channels,
                     pretrain=False,
-                    num_seg=len(args.segs),
-                    num_classes=len(args.subgroups),
+                    num_seg=len(args.seg_labels),
+                    num_classes=len(args.cls_labels),
                     num_pretrain_seg=args.num_pretrain_seg,
                 )
                 model.load_state_dict(

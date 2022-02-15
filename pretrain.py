@@ -87,7 +87,7 @@ class Pretrainer(RunnerBase):
         ret.extend([
             monai.transforms.ResizeD('img', spatial_size=(args.sample_size, args.sample_size, -1)),
             monai.transforms.ResizeD(
-                ['seg', 'fg_mask'],
+                ['seg', 'fg_ohe'],
                 spatial_size=(args.sample_size, args.sample_size, -1),
                 mode=InterpolateMode.NEAREST,
             ),

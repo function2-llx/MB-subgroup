@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import itertools
 import logging
@@ -33,7 +34,7 @@ class FinetuneArgs(DataTrainingArgs, ModelArgs, MBArgs, TrainingArguments):
         self.save_strategy = IntervalStrategy.EPOCH.value
         super().__post_init__()
         self.folds_file = Path(self.folds_file)
-        assert set(self.seg_inputs).issubset(set(self.segs))
+        assert set(self.seg_inputs).issubset(set(self.seg_labels))
 
 class FinetunerBase(RunnerBase):
     args: FinetuneArgs
@@ -44,12 +45,12 @@ class FinetunerBase(RunnerBase):
         # if args.rank == 0:
         logging.info(f"Training/evaluation parameters {args}")
         self.reporters: dict[str, Reporter] = {
-            test_name: Reporter(Path(args.output_dir) / test_name, args.subgroups, args.segs)
+            test_name: Reporter(Path(args.output_dir) / test_name, args.cls_labels, args.seg_labels)
             for test_name in ['cross-val']
         }
         self.epoch_reporters: dict[int, dict[str, Reporter]] = {
             i: {
-                test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.subgroups, args.segs)
+                test_name: Reporter(Path(args.output_dir) / 'epoch-reports' / f'ep{i}' / test_name, args.cls_labels, args.seg_labels)
                 for test_name in ['cross-val']
             }
             for i in range(int(self.args.num_train_epochs) + 1)
@@ -60,7 +61,7 @@ class FinetunerBase(RunnerBase):
         val_set = MultimodalDataset(
             val_fold,
             monai.transforms.Compose(self.get_inference_transforms(self.args)),
-            len(self.args.subgroups),
+            len(self.args.cls_labels),
         )
         return val_set
 
@@ -70,7 +71,7 @@ class FinetunerBase(RunnerBase):
         train_set = MultimodalDataset(
             train_folds,
             monai.transforms.Compose(FinetunerBase.get_train_transforms(self.args)),
-            len(self.args.subgroups),
+            len(self.args.cls_labels),
         )
         return train_set, self.prepare_val_fold(val_id)
 
@@ -84,9 +85,9 @@ class FinetunerBase(RunnerBase):
             #     reporter.report()
 
     @classmethod
-    def get_train_transforms(cls, args: FinetuneArgs) -> list[monai.transforms.Transform]:
-        all_keys = args.protocols + args.segs + ['fg_mask']
-        ret: list[monai.transforms.Transform] = []
+    def get_train_transforms(cls, args: FinetuneArgs) -> list[Callable]:
+        all_keys = args.modalities + args.seg_labels + ['fg_mask']
+        ret = []
 
         if 'flip' in args.aug:
             ret.extend([
@@ -97,22 +98,22 @@ class FinetunerBase(RunnerBase):
             ])
         if 'noise' in args.aug:
             ret.extend([
-                monai.transforms.RandScaleIntensityD(args.protocols, factors=0.1, prob=1),
-                monai.transforms.RandShiftIntensityD(args.protocols, offsets=0.1, prob=1),
+                monai.transforms.RandScaleIntensityD(args.modalities, factors=0.1, prob=1),
+                monai.transforms.RandShiftIntensityD(args.modalities, offsets=0.1, prob=1),
             ])
         if 'blur' in args.aug:
-            ret.append(monai.transforms.RandGaussianSmoothD(args.protocols, prob=0.5))
+            ret.append(monai.transforms.RandGaussianSmoothD(args.modalities, prob=0.5))
 
         return ret + cls.get_inference_transforms(args)
 
     @classmethod
-    def get_inference_transforms(cls, args: FinetuneArgs) -> list[monai.transforms.Transform]:
-        img_keys = args.protocols + args.seg_inputs
+    def get_inference_transforms(cls, args: FinetuneArgs) -> list[Callable]:
+        img_keys = args.modalities + args.seg_inputs
         if args.input_fg_mask:
             img_keys.append('fg_mask')
         return [
             monai.transforms.ConcatItemsD(img_keys, 'img'),
-            monai.transforms.ConcatItemsD(args.segs, 'seg'),
+            monai.transforms.ConcatItemsD(args.seg_labels, 'seg'),
             monai.transforms.CastToTypeD('img', np.float32),
             monai.transforms.CastToTypeD('seg', np.int),
             monai.transforms.ToTensorD(['img', 'seg', 'label'], device=args.device),

@@ -1,14 +1,20 @@
+from collections.abc import Callable
+from copy import copy
 from dataclasses import dataclass
 import os
 
+import numpy as np
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+
+import monai
+from monai.utils import InterpolateMode
 
 from cls_unet import ClsUNet, ClsUNetArgs
 from utils.argparse import ArgParser
 from utils.args import TrainingArgs
 from utils.data import KFoldDataModule
-from utils.data.datasets.tiantan.load import load_cohort
+from utils.transforms import CreateForegroundMaskD
 
 @dataclass
 class Args(ClsUNetArgs, TrainingArgs):
@@ -17,60 +23,44 @@ class Args(ClsUNetArgs, TrainingArgs):
 def main():
     parser = ArgParser((Args, ))
     args: Args = parser.parse_args_into_dataclasses()[0]
-
-    load_cohort
-
-    trainer = Trainer.from_argparse_args(args)
+    # trainer = Trainer.from_argparse_args(args)
     model = ClsUNet(args)
-    data_module = KFoldDataModule(args, )
+    data_module = KFoldDataModule(args)
+    trainer = Trainer(
+        gpus=args.n_gpu,
+        precision=16 if args.amp else 32,
+        benchmark=True,
+        max_epochs=int(args.num_train_epochs),
+        callbacks=callbacks,
+        num_sanity_val_steps=0,
+        # default_root_dir=args.output_dir,
+        strategy=None,
+    )
+    trainer.early_stopping_callbacks
+    for fold_id in range(args.num_folds):
+        data_module.val_fold_id = fold_id
 
-    callbacks = None
-    model_ckpt = None
-    if args.exec_mode == "train":
+
+
+    callbacks = []
+    checkpoint_callback = None
+    if args.do_train:
         model = NNUnet(args)
-        early_stopping = EarlyStopping(monitor="dice_mean", patience=args.patience, verbose=True, mode="max")
-        callbacks = [early_stopping]
-        if args.save_ckpt:
-            model_ckpt = ModelCheckpoint(
-                filename="{epoch}-{dice_mean:.2f}", monitor="dice_mean", mode="max", save_last=True
-            )
-            callbacks.append(model_ckpt)
+        checkpoint_callback = ModelCheckpoint(
+            filename="{epoch}-{dice_mean:.2f}", monitor="dice_mean", mode="max", save_last=True
+        )
+        checkpoint_callback.last_model_path
+        callbacks.append(checkpoint_callback)
     else:  # Evaluation or inference
         if ckpt_path is not None:
             model = NNUnet.load_from_checkpoint(ckpt_path)
         else:
             model = NNUnet(args)
+    Trainer.from_argparse_args()
 
-    trainer = Trainer(
-        precision=16 if args.amp else 32,
-        benchmark=True,
-        deterministic=False,
-        max_epochs=int(args.num_train_epochs),
-        sync_batchnorm=args.sync_batchnorm,
-        gradient_clip_val=args.gradient_clip_val,
-        callbacks=callbacks,
-        num_sanity_val_steps=0,
-        default_root_dir=args.results,
-        resume_from_checkpoint=ckpt_path,
-        accelerator="ddp" if args.gpus > 1 else None,
-        checkpoint_callback=args.save_ckpt,
-        limit_train_batches=1.0 if args.train_batches == 0 else args.train_batches,
-        limit_val_batches=1.0 if args.test_batches == 0 else args.test_batches,
-        limit_test_batches=1.0 if args.test_batches == 0 else args.test_batches,
-    )
-
-    if args.benchmark:
-        if args.exec_mode == "train":
-            trainer.fit(model, train_dataloader=data_module.train_dataloader())
-        else:
-            # warmup
-            trainer.test(model, test_dataloaders=data_module.test_dataloader())
-            # benchmark run
-            trainer.current_epoch = 1
-            trainer.test(model, test_dataloaders=data_module.test_dataloader())
-    elif args.exec_mode == "train":
+    if args.do_train:
         trainer.fit(model, data_module)
-    elif args.exec_mode == "evaluate":
+    if args.do_eval
         model.args = args
         trainer.test(model, test_dataloaders=data_module.val_dataloader())
     elif args.exec_mode == "predict":

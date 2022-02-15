@@ -87,13 +87,17 @@ def convert(info):
     ])
     saver(data)
 
-cohort = read_cohort_info(args)
-process_map(convert, [info for _, info in cohort.iterrows()])
-generate_dataset_json(
-    output_file=str(target_base / 'dataset.json'),
-    imagesTr_dir=str(target_images_train),
-    imagesTs_dir=None,
-    modalities=tuple(protocol.name for protocol in list(ScanProtocol)),
-    labels={0: 'background', 1: 'AT'},
-    dataset_name=task_name,
-)
+def main():
+    cohort = read_cohort_info(args)
+    process_map(convert, [info for _, info in cohort.iterrows()])
+    generate_dataset_json(
+        output_file=str(target_base / 'dataset.json'),
+        imagesTr_dir=str(target_images_train),
+        imagesTs_dir=None,
+        modalities=tuple(protocol.name for protocol in list(ScanProtocol)),
+        labels={0: 'background', 1: 'AT'},
+        dataset_name=task_name,
+    )
+
+if __name__ == '__main__':
+    main()

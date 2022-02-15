@@ -14,7 +14,7 @@ def main():
     args: FinetuneArgs
     n_folds = args.n_folds
     folds = [[] for _ in range(n_folds)]
-    subgroups = args.subgroups
+    subgroups = args.cls_labels
     random.seed(2333)
     cohort = pd.read_excel('cohort.xlsx')
     # group by subtypes

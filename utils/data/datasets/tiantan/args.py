@@ -8,8 +8,8 @@ from utils.dicom_utils import ScanProtocol
 class MBArgs:
     img_dir: Path = field(default=None)
     seg_dir: Path = field(default=None)
-    segs: List[str] = field(default_factory=list)
-    subgroups: List[str] = field(default=None)
+    cls_labels: List[str] = field(default=None)
+    seg_labels: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         protocol_map = {
