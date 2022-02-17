@@ -9,8 +9,7 @@ dependencies:
   - defaults::cudatoolkit=11.3
   - pytorch::torchvision=0.11.3
 #  - pytorch::ignite=0.4.8
-  - pytorch-lightning=1.5.9
-  - torchmetrics=0.7.1
+  - pytorch-lightning=1.5.10
   - tensorboard=2.8.0
   - transformers=4.16.2
 

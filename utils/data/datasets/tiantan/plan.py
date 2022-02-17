@@ -1,11 +1,9 @@
-from argparse import ArgumentParser
 from pathlib import Path
-from typing import Tuple, List, Union, Optional
 
 import numpy as np
+from tqdm.contrib.concurrent import process_map
 
 import monai
-from tqdm.contrib.concurrent import process_map
 
 from cls_unet.cls_unet import get_params
 from utils.data.datasets.tiantan.load import read_cohort_info

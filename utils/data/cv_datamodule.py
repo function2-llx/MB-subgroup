@@ -11,15 +11,23 @@ from monai.data import DataLoader, Dataset
 from utils import Intersection
 from utils.args import TrainingArgs
 
-class KFoldDataModule(LightningDataModule):
+class CrossValidationDataModule(LightningDataModule):
     def __init__(
         self,
         args: Intersection[TrainingArgs, ClsUNetArgs],
     ):
         super().__init__()
         self.args = args
-        self.val_fold_id = -1
+        self._val_fold_id = -1
         self.folds = self.load_cohort()
+
+    @property
+    def val_fold_id(self) -> int:
+        return self._val_fold_id
+
+    @val_fold_id.setter
+    def val_fold_id(self, value: int):
+        self._val_fold_id = value
 
     def load_cohort(self) -> Sequence[Sequence]:
         cohort = pd.read_excel(self.args.cohort_path).set_index('subject')

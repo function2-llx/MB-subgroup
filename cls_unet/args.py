@@ -2,18 +2,16 @@ from collections.abc import Callable
 from copy import copy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 
-from monai.utils import InterpolateMode
-
 import monai
-from transformers import TrainingArguments
+from monai.utils import InterpolateMode
 
 from utils.transforms import CreateForegroundMaskD
 
-@dataclass(kw_only=True)
+@dataclass
 class ClsUNetArgs:
     """
     arguments related to the model
