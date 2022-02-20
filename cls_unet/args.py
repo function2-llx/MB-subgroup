@@ -8,7 +8,6 @@ import numpy as np
 
 import monai
 from monai.utils import InterpolateMode
-
 from utils.transforms import CreateForegroundMaskD
 
 @dataclass
@@ -18,10 +17,10 @@ class ClsUNetArgs:
     """
     dim: int = field(default=3, metadata={'help': 'UNet spatial dimensions'})
     min_fmap: int = field(default=2, metadata={'help': 'Minimal dimension of feature map in the bottleneck'})
-    pool_type: Literal['max', 'avg'] = field(default='max')
+    pool_type: str = field(default='max', metadata={'help': '', 'choices': ['max', 'avg']})
     pool_fmap: int = field(default=2, metadata={'help': 'feature map size after pooling for classification'})
 
-    sample_size: int = field(default=302, metadata={'help': 'image size of single slice'})
+    sample_size: int = field(default=256, metadata={'help': 'image size of single slice'})
     sample_slices: int = field(default=16, metadata={'help': 'number of slices'})
     spacing: tuple[float, ...] = field(default=None)
 
@@ -35,12 +34,14 @@ class ClsUNetArgs:
     seg_labels: list[str] = field(default=None)
 
     filters: list[int] = field(default=None, metadata={'help': '[Optional] Set U-Net filters'})
-    deep_supr_num: int = field(default=2, metadata={help: "Number of deep supervision heads"})
-    res_block: bool = field(default=True, metadata={'help': "Enable residual blocks"})
+    deep_supr_num: int = field(default=2, metadata={'help': 'Number of deep supervision heads'})
+    res_block: bool = field(default=True, metadata={'help': 'Enable residual blocks'})
 
     data_dir: Path = field(default=None)
 
     def __post_init__(self):
+        # for mro
+        super().__post_init__()
         self.spacing = tuple(self.spacing)
 
     @property

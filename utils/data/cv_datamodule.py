@@ -40,8 +40,8 @@ class CrossValidationDataModule(LightningDataModule):
         train_cohort = cohort[cohort['split'] == 'train']
         skf = StratifiedKFold(n_splits=self.args.num_folds, shuffle=True, random_state=self.args.seed)
         return [
-            train_cohort.loc[val_index, :].to_dict('records')
-            for fold_id, (_, val_index) in skf.split(train_cohort['subject'], train_cohort['cls'])
+            train_cohort.iloc[fold_indices, :].to_dict('records')
+            for fold_id, (_, fold_indices) in enumerate(skf.split(train_cohort.index, train_cohort['cls']))
         ]
 
     def train_dataloader(self) -> TRAIN_DATALOADERS:

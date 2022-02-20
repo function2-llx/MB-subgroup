@@ -1,0 +1,17 @@
+sample_size: 302
+sample_slices: 16
+spacing: [0.46875, 0.46875197, 6.4999924]
+modalities:
+  - T1
+  - T1c
+  - T2
+cls_labels:
+  - SHH
+  - G3
+  - G4
+seg_labels:
+  - AT
+  - CT
+cohort_path: utils/data/datasets/tiantan/cohort.xlsx
+img_dir: utils/data/datasets/tiantan/preprocessed
+seg_dir: utils/data/datasets/tiantan/preprocessed

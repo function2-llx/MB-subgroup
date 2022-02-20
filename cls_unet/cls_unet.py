@@ -7,11 +7,14 @@ from scipy.special import expit, softmax
 from skimage.transform import resize
 import torch
 import torch.nn as nn
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import DynUNet
-from monai.optimizers.lr_scheduler import WarmupCosineSchedule
+from monai.optimizers import WarmupCosineSchedule
 from utils import Intersection
+from utils.args import TrainingArgs
 from .args import ClsUNetArgs
 
 def get_params(
@@ -40,7 +43,7 @@ def get_params(
     return kernels, strides, tuple(sizes)
 
 class ClsUNet(pl.LightningModule):
-    def __init__(self, args: Intersection[ClsUNetArgs], data_dir=None):
+    def __init__(self, args: Intersection[ClsUNetArgs, TrainingArgs], data_dir=None):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
@@ -81,13 +84,13 @@ class ClsUNet(pl.LightningModule):
     #     return self.tta_inference(img) if self.args.tta else self.do_inference(img)
 
     def compute_loss(self, preds, label):
-        if self.args.deep_supervision:
-            loss, weights = 0.0, 0.0
-            for i in range(preds.shape[1]):
-                loss += self.loss(preds[:, i], label) * 0.5 ** i
-                weights += 0.5 ** i
-            return loss / weights
-        return self.loss(preds, label)
+        # if self.args.deep_supr_num:
+        loss, weights = 0.0, 0.0
+        for i in range(preds.shape[1]):
+            loss += self.loss(preds[:, i], label) * 0.5 ** i
+            weights += 0.5 ** i
+        return loss / weights
+        # return self.loss(preds, label)
 
     def training_step(self, batch, batch_idx):
         img, lbl = self.get_train_data(batch)
@@ -209,23 +212,21 @@ class ClsUNet(pl.LightningModule):
             self.eval_dice, _ = self.dice.compute()
 
     def configure_optimizers(self):
-        optimizer = {
-            "sgd": FusedSGD(self.parameters(), lr=self.learning_rate, momentum=self.args.momentum),
-            "adam": FusedAdam(self.parameters(), lr=self.learning_rate, weight_decay=self.args.weight_decay),
-        }[self.args.optimizer.lower()]
-
-        if self.args.scheduler:
-            scheduler = {
-                "scheduler": WarmupCosineSchedule(
-                    optimizer=optimizer,
-                    warmup_steps=250,
-                    t_total=self.args.epochs * len(self.trainer.datamodule.train_dataloader()),
-                ),
-                "interval": "step",
-                "frequency": 1,
-            }
-            return {"optimizer": optimizer, "monitor": "val_loss", "lr_scheduler": scheduler}
-        return {"optimizer": optimizer, "monitor": "val_loss"}
+        optimizer = AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        return {
+            'optimizer': optimizer,
+            'monitor': 'val_loss',
+            'lr_scheduler': ReduceLROnPlateau(optimizer, patience=self.args.patience, verbose=True),
+            # 'lr_scheduler': {
+            #     "scheduler": WarmupCosineSchedule(
+            #         optimizer=optimizer,
+            #         warmup_steps=250,
+            #         t_total=self.args.train_epochs * len(self.trainer.datamodule.train_dataloader()),
+            #     ),
+            #     "interval": "step",
+            #     "frequency": 1,
+            # }
+        }
 
     def save_mask(self, pred):
         if self.test_idx == 0:

@@ -11,7 +11,8 @@ from utils.data import CrossValidationDataModule
 
 @dataclass
 class Args(ClsUNetArgs, TrainingArgs):
-    pass
+    def __post_init__(self):
+        super().__post_init__()
 
 def get_cv_trainer(args: Args) -> pl.Trainer:
     trainer = pl.Trainer(
@@ -32,36 +33,13 @@ def get_cv_trainer(args: Args) -> pl.Trainer:
     return trainer
 
 def main():
-    parser = ArgParser((Args, ))
+    parser = ArgParser((Args, ), exit_on_error=False)
     args: Args = parser.parse_args_into_dataclasses()[0]
     # trainer = Trainer.from_argparse_args(args)
     model = ClsUNet(args)
     trainer = get_cv_trainer(args)
-    data_module = CrossValidationDataModule(args)
-
-    trainer.fit(model, data_module)
-
-    callbacks = []
-    checkpoint_callback = None
-    if args.do_train:
-        model = NNUnet(args)
-        checkpoint_callback = ModelCheckpoint(
-            filename="{epoch}-{dice_mean:.2f}", monitor="dice_mean", mode="max", save_last=True
-        )
-        checkpoint_callback.last_model_path
-        callbacks.append(checkpoint_callback)
-    else:  # Evaluation or inference
-        if ckpt_path is not None:
-            model = NNUnet.load_from_checkpoint(ckpt_path)
-        else:
-            model = NNUnet(args)
-    trainer.fit_loop.epoch_loop.batch_loop.optimizer_loop
-    if args.do_train:
-        trainer.fit(model, data_module)
-    if args.do_eval:
-        model.args = args
-        trainer.validate()
-        trainer.test(model, test_dataloaders=data_module.val_dataloader())
+    datamodule = CrossValidationDataModule(args)
+    trainer.fit(model, datamodule=datamodule)
 
 if __name__ == "__main__":
     main()

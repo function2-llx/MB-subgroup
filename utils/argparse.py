@@ -1,8 +1,10 @@
 from argparse import Namespace
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, Optional
 
-from transformers import HfArgumentParser
 from ruamel.yaml import YAML
+from transformers import HfArgumentParser
 
 yaml = YAML()
 
@@ -11,29 +13,65 @@ class ArgParser(HfArgumentParser):
         super().__init__(*args, **kwargs)
         self.use_conf = use_conf
 
+    @staticmethod
+    def _save_args_as_conf(args: Namespace, save_path: Path):
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        args_dict = vars(args)
+        for k, v in args_dict.items():
+            if isinstance(v, Path):
+                args_dict[k] = str(v)
+        yaml.dump(args_dict, save_path)
+
     def parse_args_into_dataclasses(self, **kwargs):
         from sys import argv
 
         if not self.use_conf:
             return super().parse_args_into_dataclasses(**kwargs)
-        conf_path = Path(argv[1])
+        conf_path = Path(argv[1]).resolve()
         if conf_path.suffix in ['.yml', '.yaml', '.json']:
-            conf = yaml.load(conf_path)
+            conf: dict = yaml.load(conf_path)
         else:
             raise ValueError(f'format not supported for conf: {conf_path.suffix}')
-        args = argv[2:]
-        # manually fix problem that error is raised when required arguments are not found in command line
-        # even if they already present in the `namespace` object
-        if 'output_dir' in conf:
-            args = ['--output_dir', conf['output_dir']] + args
 
-        args, _ = self.parse_known_args(args=args, namespace=Namespace(**conf))
+        def to_cli_options(conf: dict[str, Any]) -> list[str]:
+            ret = []
+            for k, v in conf.items():
+                ret.append(f'--{k}')
+                if isinstance(v, list):
+                    for x in v:
+                        ret.append(str(x))
+                else:
+                    ret.append(str(v))
+            return ret
+
+        argv = to_cli_options(conf) + argv[2:]
+        # argv = argv[2:]
+
+        for action in self._actions:
+            # `output_dir` may be inferred later
+            if action.dest == 'output_dir':
+                action.required = False
+            if hasattr(action.type, '__origin__') and issubclass(getattr(action.type, '__origin__'), Iterable):
+                action.type = action.type.__args__[0]
+                action.nargs = '+'
+
+        args, _ = self.parse_known_args(argv)
+
+        if args.output_dir is None:
+            def infer_output_dir() -> Optional[Path]:
+                if args.output_root is None or args.conf_root is None:
+                    return None
+                conf_root: Path = args.conf_root.resolve()
+                if str(conf_path).startswith(str(conf_root)):
+                    return args.output_root / Path(*conf_path.parts[len(conf_root.parts):])
+                else:
+                    return None
+
+            args.output_dir = infer_output_dir()
+            if args.output_dir is None:
+                raise AttributeError('unable to infer `output_root`')
+
         output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        args_dict = vars(args)
-        for k, v in args_dict.items():
-            if isinstance(v, Path):
-                args_dict[k] = str(v)
-        yaml.dump(args_dict, output_dir / 'conf.yml')
-        args = self.parse_dict(args_dict)
-        return args
+        self._save_args_as_conf(args, output_dir / 'conf.yml')
+        # compatible interface
+        return self.parse_dict(vars(args))

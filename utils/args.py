@@ -1,7 +1,8 @@
-from __future__ import annotations
+# from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Union
 
 import transformers
 
@@ -12,13 +13,20 @@ class TrainingArgs(transformers.TrainingArguments):
     """
     arguments for training & evaluation processes (model-agnostic)
     """
-    patience: int = field(default=5)
-    num_folds: int = field(default=5, metadata={'help': 'number of folds for cross-validation'})
+    patience: int = field(default=5, metadata={'help': ''})
+    num_folds: int = field(default=3, metadata={'help': 'number of folds for cross-validation'})
     amp: bool = field(default=True)
 
     img_dir: Path = field(default=None)
     seg_dir: Path = field(default=None)
-    cohort_path: Path = field(default=None, metadata={'help': 'cohort file path, csv format'})
+    cohort_path: Path = field(default=None, metadata={'help': 'cohort file path, xlsx format'})
+
+    conf_root: Path = field(default=Path('conf'))
+    output_root: Path = field(default=Path('output'), metadata={'help': ''})
+
+    @property
+    def train_epochs(self) -> int:
+        return int(self.num_train_epochs)
 
     def __post_init__(self):
         super().__post_init__()
@@ -32,7 +40,7 @@ class DataTrainingArgs:
     sample_slices: int = field(default=None)
     aug: list[str] = field(default=None)
     subjects: int = field(default=None)
-    modalities: list[str | ScanProtocol] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
+    modalities: list[Union[str, ScanProtocol]] = field(default_factory=lambda: [protocol.name for protocol in list(ScanProtocol)])
     input_fg_mask: bool = field(default=True)
     use_focal: bool = field(default=False)
     do_ensemble: bool = field(default=False)

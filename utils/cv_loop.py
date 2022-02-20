@@ -1,20 +1,20 @@
 # adapt from https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pl_examples/loop_examples/kfold.py
+
 from copy import deepcopy
+from functools import cached_property
 from typing import Any, Optional
 
-import pytorch_lightning as pl
 from pytorch_lightning.loops import FitLoop, Loop
 from pytorch_lightning.trainer.states import TrainerFn
 
 from utils.data import CrossValidationDataModule
 
 class CrossValidationLoop(Loop):
-    def __init__(self, num_folds: int, export_path: str) -> None:
+    def __init__(self, num_folds: int) -> None:
         super().__init__()
 
         self.num_folds = num_folds
         self.val_fold_id: int = 0
-        # self.export_path = export_path
 
         self.fit_loop: Optional[FitLoop] = None
 
@@ -28,27 +28,28 @@ class CrossValidationLoop(Loop):
     def reset(self) -> None:
         """Nothing to reset in this loop."""
 
+    @cached_property
+    def cv_datamodule(self) -> CrossValidationDataModule:
+        datamodule = self.trainer.datamodule
+        assert isinstance(datamodule, CrossValidationDataModule)
+        return datamodule
+
     def on_run_start(self, *args: Any, **kwargs: Any) -> None:
         """Used to call `setup_folds` from the `BaseKFoldDataModule` instance and store the original weights of the
         model."""
-        assert isinstance(self.trainer.datamodule, CrossValidationDataModule)
-        self.trainer.datamodule.load_cohort()
+        # assert isinstance(self.trainer.datamodule, CrossValidationDataModule)
         # self.trainer.datamodule.setup_folds(self.num_folds)
         self.lightning_module_state_dict = deepcopy(self.trainer.lightning_module.state_dict())
 
     def on_advance_start(self, *args: Any, **kwargs: Any) -> None:
         """Used to call `setup_fold_index` from the `BaseKFoldDataModule` instance."""
         print(f"STARTING FOLD {self.val_fold_id}")
-        assert isinstance(self.trainer.datamodule, CrossValidationDataModule)
-        self.trainer.datamodule.val_fold_id = self.val_fold_id
-        self.trainer.checkpoint_callback.dirpath
+        self.cv_datamodule.val_fold_id = self.val_fold_id
 
     def advance(self, *args: Any, **kwargs: Any) -> None:
         """Used to the run a fitting and testing on the current hold."""
         self._reset_fitting()  # requires to reset the tracking stage.
         self.fit_loop.run()
-        self.trainer.checkpoint_callback
-
         self._reset_testing()  # requires to reset the tracking stage.
         self.trainer.test_loop.run()
 
