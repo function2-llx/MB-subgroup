@@ -1,6 +1,7 @@
 # from __future__ import annotations
-
-from dataclasses import dataclass, field
+import dataclasses
+from dataclasses import dataclass, field, fields
+import multiprocessing
 from pathlib import Path
 from typing import Union
 
@@ -13,6 +14,8 @@ class TrainingArgs(transformers.TrainingArguments):
     """
     arguments for training & evaluation processes (model-agnostic)
     """
+    output_dir: Path = field(default=None)
+    dataloader_num_workers: int = field(default=multiprocessing.cpu_count())
     patience: int = field(default=5, metadata={'help': ''})
     num_folds: int = field(default=3, metadata={'help': 'number of folds for cross-validation'})
     amp: bool = field(default=True)

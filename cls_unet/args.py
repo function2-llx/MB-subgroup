@@ -115,7 +115,7 @@ class ClsUNetArgs:
             monai.transforms.ConcatItemsD(self.seg_labels, self.seg_key),
             monai.transforms.CastToTypeD(self.img_key, np.float32),
             monai.transforms.CastToTypeD(self.seg_key, np.int),
-            # monai.transforms.ToTensorD([self.img_key, self.seg_key, self.cls_key]),
+            monai.transforms.SelectItemsD(['img', 'cls', 'seg']),
         ])
 
     @property

@@ -48,9 +48,6 @@ class ArgParser(HfArgumentParser):
         # argv = argv[2:]
 
         for action in self._actions:
-            # `output_dir` may be inferred later
-            if action.dest == 'output_dir':
-                action.required = False
             if hasattr(action.type, '__origin__') and issubclass(getattr(action.type, '__origin__'), Iterable):
                 action.type = action.type.__args__[0]
                 action.nargs = '+'

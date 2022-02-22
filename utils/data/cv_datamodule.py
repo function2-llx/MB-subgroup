@@ -33,9 +33,9 @@ class CrossValidationDataModule(LightningDataModule):
         cohort = pd.read_excel(self.args.cohort_path).set_index('subject')
         for subject in cohort.index:
             for modality in self.args.modalities:
-                cohort.loc[subject, modality] = self.args.img_dir / f'{modality}.nii.gz'
+                cohort.loc[subject, modality] = self.args.img_dir / subject / f'{modality}.nii.gz'
             for seg_label in self.args.seg_labels:
-                cohort.loc[subject, seg_label] = self.args.seg_dir / f'{seg_label}.nii.gz'
+                cohort.loc[subject, seg_label] = self.args.seg_dir / subject / f'{seg_label}.nii.gz'
 
         train_cohort = cohort[cohort['split'] == 'train']
         skf = StratifiedKFold(n_splits=self.args.num_folds, shuffle=True, random_state=self.args.seed)
