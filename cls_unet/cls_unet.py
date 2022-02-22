@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 from typing import Optional
 
@@ -12,27 +13,37 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import DynUNet
-from monai.optimizers import WarmupCosineSchedule
 from utils import Intersection
 from utils.args import TrainingArgs
 from .args import ClsUNetArgs
+
+@dataclass
+class UNetParams:
+    kernels: list[tuple[int, ...]]
+    strides: list[tuple[int, ...]]
+    bottom_fmap_shape: tuple[float, ...]
+    output_paddings: list[tuple[int, ...]]
 
 def get_params(
     patch_size: tuple[int, ...],
     spacing: tuple[float, ...],
     min_fmap: int,
     depth: Optional[int] = None,
-) -> tuple[list[tuple[int, ...]], list[tuple[int, ...]], tuple[float, ...]]:
-    strides, kernels, sizes = [], [], patch_size[:]
+) -> UNetParams:
+    strides, kernels, fmap_shape = [], [], patch_size[:]
     while True:
         spacing_ratio = [s / min(spacing) for s in spacing]
         stride = tuple(
-            2 if ratio <= 2 and size >= 2 * min_fmap else 1 for (ratio, size) in zip(spacing_ratio, sizes)
+            2 if ratio <= 2 and size >= 2 * min_fmap else 1
+            for ratio, size in zip(spacing_ratio, fmap_shape)
         )
-        kernel = tuple(3 if ratio <= 2 else 1 for ratio in spacing_ratio)
         if all(s == 1 for s in stride):
             break
-        sizes = [i / j for i, j in zip(sizes, stride)]
+        kernel = tuple(
+            3 if ratio <= 2 else 1
+            for ratio in spacing_ratio
+        )
+        fmap_shape = ((i - 1) // j + 1 for i, j in zip(fmap_shape, stride))
         spacing = [i * j for i, j in zip(spacing, stride)]
         kernels.append(kernel)
         strides.append(stride)
@@ -40,7 +51,7 @@ def get_params(
             break
     strides.insert(0, len(spacing) * (1,))
     kernels.append(len(spacing) * (3,))
-    return kernels, strides, tuple(sizes)
+    return UNetParams(kernels, strides, fmap_shape, None)
 
 class ClsUNet(pl.LightningModule):
     def __init__(self, args: Intersection[ClsUNetArgs, TrainingArgs], data_dir=None):
@@ -93,8 +104,7 @@ class ClsUNet(pl.LightningModule):
         # return self.loss(preds, label)
 
     def training_step(self, batch, batch_idx):
-        img, lbl = self.get_train_data(batch)
-        pred = self.model(img)
+        cls_out, seg_out = self.model(batch[self.args.img_key])
         loss = self.compute_loss(pred, lbl)
         return loss
 

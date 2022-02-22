@@ -31,6 +31,7 @@ class CrossValidationDataModule(LightningDataModule):
 
     def load_cohort(self) -> Sequence[Sequence]:
         cohort = pd.read_excel(self.args.cohort_path).set_index('subject')
+        cohort = cohort[cohort[self.args.cls_key].isin(self.args.cls_labels)]
         for subject in cohort.index:
             for modality in self.args.modalities:
                 cohort.loc[subject, modality] = self.args.img_dir / subject / f'{modality}.nii.gz'

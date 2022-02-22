@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from copy import copy
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 
@@ -43,6 +43,13 @@ class ClsUNetArgs:
         # for mro
         super().__post_init__()
         self.spacing = tuple(self.spacing)
+
+    @cached_property
+    def cls_labels_inv(self) -> dict[str, int]:
+        return {
+            label: i
+            for i, label in enumerate(self.cls_labels)
+        }
 
     @property
     def num_input_channels(self) -> int:
@@ -111,11 +118,12 @@ class ClsUNetArgs:
         if self.input_fg_mask:
             img_keys.append(self.fg_mask_key)
         return monai.transforms.Compose([
-            monai.transforms.ConcatItemsD(img_keys, self.img_key),
-            monai.transforms.ConcatItemsD(self.seg_labels, self.seg_key),
-            monai.transforms.CastToTypeD(self.img_key, np.float32),
-            monai.transforms.CastToTypeD(self.seg_key, np.int),
-            monai.transforms.SelectItemsD(['img', 'cls', 'seg']),
+            monai.transforms.ConcatItemsD(img_keys, name=self.img_key),
+            monai.transforms.ConcatItemsD(self.seg_labels, name=self.seg_key),
+            monai.transforms.CastToTypeD(self.img_key, dtype=np.float32),
+            monai.transforms.CastToTypeD(self.seg_key, dtype=np.int),
+            monai.transforms.LambdaD(self.cls_key, func=lambda label: self.cls_labels_inv[label]),
+            monai.transforms.SelectItemsD([self.img_key, self.cls_key, self.seg_key]),
         ])
 
     @property
