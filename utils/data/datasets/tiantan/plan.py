@@ -14,8 +14,8 @@ loader = monai.transforms.Compose([
 ])
 
 def process_patient(_, info):
-    patient_dir = data_dir / info['name(raw)']
-    data = loader({'T2': patient_dir / info['T2'], 'AT': patient_dir / info['AT']})
+    patient_dir = data_dir / info['subject']
+    data = loader({'T2': patient_dir / 'T2.nii.gz', 'AT': patient_dir / 'AT.nii.gz'})
     spacing = data['T2_meta_dict']['pixdim'][1:4]
     size = data['T2'].shape
     pos = data['AT'].sum(axis=(0, 1)).nonzero()[0][-1]
@@ -31,13 +31,13 @@ def main():
     spacing = np.median(spacings, axis=0)
     size = list(map(int, np.median(sizes, axis=0)))
     size[2] = sample_slices
-    kernels, strides, bn_size = get_params(tuple(size), tuple(spacing), min_fmap=2)
+    params = get_params(tuple(size), tuple(spacing), min_fmap=2)
     print('spacing =', spacing)
     print('size =', size)
-    print('kernels =', kernels)
-    print('strides =', strides)
-    print('depth =', len(kernels) - 1)
-    print('bottleneck size =', bn_size)
+    print('kernels =', params.kernels)
+    print('strides =', params.strides)
+    print('depth =', len(params.kernels) - 1)
+    print('bottleneck size =', params.fmap_shapes[-1])
 
 if __name__ == '__main__':
     main()

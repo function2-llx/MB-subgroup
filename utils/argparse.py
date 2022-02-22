@@ -60,7 +60,7 @@ class ArgParser(HfArgumentParser):
                     return None
                 conf_root: Path = args.conf_root.resolve()
                 if str(conf_path).startswith(str(conf_root)):
-                    return args.output_root / Path(*conf_path.parts[len(conf_root.parts):])
+                    return args.output_root / Path(*conf_path.parts[len(conf_root.parts):-1], conf_path.name)
                 else:
                     return None
 

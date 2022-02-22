@@ -11,6 +11,8 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+import monai.losses
+from monai.losses import DiceFocalLoss
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import DynUNet
 from utils import Intersection
@@ -21,7 +23,7 @@ from .args import ClsUNetArgs
 class UNetParams:
     kernels: list[tuple[int, ...]]
     strides: list[tuple[int, ...]]
-    bottom_fmap_shape: tuple[float, ...]
+    fmap_shapes: list[tuple[int, ...]]
     output_paddings: list[tuple[int, ...]]
 
 def get_params(
@@ -30,7 +32,8 @@ def get_params(
     min_fmap: int,
     depth: Optional[int] = None,
 ) -> UNetParams:
-    strides, kernels, fmap_shape = [], [], patch_size[:]
+    strides, kernels, fmap_shapes, output_paddings = [], [], [], []
+    fmap_shape = patch_size[:]
     while True:
         spacing_ratio = [s / min(spacing) for s in spacing]
         stride = tuple(
@@ -43,34 +46,43 @@ def get_params(
             3 if ratio <= 2 else 1
             for ratio in spacing_ratio
         )
-        fmap_shape = ((i - 1) // j + 1 for i, j in zip(fmap_shape, stride))
+        output_padding = tuple(
+            1 if s == 2 and shape % 2 == 0 else 0
+            for s, shape in zip(stride, fmap_shape)
+        )
+        fmap_shape = tuple(
+            (i - 1) // j + 1
+            for i, j in zip(fmap_shape, stride)
+        )
         spacing = [i * j for i, j in zip(spacing, stride)]
         kernels.append(kernel)
         strides.append(stride)
+        fmap_shapes.append(fmap_shape)
+        output_paddings.append(output_padding)
         if depth is not None and len(strides) == depth:
             break
-    strides.insert(0, len(spacing) * (1,))
-    kernels.append(len(spacing) * (3,))
-    return UNetParams(kernels, strides, fmap_shape, None)
+    strides.insert(0, len(spacing) * (1, ))
+    kernels.append(len(spacing) * (3, ))
+    return UNetParams(kernels, strides, fmap_shapes, output_paddings)
 
 class ClsUNet(pl.LightningModule):
     def __init__(self, args: Intersection[ClsUNetArgs, TrainingArgs], data_dir=None):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
-        # if data_dir is not None:
-        #     self.args.data = data_dir
+        self.cls_loss_fn = nn.CrossEntropyLoss()
+        self.seg_loss_fn = DiceFocalLoss(to_onehot_y=False, sigmoid=True, squared_pred=True)
 
-        kernels, strides, bottleneck_size = get_params(args.patch_size, args.spacing, args.min_fmap)
+        params = get_params(args.patch_size, args.spacing, args.min_fmap)
 
         self.model = DynUNet(
             self.args.dim,
             in_channels=args.num_input_channels,
             cls_out_channels=args.num_cls_classes,
             seg_out_channels=args.num_seg_classes,
-            kernel_size=kernels,
-            strides=strides,
-            upsample_kernel_size=strides[1:],
+            kernel_size=params.kernels,
+            strides=params.strides,
+            output_paddings=params.output_paddings,
             filters=self.args.filters,
             norm_name=("INSTANCE", {"affine": True}),
             act_name=("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
@@ -105,6 +117,7 @@ class ClsUNet(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         cls_out, seg_out = self.model(batch[self.args.img_key])
+
         loss = self.compute_loss(pred, lbl)
         return loss
 
