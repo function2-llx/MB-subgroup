@@ -66,7 +66,7 @@ def get_params(
     return UNetParams(kernels, strides, fmap_shapes, output_paddings)
 
 class ClsUNet(pl.LightningModule):
-    def __init__(self, args: Intersection[ClsUNetArgs, TrainingArgs], data_dir=None):
+    def __init__(self, args: Intersection[ClsUNetArgs, TrainingArgs]):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
@@ -106,29 +106,59 @@ class ClsUNet(pl.LightningModule):
     #         return self.model(img)
     #     return self.tta_inference(img) if self.args.tta else self.do_inference(img)
 
-    def compute_loss(self, preds, label):
-        # if self.args.deep_supr_num:
-        loss, weights = 0.0, 0.0
-        for i in range(preds.shape[1]):
-            loss += self.loss(preds[:, i], label) * 0.5 ** i
-            weights += 0.5 ** i
-        return loss / weights
-        # return self.loss(preds, label)
+    # def compute_loss(self, cls_out: torch.Tensor, cls_label: torch.Tensor, seg_out: torch.Tensor, seg_label: torch.Tensor):
+    #     # if self.args.deep_supr_num:
+    #     loss, weights = 0.0, 0.0
+    #     for i in range(preds.shape[1]):
+    #         loss += self.loss(preds[:, i], label) * 0.5 ** i
+    #         weights += 0.5 ** i
+    #     return loss / weights
+    #     # return self.loss(preds, label)
 
     def training_step(self, batch, batch_idx):
         cls_out, seg_out = self.model(batch[self.args.img_key])
-
-        loss = self.compute_loss(pred, lbl)
-        return loss
+        cls_loss = self.cls_loss_fn(cls_out, batch[self.args.cls_key])
+        seg_loss_weight = torch.tensor([0.5 ** i for i in range(seg_out.shape[1])]).to(seg_out)
+        seg_loss = torch.dot(
+            torch.stack([
+                self.seg_loss_fn(seg_out[:, i], batch[self.args.seg_key])
+                for i in range(seg_out.shape[1])
+            ]),
+            seg_loss_weight
+        ) / seg_loss_weight.sum()
+        self.log('cls_loss', cls_loss, prog_bar=True)
+        self.log('seg_loss', seg_loss, prog_bar=True)
+        return cls_loss + seg_loss
 
     def validation_step(self, batch, batch_idx):
-        img, lbl = batch["image"], batch["label"]
-        pred = self._forward(img)
-        loss = self.loss(pred, lbl)
-        if self.args.invert_resampled_y:
-            meta, lbl = batch["meta"][0].cpu().detach().numpy(), batch["orig_lbl"]
-            pred = nn.functional.interpolate(pred, size=tuple(meta[3]), mode="trilinear", align_corners=True)
-        self.dice.update(pred, lbl[:, 0], loss)
+        cls_out, seg_out = self.model(batch[self.args.img_key])
+        cls_loss = self.cls_loss_fn(cls_out, batch[self.args.cls_key])
+        seg_loss = self.seg_loss_fn(seg_out, batch[self.args.seg_key])
+        self.log('cls_loss', cls_loss)
+        self.log('seg_loss', seg_loss)
+
+    # def validation_epoch_end(self, outputs):
+    #     dice, loss = self.dice.compute()
+    #     self.dice.reset()
+    #     dice_mean = torch.mean(dice)
+    #     if dice_mean >= self.best_mean:
+    #         self.best_mean = dice_mean
+    #         self.best_mean_dice = dice[:]
+    #         self.best_mean_epoch = self.current_epoch
+    #     for i, dice_i in enumerate(dice):
+    #         if dice_i > self.best_dice[i]:
+    #             self.best_dice[i], self.best_epoch[i] = dice_i, self.current_epoch
+    #
+    #     metrics = {}
+    #     metrics.update({"Mean dice": round(torch.mean(dice).item(), 2)})
+    #     metrics.update({"Highest": round(torch.mean(self.best_mean_dice).item(), 2)})
+    #     if self.n_class > 1:
+    #         metrics.update({f"L{i+1}": round(m.item(), 2) for i, m in enumerate(dice)})
+    #     metrics.update({"val_loss": round(loss.item(), 4)})
+    #     self.dllogger.log_metrics(step=self.current_epoch, metrics=metrics)
+    #     self.dllogger.flush()
+    #     self.log("val_loss", loss)
+    #     self.log("dice_mean", dice_mean)
 
     def test_step(self, batch, batch_idx):
         if self.args.exec_mode == "evaluate":
@@ -207,29 +237,6 @@ class ClsUNet(pl.LightningModule):
             mode=self.args.blend,
         )
 
-    def validation_epoch_end(self, outputs):
-        dice, loss = self.dice.compute()
-        self.dice.reset()
-        dice_mean = torch.mean(dice)
-        if dice_mean >= self.best_mean:
-            self.best_mean = dice_mean
-            self.best_mean_dice = dice[:]
-            self.best_mean_epoch = self.current_epoch
-        for i, dice_i in enumerate(dice):
-            if dice_i > self.best_dice[i]:
-                self.best_dice[i], self.best_epoch[i] = dice_i, self.current_epoch
-
-        metrics = {}
-        metrics.update({"Mean dice": round(torch.mean(dice).item(), 2)})
-        metrics.update({"Highest": round(torch.mean(self.best_mean_dice).item(), 2)})
-        if self.n_class > 1:
-            metrics.update({f"L{i+1}": round(m.item(), 2) for i, m in enumerate(dice)})
-        metrics.update({"val_loss": round(loss.item(), 4)})
-        self.dllogger.log_metrics(step=self.current_epoch, metrics=metrics)
-        self.dllogger.flush()
-        self.log("val_loss", loss)
-        self.log("dice_mean", dice_mean)
-
     def test_epoch_end(self, outputs):
         if self.args.exec_mode == "evaluate":
             self.eval_dice, _ = self.dice.compute()
@@ -238,8 +245,10 @@ class ClsUNet(pl.LightningModule):
         optimizer = AdamW(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         return {
             'optimizer': optimizer,
-            'monitor': 'val_loss',
-            'lr_scheduler': ReduceLROnPlateau(optimizer, patience=self.args.patience, verbose=True),
+            'lr_scheduler': {
+                'scheduler': ReduceLROnPlateau(optimizer, patience=self.args.patience, verbose=True),
+                'monitor': 'cls_loss',
+            }
             # 'lr_scheduler': {
             #     "scheduler": WarmupCosineSchedule(
             #         optimizer=optimizer,

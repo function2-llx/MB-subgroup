@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 
 from cls_unet import ClsUNet, ClsUNetArgs
 from utils.argparse import ArgParser
@@ -16,15 +17,17 @@ class Args(ClsUNetArgs, TrainingArgs):
 
 def get_cv_trainer(args: Args) -> pl.Trainer:
     trainer = pl.Trainer(
+        logger=WandbLogger(),
+        default_root_dir=None,
+        limit_train_batches=1,
         gpus=args.n_gpu,
         precision=16 if args.amp else 32,
         benchmark=True,
         max_epochs=int(args.num_train_epochs),
         callbacks=[
-            ModelCheckpoint()
+            ModelCheckpoint(monitor='cls_loss', save_last=True),
         ],
         num_sanity_val_steps=0,
-        checkpoint_callback=None,
         strategy=None,
     )
     cv_loop = CrossValidationLoop(args.num_folds)

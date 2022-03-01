@@ -54,8 +54,8 @@ class CrossValidationLoop(Loop):
         self.trainer.test_loop.run()
 
     def on_advance_end(self) -> None:
-        """save the weights of the current fold and reset the LightningModule and its optimizers."""
-        self.trainer.save_checkpoint(osp.join(self.export_path, f"model.{self.val_fold_id}.pt"))
+        # """save the weights of the current fold and reset the LightningModule and its optimizers."""
+        # self.trainer.save_checkpoint(osp.join(self.export_path, f"model.{self.val_fold_id}.pt"))
         # restore the original weights + optimizers and schedulers.
         self.trainer.lightning_module.load_state_dict(self.lightning_module_state_dict)
         self.trainer.strategy.setup_optimizers(self.trainer)
