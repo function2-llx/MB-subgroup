@@ -14,6 +14,7 @@ class TrainingArgs(transformers.TrainingArguments):
     """
     arguments for training & evaluation processes (model-agnostic)
     """
+    exp_name: str = field(default=None)
     output_dir: Path = field(default=None)
     dataloader_num_workers: int = field(default=multiprocessing.cpu_count())
     patience: int = field(default=5, metadata={'help': ''})
@@ -28,11 +29,17 @@ class TrainingArgs(transformers.TrainingArguments):
     output_root: Path = field(default=Path('output'), metadata={'help': ''})
 
     @property
+    def precision(self):
+        return 16 if self.amp else 32
+
+    @property
     def train_epochs(self) -> int:
         return int(self.num_train_epochs)
 
     def __post_init__(self):
         super().__post_init__()
+        self.output_dir = Path(self.output_dir)
+        self.output_root = Path(self.output_root)
         self.img_dir = Path(self.img_dir)
         self.seg_dir = Path(self.seg_dir)
         self.cohort_path = Path(self.cohort_path)

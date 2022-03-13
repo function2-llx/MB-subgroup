@@ -54,19 +54,23 @@ class ArgParser(HfArgumentParser):
 
         args, _ = self.parse_known_args(argv)
 
-        if args.output_dir is None:
-            def infer_output_dir() -> Optional[Path]:
-                if args.output_root is None or args.conf_root is None:
-                    return None
-                conf_root: Path = args.conf_root.resolve()
-                if str(conf_path).startswith(str(conf_root)):
-                    return args.output_root / Path(*conf_path.parts[len(conf_root.parts):-1], conf_path.name)
-                else:
-                    return None
+        def infer_exp_name() -> Optional[str]:
+            if args.conf_root is None:
+                return None
+            conf_root: Path = args.conf_root.resolve()
+            if str(conf_path).startswith(str(conf_root)):
+                return str(Path(*conf_path.parts[len(conf_root.parts):-1], conf_path.stem))
+            else:
+                return None
 
-            args.output_dir = infer_output_dir()
-            if args.output_dir is None:
-                raise AttributeError('unable to infer `output_root`')
+        if args.exp_name is None:
+            args.exp_name = infer_exp_name()
+
+        if args.output_dir is None:
+            if args.output_root is None or args.exp_name is None:
+                raise AttributeError('unable to infer `output_dir`')
+            else:
+                args.output_dir = Path(args.output_root) / args.exp_name
 
         output_dir = Path(args.output_dir)
         self._save_args_as_conf(args, output_dir / 'conf.yml')

@@ -156,3 +156,5 @@ nnUNet_data
 save-files
 
 lightning_logs/
+nnunet-example/
+wandb/
