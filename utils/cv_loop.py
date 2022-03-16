@@ -9,8 +9,26 @@ from pytorch_lightning.trainer.states import TrainerFn
 
 from utils.data import CrossValidationDataModule
 
+class TrialLoop(Loop):
+
+    def reset(self) -> None:
+        pass
+
+    def __init__(self, num_trials: int):
+        super().__init__()
+
+        self.num_trials = num_trials
+        self.cur_trial = 0
+        self.fit_loop = None
+
+    def done(self) -> bool:
+        return self.cur_trial == self.num_trials
+
+    def connect(self, *, fit_loop: FitLoop):
+        self.fit_loop = fit_loop
+
 class CrossValidationLoop(Loop):
-    def __init__(self, num_folds: int) -> None:
+    def __init__(self, num_folds: int, num_trials: int = 1) -> None:
         super().__init__()
 
         self.num_folds = num_folds
