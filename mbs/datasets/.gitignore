@@ -1,0 +1,5 @@
+# no slash at end, it might be a softlink
+tiantan/origin
+*/*processed*
+*.xlsx
+*MRICCAS*

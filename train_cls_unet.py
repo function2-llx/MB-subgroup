@@ -6,10 +6,10 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 from cls_unet import ClsUNet, ClsUNetArgs
-from utils.argparse import ArgParser
-from utils.args import TrainingArgs
-from utils.cv_loop import CrossValidationLoop
-from utils.data import CrossValidationDataModule
+from mbs.utils.argparse import ArgParser
+from mbs.utils.args import TrainingArgs
+from mbs.utils.cv_loop import CrossValidationLoop
+from mbs.utils.data import CrossValidationDataModule
 
 @dataclass
 class Args(ClsUNetArgs, TrainingArgs):

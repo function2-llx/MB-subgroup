@@ -135,7 +135,7 @@ class ClsUNetArgs:
         ])
 
     @property
-    def eval_transform(self):
+    def eval_transform(self) -> Callable:
         return monai.transforms.Compose([
             self.preprocess_transform,
             self.input_transform,

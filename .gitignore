@@ -142,7 +142,7 @@ subgroup.csv
 folds.json
 data-*/
 reports/
-finetune*/
+mbs/scripts/finetune.py/
 pretrained/
 processed_3d
 

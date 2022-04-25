@@ -5,12 +5,11 @@ from pathlib import Path
 import radiomics
 from radiomics.featureextractor import RadiomicsFeatureExtractor
 import pandas as pd
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from utils.argparse import ArgParser
-from utils.data.datasets.tiantan.load import read_cohort_info
-from utils.dicom_utils import ScanProtocol
+from mbs.utils.argparse import ArgParser
+from mbs.datasets.tiantan.load import read_cohort_info
+from mbs.utils.dicom_utils import ScanProtocol
 
 @dataclass
 class RadiomicsArgs:

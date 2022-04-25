@@ -1,6 +1,0 @@
-#*.xlsx
-*.json
-*.zip
-stripped*
-preprocessed/
-stat.csv
