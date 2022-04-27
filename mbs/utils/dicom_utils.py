@@ -21,7 +21,7 @@ class Plane(Enum):
 
 class ScanProtocol(SameStrEnum):
     T1 = auto()
-    T1c = auto()
+    T1C = auto()
     T2 = auto()
 
 # ScanProtocolMeta.protocol_map = {
