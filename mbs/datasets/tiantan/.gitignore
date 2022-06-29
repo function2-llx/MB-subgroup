@@ -1,7 +1,7 @@
 #*.xlsx
 *.json
 *.zip
-stripped
+stripped*/
 preprocessed/
 stat.csv
 inter-rater-test
