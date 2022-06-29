@@ -1,7 +1,5 @@
-import json
 from pathlib import Path
 
-from fsl.utils.platform import platform
 from fsl.wrappers import flirt
 from tqdm.contrib.concurrent import process_map
 
@@ -14,12 +12,12 @@ def process_patient(patient: str):
     patient_input_dir = input_dir / patient
     patient_output_dir = output_dir / patient
     patient_output_dir.mkdir(parents=True, exist_ok=True)
+    ref = patient_input_dir / f'{ScanProtocol.T2}.nii'
     for protocol in ScanProtocol:
-        if protocol is ScanProtocol.T2:
+        if protocol is not ScanProtocol.T2:
             continue
         src = patient_input_dir / f'{protocol}.nii'
-        ref = patient_input_dir / f'{ScanProtocol.T2}.nii'
-        out = patient_output_dir / f'{protocol.name}.nii.gz'
+        out = patient_output_dir / f'{protocol}.nii.gz'
         print(src)
         flirt(str(src), str(ref), out=str(out))
 
