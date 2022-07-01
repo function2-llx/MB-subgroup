@@ -7,3 +7,6 @@
 [submodule "third-party/HD-BET"]
 	path = third-party/HD-BET
 	url = git@github.com:MIC-DKFZ/HD-BET.git
+[submodule "third-party/UMeI"]
+	path = third-party/UMeI
+	url = git@github.com:function2-llx/UMeI.git
