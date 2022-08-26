@@ -158,3 +158,6 @@ save-files
 lightning_logs/
 nnunet-example/
 wandb/
+*.nii.gz
+*.xlsx
+origin
