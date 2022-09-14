@@ -2,17 +2,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Sequence
 
-import numpy as np
 import pandas as pd
 
 import monai
 from monai.utils import GridSampleMode
 from umei.args import CVArgs
 from umei.datamodule import CVDataModule, SegDataModule
+from umei.utils import DataKey, DataSplit
 
 from mbs.args import MBSegArgs
 from mbs.utils.enums import MBDataKey, Modality, SegClass
-from umei.utils import DataKey, DataSplit
 
 DATASET_ROOT = Path(__file__).parent
 DATA_DIR = DATASET_ROOT / 'origin'
@@ -92,6 +91,7 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
             monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
             monai.transforms.NormalizeIntensityD(img_keys),
+            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
             monai.transforms.ConcatItemsD(SegClass.ST, name=DataKey.SEG),
             monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG]),
@@ -108,6 +108,7 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
             monai.transforms.SpacingD(SegClass.ST, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
             monai.transforms.NormalizeIntensityD(img_keys),
+            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
             monai.transforms.ConcatItemsD(SegClass.ST, name=DataKey.SEG),
             monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
