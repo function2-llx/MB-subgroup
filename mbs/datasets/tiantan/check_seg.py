@@ -9,6 +9,8 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent, KeyEvent
 from matplotlib.colors import ListedColormap
 
+
+
 from mbs.utils.dicom_utils import ScanProtocol
 
 data_dir = Path(__file__).parent / 'preprocessed'

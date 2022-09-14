@@ -19,4 +19,4 @@ rotate_p: 0.5
 dice_include_background: true
 dice_nr: 1e-5
 dice_dr: 1e-5
-crop_pos: 3
+crop_pos: 4

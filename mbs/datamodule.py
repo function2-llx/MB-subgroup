@@ -12,7 +12,7 @@ from umei.datamodule import CVDataModule, SegDataModule
 
 from mbs.args import MBSegArgs
 from mbs.utils.enums import MBDataKey, Modality, SegClass
-from umei.utils import DataKey
+from umei.utils import DataKey, DataSplit
 
 DATASET_ROOT = Path(__file__).parent
 DATA_DIR = DATASET_ROOT / 'origin'
@@ -52,6 +52,9 @@ class MBCVDataModule(CVDataModule):
         ]
         return data, classes
 
+    def test_data(self) -> Sequence:
+        return self.val_data()[DataSplit.VAL]
+
 class MBSegDataModule(MBCVDataModule, SegDataModule):
     args: MBSegArgs
 
@@ -84,7 +87,7 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
                 neg=self.args.crop_neg,
                 num_samples=self.args.num_crop_samples,
             ),
-            monai.transforms.RandRotate90D(),
+            monai.transforms.RandRotate90D(all_keys, prob=self.args.rotate_p),
             monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
             monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
             monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
@@ -107,5 +110,9 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
             monai.transforms.ConcatItemsD(SegClass.ST, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG]),
+            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
         ])
+
+    @property
+    def test_transform(self):
+        return self.val_transform

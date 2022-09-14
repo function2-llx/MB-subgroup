@@ -23,8 +23,13 @@ class MBArgs(CVArgs, UMeIArgs):
 @dataclass
 class MBSegArgs(SegArgs, MBArgs, AugArgs):  # be careful with the MRO
     mc_seg: bool = field(default=True)
+    use_post: bool = field(default=False)
 
     @property
     def num_seg_classes(self) -> int:
         return 1
         # return len(SegClass)
+
+    def __post_init__(self):
+        assert self.mc_seg
+        super().__post_init__()

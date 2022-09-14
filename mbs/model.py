@@ -7,16 +7,21 @@ from einops import rearrange
 import torch
 from torch import nn as nn
 from torch.nn import LayerNorm, functional as torch_f
+from torchmetrics import Recall
 
-from mbs.args import MBArgs, MBSegArgs
-from mbs.cnn_decoder import CNNDecoder
+import monai
+from monai.metrics import DiceMetric
 from monai.networks.blocks import Convolution, UnetBasicBlock
 from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
 from umei import SegModel
-from umei.models.swin import SwinTransformer
+from umei.utils import DataKey
+
+from mbs.args import MBArgs, MBSegArgs
+from mbs.cnn_decoder import CNNDecoder
+from mbs.utils.enums import MBDataKey
 
 class PatchMergingV3(PatchMergingV2):
     def __init__(self, dim: int, norm_layer: Type[LayerNorm] = nn.LayerNorm, spatial_dims: int = 3, *, z_stride: int):
@@ -127,6 +132,14 @@ class MBBackbone(UEncoderBase):
 class MBSegModel(SegModel):
     args: MBSegArgs
 
+    def __init__(self, args: MBSegArgs):
+        super().__init__(args)
+        self.post_transform = monai.transforms.Compose([
+            monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
+        ])
+        self.test_outputs = []
+        self.recall = Recall(num_classes=1, multiclass=False)
+
     def build_encoder(self):
         return MBBackbone(self.args)
 
@@ -136,3 +149,25 @@ class MBSegModel(SegModel):
             feature_size=self.args.base_feature_size,
             num_layers=self.args.num_stages,
         )
+
+    def on_test_start(self) -> None:
+        self.dice_metric.reset()
+        self.recall.reset()
+        self.test_outputs.clear()
+
+    def test_step(self, batch, *args, **kwargs):
+        seg = batch[DataKey.SEG].long()
+        case = batch[MBDataKey.CASE][0]
+        pred_logit = self.sw_infer(batch[DataKey.IMG])
+
+        pred = (pred_logit.sigmoid() > 0.5).long()
+        if self.args.use_post:
+            pred = self.post_transform(pred[0])[None]
+        dice = self.dice_metric(pred, seg).item()
+        recall = self.recall(pred.view(-1), seg.view(-1)).item()
+        print(case, dice, recall)
+        self.test_outputs.append({
+            MBDataKey.CASE: case,
+            'dice': dice,
+            'recall': recall,
+        })
