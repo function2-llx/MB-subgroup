@@ -67,6 +67,5 @@ def main():
     data = [process_patient(patient_dir) for patient_dir in tqdm(list((DATA_DIR / 'image').iterdir()))]
     pd.DataFrame.from_records(data).to_excel(DATA_DIR / 'plan.xlsx', index=False)
 
-
 if __name__ == '__main__':
     main()

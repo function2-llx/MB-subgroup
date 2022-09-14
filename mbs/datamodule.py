@@ -6,26 +6,23 @@ import pandas as pd
 
 import monai
 from monai.utils import GridSampleMode
-from umei.args import CVArgs
 from umei.datamodule import CVDataModule, SegDataModule
 from umei.utils import DataKey, DataSplit
 
-from mbs.args import MBSegArgs
+from mbs.args import MBArgs, MBSegArgs
 from mbs.utils.enums import MBDataKey, Modality, SegClass
 
 DATASET_ROOT = Path(__file__).parent
 DATA_DIR = DATASET_ROOT / 'origin'
 
 def load_cohort():
-    cohort = pd.read_excel(DATA_DIR / 'plan.xlsx', sheet_name='Sheet1')
+    cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1')
     cohort.set_index('name', inplace=True)
-    data = []
+    data = {}
     for patient, info in cohort.iterrows():
-        if info['exclude']:
-            continue
         patient = str(patient)
         patient_img_dir = DATA_DIR / 'image' / patient
-        data.append({
+        data.setdefault(str(info['split']), []).append({
             MBDataKey.CASE: patient,
             MBDataKey.SUBGROUP: info['subgroup'],
             **{
@@ -36,23 +33,28 @@ def load_cohort():
 
     return data
 
-class MBCVDataModule(CVDataModule):
-    args: CVArgs
+def get_classes(data: list[dict]) -> list[str]:
+    return [
+        x[MBDataKey.SUBGROUP]
+        for x in data
+    ]
 
-    def __init__(self, args: CVArgs):
-        self.data = load_cohort()
+class MBCVDataModule(CVDataModule):
+    args: MBArgs
+
+    def __init__(self, args: MBArgs):
+        self.cohort = load_cohort()
+
         super().__init__(args)
 
-    def fit_data(self) -> Sequence:
-        data = self.data
-        classes = [
-            x[MBDataKey.SUBGROUP]
-            for x in data
+    def get_cv_partitions(self):
+        return [
+            self.cohort[str(fold_id)]
+            for fold_id in range(self.args.num_folds)
         ]
-        return data, classes
 
     def test_data(self) -> Sequence:
-        return self.val_data()[DataSplit.VAL]
+        return self.cohort[DataSplit.TEST]
 
 class MBSegDataModule(MBCVDataModule, SegDataModule):
     args: MBSegArgs

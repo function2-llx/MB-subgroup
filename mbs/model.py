@@ -10,7 +10,6 @@ from torch.nn import LayerNorm, functional as torch_f
 from torchmetrics import Recall
 
 import monai
-from monai.metrics import DiceMetric
 from monai.networks.blocks import Convolution, UnetBasicBlock
 from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
