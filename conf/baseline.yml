@@ -1,0 +1,10 @@
+z_strides: [2, 1, 1, 1, 2]
+swin_window_size: [6, 6, 6]
+vit_depths: [2, 2, 6, 2]
+vit_num_heads: [3, 6, 12, 24]
+base_feature_size: 12
+sample_size: 192
+sample_slices: 24
+input_modalities:
+  - T2
+spacing: [0.5, 0.5, -1]

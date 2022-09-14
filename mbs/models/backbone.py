@@ -1,4 +1,3 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
 from abc import ABCMeta, abstractmethod
 
 import torch
