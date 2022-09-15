@@ -51,7 +51,6 @@ class MBBackbone(UEncoderBase):
     def __init__(
         self,
         args: MBArgs,
-        act: str | tuple = Act.GELU,
         drop_path_rate: float = 0.0,
         mlp_ratio: float = 4.0,
         qkv_bias: bool = True,
@@ -63,27 +62,28 @@ class MBBackbone(UEncoderBase):
         self.conv_stem = nn.ModuleList([
             UnetBasicBlock(
                 spatial_dims=3,
-                in_channels=args.num_input_channels if i == 0 else args.base_feature_size << i - 1,
-                out_channels=args.base_feature_size << i,
+                in_channels=args.num_input_channels if i == 0 else args.feature_channels[i - 1],
+                out_channels=args.feature_channels[i],
                 kernel_size=3,
                 stride=1 if i == 0 else (2, 2, args.z_strides[i - 1]),
+                act_name=Act.PRELU,
                 norm_name=Norm.INSTANCE,
-                act_name=act,
             )
             for i in range(args.stem_stages)
         ])
         self.patch_embed = Convolution(
             spatial_dims=3,
-            in_channels=args.base_feature_size << args.stem_stages - 1,
-            out_channels=args.base_feature_size << args.stem_stages,
+            in_channels=args.feature_channels[args.stem_stages - 1],
+            out_channels=args.feature_channels[args.stem_stages],
             strides=(2, 2, args.z_strides[args.stem_stages - 1]),
             kernel_size=3,
-            act=act,
+            act=Act.PRELU,
+            norm=Norm.INSTANCE,
         )
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(args.vit_depths))]
         self.layers = nn.ModuleList([
             BasicLayer(
-                dim=args.base_feature_size << args.stem_stages + i_layer,
+                dim=args.feature_channels[args.stem_stages + i_layer],
                 depth=args.vit_depths[i_layer],
                 num_heads=args.vit_num_heads[i_layer],
                 window_size=args.swin_window_size,
@@ -94,7 +94,7 @@ class MBBackbone(UEncoderBase):
                 attn_drop=attn_drop_rate,
                 norm_layer=vit_norm_layer,
                 downsample=PatchMergingV3(
-                    dim=args.base_feature_size << args.stem_stages + i_layer,
+                    dim=args.feature_channels[args.stem_stages + i_layer],
                     norm_layer=vit_norm_layer,
                     z_stride=args.z_strides[args.stem_stages + i_layer],
                 ) if i_layer + 1 < args.vit_stages else None,
@@ -104,13 +104,12 @@ class MBBackbone(UEncoderBase):
         ])
 
         self.norms = nn.ModuleList([
-            vit_norm_layer(args.base_feature_size << args.stem_stages + i)
+            vit_norm_layer(args.feature_channels[args.stem_stages + i])
             for i in range(args.vit_stages)
         ])
         self.avg_pool = nn.AdaptiveAvgPool3d(1)
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> UEncoderOutput:
-        # ret = UEncoderOutput()
         hidden_states = []
         for conv in self.conv_stem:
             x = conv(x)
@@ -144,8 +143,9 @@ class MBSegModel(SegModel):
 
     def build_decoder(self, encoder_feature_sizes: list[int]):
         return CNNDecoder(
+            # feature_size=self.args.base_feature_size,
+            feature_channels=self.args.feature_channels,
             z_strides=self.args.z_strides,
-            feature_size=self.args.base_feature_size,
             num_layers=self.args.num_stages,
         )
 

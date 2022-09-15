@@ -13,9 +13,9 @@ class MBArgs(CVArgs, UMeIArgs):
     def num_input_channels(self) -> int:
         return len(self.input_modalities)
 
-    @property
-    def num_stages(self) -> int:
-        return len(self.z_strides) + 1
+    # @property
+    # def num_stages(self) -> int:
+    #     return len(self.z_strides) + 1
 
     @property
     def stem_stages(self) -> int:

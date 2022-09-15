@@ -9,8 +9,8 @@ from monai.umei import UDecoderBase, UDecoderOutput
 class CNNDecoder(UDecoderBase):
     def __init__(
         self,
+        feature_channels: list[int],
         z_strides: list[int] = None,
-        feature_size: int = 24,
         num_layers: int = 4,
         norm_name: tuple | str = "instance",
         spatial_dims: int = 3,
@@ -20,8 +20,8 @@ class CNNDecoder(UDecoderBase):
 
         self.bottleneck = UnetResBlock(
             spatial_dims=spatial_dims,
-            in_channels=feature_size << num_layers - 1,
-            out_channels=feature_size << num_layers - 1,
+            in_channels=feature_channels[num_layers - 1],
+            out_channels=feature_channels[num_layers - 1],
             kernel_size=3,
             stride=1,
             norm_name=norm_name,
@@ -30,8 +30,8 @@ class CNNDecoder(UDecoderBase):
         self.ups = nn.ModuleList([
             UnetrUpBlock(
                 spatial_dims=spatial_dims,
-                in_channels=feature_size << i,
-                out_channels=feature_size << i - 1,
+                in_channels=feature_channels[i],
+                out_channels=feature_channels[i - 1],
                 kernel_size=3,
                 upsample_kernel_size=(2, 2, z_strides[i - 1]),
                 norm_name=norm_name,
@@ -43,8 +43,8 @@ class CNNDecoder(UDecoderBase):
         self.lateral_convs = nn.ModuleList([
             UnetResBlock(
                 spatial_dims=spatial_dims,
-                in_channels=feature_size << i,
-                out_channels=feature_size << i,
+                in_channels=feature_channels[i],
+                out_channels=feature_channels[i],
                 kernel_size=3,
                 stride=1,
                 norm_name=norm_name,
