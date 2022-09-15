@@ -3,30 +3,39 @@ from __future__ import annotations
 import itertools
 from typing import Type
 
-from einops import rearrange
 import torch
-from torch import nn as nn
-from torch.nn import LayerNorm, functional as torch_f
+from torch import nn
+from torch.nn import functional as torch_f
 from torchmetrics import Recall
 
 import monai
-from monai.networks.blocks import Convolution, UnetBasicBlock
+from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
 from umei import SegModel
+from umei.models.layernorm import LayerNormNd
 from umei.utils import DataKey
 
 from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
 from mbs.utils.enums import MBDataKey
 
-class PatchMergingV3(PatchMergingV2):
-    def __init__(self, dim: int, norm_layer: Type[LayerNorm] = nn.LayerNorm, spatial_dims: int = 3, *, z_stride: int):
+class MBPatchMerging(PatchMergingV2):
+    def __init__(
+        self,
+        dim: int,
+        out_dim: int,
+        norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
+        spatial_dims: int = 3,
+        *,
+        z_stride: int
+    ):
         super().__init__(dim, norm_layer, spatial_dims)
+        self.out_dim = out_dim
         self.z_stride = z_stride
-        self.reduction = nn.Linear(4 * z_stride * dim, 2 * dim, bias=False)
+        self.reduction = nn.Linear(4 * z_stride * dim, out_dim, bias=False)
         self.norm = norm_layer(4 * z_stride * dim)
 
     def forward(self, x):
@@ -56,29 +65,38 @@ class MBBackbone(UEncoderBase):
         qkv_bias: bool = True,
         drop_rate: float = 0.0,
         attn_drop_rate: float = 0.0,
-        vit_norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
     ):
         super().__init__()
         self.conv_stem = nn.ModuleList([
             UnetBasicBlock(
                 spatial_dims=3,
-                in_channels=args.num_input_channels if i == 0 else args.feature_channels[i - 1],
-                out_channels=args.feature_channels[i],
+                in_channels=args.num_input_channels,
+                out_channels=args.feature_channels[0],
                 kernel_size=3,
-                stride=1 if i == 0 else (2, 2, args.z_strides[i - 1]),
+                stride=1,
                 act_name=Act.GELU,
-                norm_name=Norm.INSTANCE,
+                norm_name=Norm.LAYERND,
             )
-            for i in range(args.stem_stages)
         ])
+        for i in range(1, args.stem_stages):
+            self.conv_stem.append(
+                UnetResBlock(
+                    spatial_dims=3,
+                    in_channels=args.feature_channels[i - 1],
+                    out_channels=args.feature_channels[i],
+                    kernel_size=3,
+                    stride=(2, 2, args.z_strides[i - 1]),
+                    act_name=Act.GELU,
+                    norm_name=Norm.LAYERND,
+                )
+            )
         self.patch_embed = Convolution(
             spatial_dims=3,
             in_channels=args.feature_channels[args.stem_stages - 1],
             out_channels=args.feature_channels[args.stem_stages],
             strides=(2, 2, args.z_strides[args.stem_stages - 1]),
             kernel_size=3,
-            act=Act.GELU,
-            norm=Norm.INSTANCE,
+            conv_only=True,
         )
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(args.vit_depths))]
         self.layers = nn.ModuleList([
@@ -92,10 +110,9 @@ class MBBackbone(UEncoderBase):
                 qkv_bias=qkv_bias,
                 drop=drop_rate,
                 attn_drop=attn_drop_rate,
-                norm_layer=vit_norm_layer,
-                downsample=PatchMergingV3(
+                downsample=MBPatchMerging(
                     dim=args.feature_channels[args.stem_stages + i_layer],
-                    norm_layer=vit_norm_layer,
+                    out_dim=args.feature_channels[args.stem_stages + i_layer + 1],
                     z_stride=args.z_strides[args.stem_stages + i_layer],
                 ) if i_layer + 1 < args.vit_stages else None,
                 use_checkpoint=args.gradient_checkpointing,
@@ -104,7 +121,7 @@ class MBBackbone(UEncoderBase):
         ])
 
         self.norms = nn.ModuleList([
-            vit_norm_layer(args.feature_channels[args.stem_stages + i])
+            LayerNormNd(args.feature_channels[args.stem_stages + i])
             for i in range(args.vit_stages)
         ])
         self.avg_pool = nn.AdaptiveAvgPool3d(1)
@@ -117,9 +134,7 @@ class MBBackbone(UEncoderBase):
         x = self.patch_embed(x)
         for layer, norm in zip(self.layers, self.norms):
             z, z_ds = layer(x)
-            z = rearrange(z, "n c d h w -> n d h w c")
             z = norm(z)
-            z = rearrange(z, "n d h w c -> n c d h w")
             hidden_states.append(z)
             x = z_ds
         return UEncoderOutput(
@@ -143,7 +158,6 @@ class MBSegModel(SegModel):
 
     def build_decoder(self, encoder_feature_sizes: list[int]):
         return CNNDecoder(
-            # feature_size=self.args.base_feature_size,
             feature_channels=self.args.feature_channels,
             z_strides=self.args.z_strides,
             num_layers=self.args.num_stages,
