@@ -7,6 +7,7 @@ import torch
 import wandb
 
 from umei.utils import UMeIParser
+
 from mbs.args import MBSegArgs
 from mbs.datamodule import MBSegDataModule
 from mbs.model import MBSegModel
@@ -24,6 +25,8 @@ def main():
     if args.do_eval:
         log_dir = args.output_dir / f'run-{args.seed}' / 'eval'
         eval_suffix = f'sw{args.sw_overlap}-{args.sw_blend_mode}'
+        if args.tta:
+            eval_suffix += '-tta'
         if args.use_post:
             eval_suffix += '-post'
         log_dir /= eval_suffix
@@ -98,7 +101,7 @@ def main():
                 UMeIParser.save_args_as_conf(args, conf_save_path)
             trainer.fit(model, datamodule=datamodule, ckpt_path=last_ckpt_path)
         if args.do_eval:
-            trainer.test(model, ckpt_path=last_ckpt_path, datamodule=datamodule)
+            trainer.test(model, ckpt_path=last_ckpt_path, dataloaders=datamodule.val_dataloader())
             for x in model.test_outputs:
                 x['fold'] = val_id
             test_outputs.extend(model.test_outputs)

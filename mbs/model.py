@@ -66,7 +66,7 @@ class MBBackbone(UEncoderBase):
                 out_channels=args.feature_channels[i],
                 kernel_size=3,
                 stride=1 if i == 0 else (2, 2, args.z_strides[i - 1]),
-                act_name=Act.PRELU,
+                act_name=Act.GELU,
                 norm_name=Norm.INSTANCE,
             )
             for i in range(args.stem_stages)
@@ -77,7 +77,7 @@ class MBBackbone(UEncoderBase):
             out_channels=args.feature_channels[args.stem_stages],
             strides=(2, 2, args.z_strides[args.stem_stages - 1]),
             kernel_size=3,
-            act=Act.PRELU,
+            act=Act.GELU,
             norm=Norm.INSTANCE,
         )
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(args.vit_depths))]
@@ -157,7 +157,7 @@ class MBSegModel(SegModel):
     def test_step(self, batch, *args, **kwargs):
         seg = batch[DataKey.SEG].long()
         case = batch[MBDataKey.CASE][0]
-        pred_logit = self.sw_infer(batch[DataKey.IMG])
+        pred_logit = self.infer(batch[DataKey.IMG])
 
         pred = (pred_logit.sigmoid() > 0.5).long()
         if self.args.use_post:
