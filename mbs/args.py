@@ -8,6 +8,7 @@ class MBArgs(CVArgs, UMeIArgs):
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
     test_size: int = field(default=None)
+    pad_crop_size: list[int] = field(default=None)
 
     @property
     def num_input_channels(self) -> int:

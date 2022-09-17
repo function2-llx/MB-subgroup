@@ -79,7 +79,8 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             #     range_z=np.pi,
             #     mode=[GridSampleMode.BILINEAR] * len(img_keys) + [GridSampleMode.NEAREST] * len(seg_keys),
             # ),
-            monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
             monai.transforms.RandCropByPosNegLabelD(
                 all_keys,
                 label_key=SegClass.ST,
@@ -109,6 +110,7 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.OrientationD(all_keys, axcodes='RAS'),
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
             monai.transforms.SpacingD(SegClass.ST, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
