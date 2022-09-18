@@ -151,6 +151,7 @@ class MBSegModel(SegModel):
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
         ])
         self.test_outputs = []
+        # TODO: multi-class
         self.recall = Recall(num_classes=1, multiclass=False)
 
     def build_encoder(self):

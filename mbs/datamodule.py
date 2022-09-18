@@ -65,7 +65,7 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
     @property
     def train_transform(self) -> Callable:
         img_keys = self.args.input_modalities
-        seg_keys = [SegClass.ST]
+        seg_keys = self.args.seg_classes
         all_keys = img_keys + seg_keys
         return monai.transforms.Compose([
             monai.transforms.LoadImageD(all_keys),
@@ -96,25 +96,26 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.ConcatItemsD(SegClass.ST, name=DataKey.SEG),
+            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG]),
         ])
 
     @property
     def val_transform(self) -> Callable:
         img_keys = self.args.input_modalities
-        all_keys = img_keys + [SegClass.ST]
+        seg_keys = self.args.seg_classes
+        all_keys = img_keys + seg_keys
         return monai.transforms.Compose([
             monai.transforms.LoadImageD(all_keys),
             monai.transforms.EnsureChannelFirstD(all_keys),
             monai.transforms.OrientationD(all_keys, axcodes='RAS'),
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.SpacingD(SegClass.ST, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
             monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.ConcatItemsD(SegClass.ST, name=DataKey.SEG),
+            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
         ])
 

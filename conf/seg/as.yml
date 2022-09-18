@@ -8,9 +8,13 @@ pad_crop_size: [512, 512, 24]
 sample_size: 192
 sample_slices: 24
 input_modalities:
+  - T1
+  - T1C
   - T2
 seg_classes:
   - ST
+  - AT
+  - CT
 spacing: [0.46875, 0.46875, -1]
 learning_rate: 3e-5
 train_batch_size: 2
