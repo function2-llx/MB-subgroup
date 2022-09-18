@@ -18,7 +18,7 @@ from umei import SegModel
 from umei.models.layernorm import LayerNormNd
 from umei.utils import DataKey
 
-from mbs.args import MBArgs, MBSegArgs
+from mbs.args import MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
 from mbs.utils.enums import MBDataKey
 
@@ -59,7 +59,7 @@ class MBPatchMerging(PatchMergingV2):
 class MBBackbone(UEncoderBase):
     def __init__(
         self,
-        args: MBArgs,
+        args: MBSegArgs,
         drop_path_rate: float = 0.0,
         mlp_ratio: float = 4.0,
         qkv_bias: bool = True,

@@ -6,10 +6,10 @@ import pandas as pd
 
 import monai
 from monai.utils import GridSampleMode
-from umei.datamodule import CVDataModule, SegDataModule
+from umei.datamodule import CVDataModule
 from umei.utils import DataKey, DataSplit
 
-from mbs.args import MBArgs, MBSegArgs
+from mbs.args import MBSegArgs
 from mbs.utils.enums import MBDataKey, Modality, SegClass
 
 DATASET_ROOT = Path(__file__).parent
@@ -40,9 +40,9 @@ def get_classes(data: list[dict]) -> list[str]:
     ]
 
 class MBCVDataModule(CVDataModule):
-    args: MBArgs
+    args: MBSegArgs
 
-    def __init__(self, args: MBArgs):
+    def __init__(self, args: MBSegArgs):
         self.cohort = load_cohort()
 
         super().__init__(args)
@@ -56,7 +56,7 @@ class MBCVDataModule(CVDataModule):
     def test_data(self) -> Sequence:
         return self.cohort[DataSplit.TEST]
 
-class MBSegDataModule(MBCVDataModule, SegDataModule):
+class MBSegDataModule(MBCVDataModule):
     args: MBSegArgs
 
     def __init__(self, args: MBSegArgs):
@@ -73,13 +73,6 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
             monai.transforms.OrientationD(all_keys, axcodes='RAS'),
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
             monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            # monai.transforms.RandRotateD(
-            #     all_keys,
-            #     prob=self.args.rotate_p,
-            #     range_z=np.pi,
-            #     mode=[GridSampleMode.BILINEAR] * len(img_keys) + [GridSampleMode.NEAREST] * len(seg_keys),
-            # ),
-            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
             monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
             monai.transforms.RandCropByPosNegLabelD(
                 all_keys,
@@ -122,3 +115,6 @@ class MBSegDataModule(MBCVDataModule, SegDataModule):
     @property
     def test_transform(self):
         return self.val_transform
+
+class MBDataModule(MBCVDataModule):
+    pass
