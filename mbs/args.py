@@ -11,7 +11,7 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
     test_size: int = field(default=None)
     pad_crop_size: list[int] = field(default=None)
-    use_post: bool = field(default=False)
+    do_post: bool = field(default=False)
 
     def __post_init__(self):
         assert self.mc_seg

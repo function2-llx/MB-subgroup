@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 from typing import Type
 
+import einops
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
@@ -20,7 +21,7 @@ from umei.utils import DataKey
 
 from mbs.args import MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
-from mbs.utils.enums import MBDataKey
+from mbs.utils.enums import MBDataKey, SegClass
 
 class MBPatchMerging(PatchMergingV2):
     def __init__(
@@ -151,8 +152,8 @@ class MBSegModel(SegModel):
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
         ])
         self.test_outputs = []
-        # TODO: multi-class
-        self.recall = Recall(num_classes=1, multiclass=False)
+        self.recall = Recall(num_classes=args.num_seg_classes, average=None, multiclass=False)
+        self.recall_u = Recall(num_classes=args.num_seg_classes, average=None, multiclass=False)
 
     def build_encoder(self):
         return MBBackbone(self.args)
@@ -167,6 +168,7 @@ class MBSegModel(SegModel):
     def on_test_start(self) -> None:
         self.dice_metric.reset()
         self.recall.reset()
+        self.recall_u.reset()
         self.test_outputs.clear()
 
     def test_step(self, batch, *args, **kwargs):
@@ -175,13 +177,38 @@ class MBSegModel(SegModel):
         pred_logit = self.infer(batch[DataKey.IMG])
 
         pred = (pred_logit.sigmoid() > 0.5).long()
-        if self.args.use_post:
+        if self.args.do_post:
             pred = self.post_transform(pred[0])[None]
-        dice = self.dice_metric(pred, seg).item()
-        recall = self.recall(pred.view(-1), seg.view(-1)).item()
+
+        dice = self.dice_metric(pred, seg)
+        recall = self.recall(
+            einops.rearrange(pred, 'n c ... -> (n ...) c'),
+            einops.rearrange(seg, 'n c ... -> (n ...) c'),
+        )
         print(case, dice, recall)
-        self.test_outputs.append({
+        output = {
             MBDataKey.CASE: case,
-            'dice': dice,
-            'recall': recall,
-        })
+            **{
+                f'dice-{s}': dice[0, i].item()
+                for i, s in enumerate(self.args.seg_classes)
+            },
+            **{
+                f'recall-{s}': recall[i].item()
+                for i, s in enumerate(self.args.seg_classes)
+            }
+        }
+        if self.args.num_seg_classes == len(SegClass):
+            # want reduce: https://github.com/pytorch/pytorch/issues/35641
+            pred_u = pred[:, 0]
+            for i in range(1, self.args.num_seg_classes):
+                pred_u |= pred[:, i]
+            pred_u = einops.repeat(pred_u, 'n ... -> n c ...', c=self.args.num_seg_classes)
+            recall_u = self.recall_u(
+                einops.rearrange(pred_u, 'n c ... -> (n ...) c'),
+                einops.rearrange(seg, 'n c ... -> (n ...) c'),
+            )
+            print(recall_u)
+            for i, s in enumerate(self.args.seg_classes):
+                output[f'recall-u-{s}'] = recall_u[i].item()
+
+        self.test_outputs.append(output)

@@ -25,9 +25,9 @@ def main():
     if args.do_eval:
         log_dir = args.output_dir / f'run-{args.seed}' / 'eval'
         eval_suffix = f'sw{args.sw_overlap}-{args.sw_blend_mode}'
-        if args.tta:
+        if args.do_tta:
             eval_suffix += '-tta'
-        if args.use_post:
+        if args.do_post:
             eval_suffix += '-post'
         log_dir /= eval_suffix
 
