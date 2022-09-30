@@ -171,23 +171,13 @@ class MBSegModel(SegModel):
         self.recall_u.reset()
         self.test_outputs.clear()
 
-    def test_step(self, batch, *args, **kwargs):
-        seg = batch[DataKey.SEG].long()
-        case = batch[MBDataKey.CASE][0]
-        pred_logit = self.infer(batch[DataKey.IMG])
-
-        pred = (pred_logit.sigmoid() > 0.5).long()
-        if self.args.do_post:
-            pred = self.post_transform(pred[0])[None]
-
+    def cal_metrics(self, pred: torch.Tensor, seg: torch.Tensor):
         dice = self.dice_metric(pred, seg)
         recall = self.recall(
             einops.rearrange(pred, 'n c ... -> (n ...) c'),
             einops.rearrange(seg, 'n c ... -> (n ...) c'),
         )
-        print(case, dice, recall)
         output = {
-            MBDataKey.CASE: case,
             **{
                 f'dice-{s}': dice[0, i].item()
                 for i, s in enumerate(self.args.seg_classes)
@@ -211,4 +201,17 @@ class MBSegModel(SegModel):
             for i, s in enumerate(self.args.seg_classes):
                 output[f'recall-u-{s}'] = recall_u[i].item()
 
-        self.test_outputs.append(output)
+        return output
+
+    def test_step(self, batch, *args, **kwargs):
+        seg = batch[DataKey.SEG].long()
+        case = batch[MBDataKey.CASE][0]
+        pred_logit = self.infer_logit(batch[DataKey.IMG])
+
+        pred = (pred_logit.sigmoid() > 0.5).long()
+        if self.args.do_post:
+            pred = self.post_transform(pred[0])[None]
+        metrics = self.cal_metrics(pred, seg)
+        metrics[MBDataKey.CASE] = case
+
+        self.test_outputs.append(metrics)

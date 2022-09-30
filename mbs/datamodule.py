@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import itertools
 from pathlib import Path
 from typing import Sequence
 
@@ -55,6 +56,9 @@ class MBCVDataModule(CVDataModule):
 
     def test_data(self) -> Sequence:
         return self.cohort[DataSplit.TEST]
+
+    def all_data(self) -> Sequence:
+        return list(itertools.chain(*self.cohort.values()))
 
 class MBSegDataModule(MBCVDataModule):
     args: MBSegArgs

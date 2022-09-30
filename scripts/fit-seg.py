@@ -13,15 +13,12 @@ from mbs.datamodule import MBSegDataModule
 from mbs.model import MBSegModel
 
 task_name = 'mb-seg'
+args: MBSegArgs
+datamodule: MBSegDataModule
 
-def main():
-    parser = UMeIParser((MBSegArgs, ), use_conf=True)
-    args: MBSegArgs = parser.parse_args_into_dataclasses()[0]
-    print(args)
-    assert args.do_train ^ args.do_eval
-    datamodule = MBSegDataModule(args)
-    test_outputs = []
+def fit_or_eval():
     log_dir = None
+    test_outputs = []
     if args.do_eval:
         log_dir = args.output_dir / f'run-{args.seed}' / 'eval'
         eval_suffix = f'sw{args.sw_overlap}-{args.sw_blend_mode}'
@@ -61,15 +58,6 @@ def main():
                     save_last=True,
                     save_on_train_epoch_end=False,
                 ),
-                # ModelCheckpoint(
-                #     dirpath=output_dir,
-                #     filename=f'ep{{epoch}}-{args.monitor.replace("/", " ")}={{{args.monitor}:.3f}}',
-                #     auto_insert_metric_name=False,
-                #     verbose=True,
-                #     save_on_train_epoch_end=False,
-                #     save_top_k=-1,
-                #     every_n_epochs=250,
-                # ),
                 LearningRateMonitor(logging_interval='epoch'),
                 ModelSummary(max_depth=2),
             ],
@@ -80,7 +68,7 @@ def main():
             benchmark=True,
             max_epochs=int(args.num_train_epochs),
             num_sanity_val_steps=args.num_sanity_val_steps,
-            log_every_n_steps=5,
+            log_every_n_steps=10,
             check_val_every_n_epoch=args.eval_epochs,
             strategy=DDPStrategy(find_unused_parameters=args.ddp_find_unused_parameters),
             # limit_train_batches=0.1,
@@ -97,7 +85,7 @@ def main():
             if trainer.is_global_zero:
                 conf_save_path = output_dir / 'conf.yml'
                 if conf_save_path.exists():
-                    conf_save_path.rename(output_dir / 'conf-save.yml')
+                    conf_save_path.rename(output_dir / 'conf-old.yml')
                 UMeIParser.save_args_as_conf(args, conf_save_path)
             trainer.fit(model, datamodule=datamodule, ckpt_path=last_ckpt_path)
         if args.do_eval:
@@ -105,6 +93,7 @@ def main():
             for x in model.test_outputs:
                 x['fold'] = val_id
             test_outputs.extend(model.test_outputs)
+            # partial results
             pd.DataFrame.from_records(test_outputs).to_excel(
                 args.output_dir / f'run-{args.seed}' / 'results.xlsx',
                 index=False,
@@ -112,6 +101,15 @@ def main():
         wandb.finish()
     if args.do_eval:
         pd.DataFrame.from_records(test_outputs).to_excel(log_dir / 'results.xlsx', index=False)
+        pd.DataFrame.from_records(test_outputs).to_csv(log_dir / 'results.csv', index=False)
+
+def main():
+    global args, datamodule
+    parser = UMeIParser((MBSegArgs, ), use_conf=True)
+    args = parser.parse_args_into_dataclasses()[0]
+    print(args)
+    datamodule = MBSegDataModule(args)
+    fit_or_eval()
 
 if __name__ == '__main__':
     main()

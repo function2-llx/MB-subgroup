@@ -14,7 +14,7 @@ from mbs.model import MBSegModel
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 # plot_case = None
-plot_case = '470127wangwenkang'
+plot_case = '424442cuitongkai'
 val_id = None
 dice_metric = DiceMetric()
 recall_metric = Recall(num_classes=1, multiclass=False).cuda()
@@ -53,14 +53,14 @@ def main():
         seg = data[DataKey.SEG].cuda()
         img = data[DataKey.IMG].cuda()
         with torch.no_grad():
-            for flip_idx in [[]] + model.tta_flips:
-                print(flip_idx)
-                flip_img = img.flip(flip_idx)
-                pred = model.infer(flip_img)
-                pred = (pred.sigmoid() > 0.5).long()
-                plot(flip_img, pred, seg.flip(flip_idx))
-                # pred = model.post_transform(pred[0])[None]
-                # plot(img, pred, seg)
+            pred = model.infer_logit(img)
+            pred = (pred.sigmoid() > 0.5).long()
+            for i, s in enumerate(args.seg_classes):
+                if s == SegClass.CT:
+                    j = args.input_modalities.index(Modality.T1)
+                else:
+                    j = args.input_modalities.index(Modality.T2)
+                plot(img[:, j:j + 1], pred[:, i:i + 1], seg[:, i:i + 1])
 
 if __name__ == '__main__':
     main()
