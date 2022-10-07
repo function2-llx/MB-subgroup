@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from umei.args import AugArgs, CVArgs, SegArgs, UMeIArgs
 
 from mbs.utils.enums import Modality, SegClass
-from umei.args import AugArgs, CVArgs, SegArgs, UMeIArgs
 
 @dataclass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
@@ -32,3 +36,21 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 @dataclass
 class MBArgs(MBSegArgs):
     pass
+
+@dataclass
+class MBSegPredArgs(MBSegArgs):
+    p_seeds: list[int] = field(default=None)
+    p_output_dir: Path = field(default=None)
+    l: int = field(default=None)
+    r: int = field(default=None)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.p_seeds = sorted(self.p_seeds)
+        if self.p_output_dir is None:
+            suffix = f'sw{self.sw_overlap}'
+            if self.do_post:
+                suffix += '+post'
+            if self.do_tta:
+                suffix += '+tta'
+            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix

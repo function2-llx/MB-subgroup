@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -14,32 +12,15 @@ from monai.data import DataLoader, Dataset
 from monai.utils import GridSampleMode
 from umei.utils import DataKey, UMeIParser
 
-from mbs.args import MBSegArgs
+from mbs.args import MBSegPredArgs
 from mbs.datamodule import MBSegDataModule
 from mbs.model import MBSegModel
 from mbs.utils.enums import MBDataKey
 
-@dataclass
-class MBSegPredictionArgs(MBSegArgs):
-    p_seeds: list[int] = field(default=None)
-    p_output_dir: Path = field(default=None)
-    l: int = field(default=None)
-    r: int = field(default=None)
-
-    def __post_init__(self):
-        super().__post_init__()
-        if self.p_output_dir is None:
-            suffix = f'sw{self.sw_overlap}'
-            if self.do_post:
-                suffix += '+post'
-            if self.do_tta:
-                suffix += '+tta'
-            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix
-
 class MBSegPredictor(pl.LightningModule):
     models: nn.ModuleList | Sequence[MBSegModel]
 
-    def __init__(self, args: MBSegPredictionArgs):
+    def __init__(self, args: MBSegPredArgs):
         super().__init__()
         self.args = args
         self.models = nn.ModuleList([
@@ -67,7 +48,7 @@ class MBSegPredictor(pl.LightningModule):
         torch.save(pred_prob, save_path)
 
 class MBSegPredictionDataModule(MBSegDataModule):
-    args: MBSegPredictionArgs
+    args: MBSegPredArgs
 
     @property
     def predict_transform(self):
@@ -97,8 +78,8 @@ class MBSegPredictionDataModule(MBSegDataModule):
         )
 
 def main():
-    parser = UMeIParser((MBSegPredictionArgs,), use_conf=True)
-    args: MBSegPredictionArgs = parser.parse_args_into_dataclasses()[0]
+    parser = UMeIParser((MBSegPredArgs,), use_conf=True)
+    args: MBSegPredArgs = parser.parse_args_into_dataclasses()[0]
     print(args)
     predictor = MBSegPredictor(args)
     trainer = pl.Trainer(
