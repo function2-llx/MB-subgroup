@@ -34,7 +34,7 @@ class MBSegPredictionArgs(MBSegArgs):
                 suffix += '+post'
             if self.do_tta:
                 suffix += '+tta'
-            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}'
+            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix
 
 class MBSegPredictor(pl.LightningModule):
     models: nn.ModuleList | Sequence[MBSegModel]

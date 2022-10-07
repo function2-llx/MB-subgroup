@@ -4,21 +4,21 @@ dependencies:
   - python=3.9.13
   - ruamel.yaml=0.17.21
   - aenum==3.1.11
-  - numpy=1.23.2
+  - numpy=1.23.3
   - einops=0.4.1
   - pytorch::pytorch=1.12.1
   - cudatoolkit=11.6
   - pytorch::torchvision=0.13.1
-  - pytorch-lightning=1.7.5
+  - pytorch-lightning=1.7.7
   - lightning-bolts=0.5.0
-  - torchmetrics=0.9.3
-  - transformers==4.21.3
-  - wandb==0.13.1
+  - torchmetrics=0.10.0
+  - transformers==4.22.2
+  - wandb==0.13.4
   - scikit-learn=1.1.2
-  - pandas=1.4.4
+  - pandas=1.5.0
   - openpyxl=3.0.10
 #  - tabulate=0.8.10
-  - matplotlib=3.5.3
+  - matplotlib=3.6.0
   - nibabel=4.0.2
 
   - pydicom=2.3.0
