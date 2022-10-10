@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from tqdm.contrib.concurrent import process_map
 
+from mbs.utils import SEG_PROB_FILENAME
 import monai
 from monai.metrics import compute_meandice
 from monai.utils import GridSampleMode
@@ -19,7 +20,7 @@ args: MBSegPredArgs
 
 def process(data: dict):
     data = loader(data)
-    prob = torch.load(args.p_output_dir / data[MBDataKey.CASE] / 'seg-prob.pt', map_location='cpu')
+    prob = torch.load(args.p_output_dir / data[MBDataKey.CASE] / SEG_PROB_FILENAME, map_location='cpu')
     th = 0.5
     ret = {
         'case': data[MBDataKey.CASE],

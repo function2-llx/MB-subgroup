@@ -35,7 +35,8 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 
 @dataclass
 class MBArgs(MBSegArgs):
-    pass
+    seg_pred_dir: Path = field(default=None)
+    th: float = field(default=0.5)
 
 @dataclass
 class MBSegPredArgs(MBSegArgs):

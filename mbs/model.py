@@ -15,11 +15,11 @@ from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
-from umei import SegModel
+from umei import SegModel, UMeI
 from umei.models.layernorm import LayerNormNd
 from umei.utils import DataKey
 
-from mbs.args import MBSegArgs
+from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
 from mbs.utils.enums import MBDataKey, SegClass
 
@@ -215,3 +215,6 @@ class MBSegModel(SegModel):
         metrics[MBDataKey.CASE] = case
 
         self.test_outputs.append(metrics)
+
+class MBModel(MBSegModel):
+    args: MBArgs

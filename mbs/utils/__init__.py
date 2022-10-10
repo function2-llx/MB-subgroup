@@ -5,4 +5,6 @@ from typing import Union as Intersection, Union
 
 PathLike = Union[str, bytes, os.PathLike]
 
-__all__ = ['Intersection', 'PathLike']
+SEG_PROB_FILENAME = 'seg-prob.pt'
+
+__all__ = ['Intersection', 'PathLike', 'SEG_PROB_FILENAME']

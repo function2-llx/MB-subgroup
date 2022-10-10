@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
+from mbs.utils import SEG_PROB_FILENAME
 import monai
 from monai.data import DataLoader, Dataset
 from monai.utils import GridSampleMode
@@ -43,7 +44,7 @@ class MBSegPredictor(pl.LightningModule):
             else:
                 pred_prob += prob
         pred_prob /= len(self.models)
-        save_path = self.args.p_output_dir / case / 'seg-prob.pt'
+        save_path = self.args.p_output_dir / case / SEG_PROB_FILENAME
         save_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(pred_prob, save_path)
 
