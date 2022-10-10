@@ -16,6 +16,9 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     test_size: int = field(default=None)
     pad_crop_size: list[int] = field(default=None)
     do_post: bool = field(default=False)
+    train_cache_num: int = field(default=200)
+    val_cache_num: int = field(default=50)
+    train_batch_size: int = field(default=8)
 
     def __post_init__(self):
         assert self.mc_seg
