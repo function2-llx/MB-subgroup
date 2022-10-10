@@ -13,3 +13,5 @@ class SegClass(StrEnum):
     ST = 'ST'
     CT = 'CT'
     AT = 'AT'
+
+SUBGROUPS = ['WNT', 'SHH', 'G3', 'G4']

@@ -7,21 +7,23 @@ import einops
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
-from torchmetrics import Recall
+from torchmetrics import Recall, AUROC
+from torchmetrics.utilities.enums import AverageMethod
 
 import monai
+from monai.losses import DiceFocalLoss
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
-from umei import SegModel, UMeI
+from umei import SegModel
 from umei.models.layernorm import LayerNormNd
 from umei.utils import DataKey
 
 from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
-from mbs.utils.enums import MBDataKey, SegClass
+from mbs.utils.enums import MBDataKey, SUBGROUPS, SegClass
 
 class MBPatchMerging(PatchMergingV2):
     def __init__(
@@ -218,3 +220,42 @@ class MBSegModel(SegModel):
 
 class MBModel(MBSegModel):
     args: MBArgs
+    encoder: MBBackbone
+
+    def __init__(self, args: MBArgs):
+        super().__init__(args)
+        self.cls_loss_fn = nn.CrossEntropyLoss()
+        # TODO: adjust weight
+        from monai.losses import FocalLoss
+        self.seg_loss_fn = DiceFocalLoss(
+            include_background=self.args.dice_include_background,
+            to_onehot_y=not args.mc_seg,
+            sigmoid=args.mc_seg,
+            softmax=not args.mc_seg,
+            squared_pred=self.args.squared_dice,
+            smooth_nr=self.args.dice_nr,
+            smooth_dr=self.args.dice_dr,
+        )
+        self.auroc = AUROC(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
+
+    def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
+        super().validation_step(batch, *args, **kwargs)
+        cls_feature = self.encoder.forward(batch[DataKey.IMG]).cls_feature
+        if DataKey.CLINICAL in batch:
+            cls_feature = torch.cat((cls_feature, batch[DataKey.CLINICAL]), dim=1)
+        logit = self.cls_head(cls_feature)
+        loss = self.cls_loss_fn(logit, batch[DataKey.CLS])
+        self.log('val/cls_loss', loss)
+        prob = logit.softmax(dim=-1)
+        self.auroc(prob, batch[DataKey.CLS])
+
+    def on_validation_epoch_start(self):
+        super().on_validation_epoch_start()
+        self.auroc.reset()
+
+    def validation_epoch_end(self, *args) -> None:
+        super().validation_epoch_end(*args)
+        auroc = self.auroc.compute()
+        for i, subgroup in enumerate(SUBGROUPS):
+            self.log(f'val/auc/{subgroup}', auroc[i], sync_dist=True)
+        self.log(f'val/auc/avg', auroc.mean(), sync_dist=True)

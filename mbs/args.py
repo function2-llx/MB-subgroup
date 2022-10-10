@@ -5,7 +5,7 @@ from pathlib import Path
 
 from umei.args import AugArgs, CVArgs, SegArgs, UMeIArgs
 
-from mbs.utils.enums import Modality, SegClass
+from mbs.utils.enums import Modality, SUBGROUPS, SegClass
 
 @dataclass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
@@ -36,7 +36,18 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 @dataclass
 class MBArgs(MBSegArgs):
     seg_pred_dir: Path = field(default=None)
-    th: float = field(default=0.5)
+    th: float = field(default=0.3)
+    do_post: bool = field(default=True)
+    monitor: str = field(default='val/auc/avg')
+    monitor_mode: str = field(default='max')
+    learning_rate: float = field(default=1e-5)
+    warmup_epochs: int = field(default=0)
+    seg_loss_factor: float = field(default=0.2)
+    num_train_epochs: float = field(default=50)
+
+    @property
+    def num_cls_classes(self):
+        return len(SUBGROUPS)
 
 @dataclass
 class MBSegPredArgs(MBSegArgs):

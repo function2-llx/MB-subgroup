@@ -10,7 +10,7 @@ from umei.utils import UMeIParser
 
 from mbs.args import MBArgs
 from mbs.datamodule import MBDataModule
-from mbs.model import MBModel, MBSegModel
+from mbs.model import MBModel
 
 task_name = 'mb'
 args: MBArgs
@@ -21,7 +21,7 @@ def fit_or_eval():
     test_outputs = []
     if args.do_eval:
         log_dir = args.output_dir / f'run-{args.seed}' / 'eval'
-        eval_suffix = f'sw{args.sw_overlap}-{args.sw_blend_mode}'
+        eval_suffix = ''
         if args.do_tta:
             eval_suffix += '-tta'
         log_dir /= eval_suffix
@@ -74,6 +74,15 @@ def fit_or_eval():
             # limit_test_batches=1,
         )
         model = MBModel(args)
+        seg_ckpt_path = output_dir / 'seg' / 'last.ckpt'
+        missing_keys, unexpected_keys = model.load_state_dict(
+            torch.load(output_dir / 'seg' / 'last.ckpt')['state_dict'],
+            strict=False,
+        )
+        assert len(unexpected_keys) == 0
+        assert set(missing_keys) == {'cls_head.weight', 'cls_head.bias'}
+        print(f'load seg model weights from {seg_ckpt_path}')
+
         last_ckpt_path = args.ckpt_path
         if last_ckpt_path is None:
             last_ckpt_path = output_dir / 'last.ckpt'
@@ -107,6 +116,7 @@ def main():
     args = parser.parse_args_into_dataclasses()[0]
     print(args)
     datamodule = MBDataModule(args)
+    assert args.do_train ^ args.do_eval
     fit_or_eval()
 
 if __name__ == '__main__':
