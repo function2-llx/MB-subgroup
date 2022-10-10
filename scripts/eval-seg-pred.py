@@ -2,10 +2,8 @@ from collections.abc import Callable
 import itertools
 
 import pandas as pd
-import torch
 from tqdm.contrib.concurrent import process_map
 
-from mbs.utils import SEG_PROB_FILENAME
 import monai
 from monai.metrics import compute_meandice
 from monai.utils import GridSampleMode
@@ -20,15 +18,14 @@ args: MBSegPredArgs
 
 def process(data: dict):
     data = loader(data)
-    prob = torch.load(args.p_output_dir / data[MBDataKey.CASE] / SEG_PROB_FILENAME, map_location='cpu')
-    th = 0.5
+    # prob = torch.load(args.p_output_dir / data[MBDataKey.CASE] / SEG_PROB_FILENAME, map_location='cpu')
     ret = {
         'case': data[MBDataKey.CASE],
         'split': data['split'],
     }
     for i, seg_class in enumerate(args.seg_classes):
-        pred = (prob[:, i:i + 1] > th).long()
         seg = data[seg_class][None]
+        pred = data[f'{seg_class}-pred'][None]
         ret[f'dice-{seg_class}'] = compute_meandice(pred, seg).item()
         ret[f'recall-{seg_class}'] = ((pred * seg).sum() / seg.sum()).item()
     return ret
@@ -37,22 +34,30 @@ def main():
     global args, loader
     parser = UMeIParser((MBSegPredArgs, ), use_conf=True)
     args = parser.parse_args_into_dataclasses()[0]
-    seg_keys = list(SegClass)
+    print(args)
+    all_keys = list(SegClass) + list(map(lambda x: f'{x}-pred', SegClass))
+
     loader = monai.transforms.Compose([
-        monai.transforms.LoadImageD(seg_keys),
-        monai.transforms.EnsureChannelFirstD(seg_keys),
-        monai.transforms.OrientationD(seg_keys, axcodes='RAS'),
-        monai.transforms.SpacingD(seg_keys, pixdim=args.spacing, mode=GridSampleMode.NEAREST),
-        monai.transforms.ResizeWithPadOrCropD(seg_keys, spatial_size=args.pad_crop_size),
-        monai.transforms.LambdaD(seg_keys, lambda x: x.as_tensor()),
+        monai.transforms.LoadImageD(all_keys),
+        monai.transforms.EnsureChannelFirstD(all_keys),
+        monai.transforms.OrientationD(all_keys, axcodes='RAS'),
+        monai.transforms.SpacingD(all_keys, pixdim=args.spacing, mode=GridSampleMode.NEAREST),
+        monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=args.pad_crop_size),
+        monai.transforms.LambdaD(all_keys, lambda x: x.as_tensor()),
     ])
     cohort = load_cohort()
+    suffix = f'th{args.th}'
+    if args.do_post:
+        suffix += '-post'
     for split, data in cohort.items():
         for x in data:
             x['split'] = split
+            for seg_class in args.seg_classes:
+                x[f'{seg_class}-pred'] = args.p_output_dir / x[MBDataKey.CASE] / suffix / f'{seg_class}.nii.gz'
     results = process_map(process, list(itertools.chain(*cohort.values())), max_workers=43)
-    pd.DataFrame.from_records(results).to_excel(args.p_output_dir / 'eval.xlsx')
-    pd.DataFrame.from_records(results).to_excel(args.p_output_dir / 'eval.csv')
+    results_df = pd.DataFrame.from_records(results)
+    results_df.to_excel(args.p_output_dir / f'eval-{suffix}.xlsx', index=False)
+    results_df.to_csv(args.p_output_dir / f'eval-{suffix}.csv', index=False)
 
 if __name__ == '__main__':
     main()
