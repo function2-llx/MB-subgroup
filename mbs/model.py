@@ -11,7 +11,7 @@ from torchmetrics import Recall, AUROC
 from torchmetrics.utilities.enums import AverageMethod
 
 import monai
-from monai.losses import DiceFocalLoss
+from monai.losses import FocalLoss
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Act, Norm
 from monai.networks.nets import PatchMergingV2
@@ -226,26 +226,23 @@ class MBModel(MBSegModel):
         super().__init__(args)
         self.cls_loss_fn = nn.CrossEntropyLoss()
         # TODO: adjust weight
-        from monai.losses import FocalLoss
-        self.seg_loss_fn = DiceFocalLoss(
-            include_background=self.args.dice_include_background,
-            to_onehot_y=not args.mc_seg,
-            sigmoid=args.mc_seg,
-            softmax=not args.mc_seg,
-            squared_pred=self.args.squared_dice,
-            smooth_nr=self.args.dice_nr,
-            smooth_dr=self.args.dice_dr,
-        )
+        self.seg_loss_fn = FocalLoss(include_background=self.args.dice_include_background, to_onehot_y=not args.mc_seg)
+        # self.seg_loss_fn = DiceFocalLoss(
+        #     include_background=self.args.dice_include_background,
+        #     to_onehot_y=not args.mc_seg,
+        #     sigmoid=args.mc_seg,
+        #     softmax=not args.mc_seg,
+        #     squared_pred=self.args.squared_dice,
+        #     smooth_nr=self.args.dice_nr,
+        #     smooth_dr=self.args.dice_dr,
+        # )
         self.auroc = AUROC(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
 
     def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
         super().validation_step(batch, *args, **kwargs)
-        cls_feature = self.encoder.forward(batch[DataKey.IMG]).cls_feature
-        if DataKey.CLINICAL in batch:
-            cls_feature = torch.cat((cls_feature, batch[DataKey.CLINICAL]), dim=1)
-        logit = self.cls_head(cls_feature)
+        logit = self.forward_cls(batch[DataKey.IMG])
         loss = self.cls_loss_fn(logit, batch[DataKey.CLS])
-        self.log('val/cls_loss', loss)
+        self.log('val/cls_loss', loss, sync_dist=True)
         prob = logit.softmax(dim=-1)
         self.auroc(prob, batch[DataKey.CLS])
 

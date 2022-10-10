@@ -86,7 +86,7 @@ def fit_or_eval():
         last_ckpt_path = args.ckpt_path
         if last_ckpt_path is None:
             last_ckpt_path = output_dir / 'last.ckpt'
-            if not last_ckpt_path.exists():
+            if not last_ckpt_path.exists() or args.no_resume:
                 last_ckpt_path = None
         if args.do_train:
             if trainer.is_global_zero:

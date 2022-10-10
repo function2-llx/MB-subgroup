@@ -129,6 +129,7 @@ class MBDataModule(MBCVDataModule):
             seg_pred_dir = args.seg_pred_dir / x[MBDataKey.CASE] / suffix
             for seg_cls in args.seg_classes:
                 x[f'{seg_cls}-pred'] = seg_pred_dir / f'{seg_cls}.nii.gz'
+                # x[f'{seg_cls}-pred'] = DATA_DIR / 'image' / x[MBDataKey.CASE] / f'{seg_cls}.nii'
 
     @property
     def train_transform(self):
@@ -188,5 +189,34 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
             monai.transforms.CopyItemsD(MBDataKey.SUBGROUP, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+            # monai.transforms.SelectItemsD([DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+        ])
+
+    @property
+    def test_transform(self):
+        img_keys = self.args.input_modalities
+        seg_keys = self.args.seg_classes
+        seg_pred_keys = list(map(lambda x: f'{x}-pred', self.args.seg_classes))
+        all_keys = img_keys + seg_keys + seg_pred_keys
+        return monai.transforms.Compose([
+            monai.transforms.LoadImageD(all_keys),
+            monai.transforms.EnsureChannelFirstD(all_keys),
+            monai.transforms.OrientationD(all_keys, axcodes='RAS'),
+            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
+            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+            monai.transforms.ResizeWithPadOrCropD(img_keys + seg_keys, spatial_size=self.args.pad_crop_size),
+            monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
+            monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
+            monai.transforms.CenterSpatialCropD(
+                all_keys,
+                roi_size=self.args.sample_shape,
+            ),
+            monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+            monai.transforms.NormalizeIntensityD(img_keys),
+            monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
+            monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
+            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP, names=DataKey.CLS),
+            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
+            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])

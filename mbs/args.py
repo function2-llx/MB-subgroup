@@ -40,13 +40,9 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 class MBArgs(MBSegArgs):
     seg_pred_dir: Path = field(default=None)
     th: float = field(default=0.3)
-    do_post: bool = field(default=True)
     monitor: str = field(default='val/auc/avg')
     monitor_mode: str = field(default='max')
-    learning_rate: float = field(default=1e-5)
-    warmup_epochs: int = field(default=0)
-    seg_loss_factor: float = field(default=0.2)
-    num_train_epochs: float = field(default=50)
+    per_device_eval_batch_size: int = field(default=4)
 
     @property
     def num_cls_classes(self):
