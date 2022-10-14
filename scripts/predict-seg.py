@@ -27,7 +27,7 @@ class MBSegPredictor(pl.LightningModule):
         self.args = args
         self.models = nn.ModuleList([
             MBSegModel.load_from_checkpoint(
-                self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
+                self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'seg' / 'last.ckpt',
                 strict=True,
                 args=args,
             )

@@ -38,7 +38,7 @@ def main():
     parser = UMeIParser((MBSegPredArgs, ), use_conf=True)
     args = parser.parse_args_into_dataclasses()[0]
     print(args)
-    all_keys = list(SegClass) + list(map(lambda x: f'{x}-pred', SegClass))
+    all_keys = list(args.seg_classes) + list(map(lambda x: f'{x}-pred', args.seg_classes))
 
     loader = monai.transforms.Compose([
         monai.transforms.LoadImageD(all_keys),

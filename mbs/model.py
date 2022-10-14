@@ -129,7 +129,10 @@ class MBBackbone(UEncoderBase):
             LayerNormNd(args.feature_channels[args.stem_stages + i])
             for i in range(args.vit_stages)
         ])
-        self.avg_pool = nn.AdaptiveAvgPool3d(1)
+        if args.num_cls_classes is not None:
+            self.cls_pool = nn.AdaptiveAvgPool3d(tuple(args.pool_shape))
+        else:
+            self.cls_pool = None
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> UEncoderOutput:
         hidden_states = []
@@ -142,10 +145,13 @@ class MBBackbone(UEncoderBase):
             z = norm(z)
             hidden_states.append(z)
             x = z_ds
-        return UEncoderOutput(
-            cls_feature=self.avg_pool(hidden_states[-1]).flatten(1),
+        ret = UEncoderOutput(
+            cls_feature=hidden_states[-1],
             hidden_states=hidden_states,
         )
+        if self.cls_pool is not None:
+            ret.cls_feature = self.cls_pool(hidden_states[-1]).flatten(1)
+        return ret
 
 class MBSegModel(SegModel):
     args: MBSegArgs
@@ -226,26 +232,20 @@ class MBModel(MBSegModel):
 
     def __init__(self, args: MBArgs):
         super().__init__(args)
-        self.cls_loss_fn = nn.CrossEntropyLoss()
-        # TODO: adjust weight
+        self.cls_loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(args.cls_weights))
         self.seg_loss_fn = FocalLoss(
             include_background=self.args.include_background,
             to_onehot_y=not args.mc_seg,
             weight=torch.tensor(args.seg_weights),
         )
-        self.auroc = AUROC(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
-        self.recall = Recall(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
-        self.prec = Precision(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
-        self.f1 = F1Score(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
-        self.acc = Accuracy(num_classes=len(SUBGROUPS))
-        self.metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
+        self.cls_metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
             k: metric_cls(num_classes=len(SUBGROUPS), average=average)
             for k, metric_cls, average in [
                 ('auroc', AUROC, AverageMethod.NONE),
                 ('recall', Recall, AverageMethod.NONE),
                 ('precision', Precision, AverageMethod.NONE),
                 ('f1', F1Score, AverageMethod.NONE),
-                ('acc', Accuracy, AverageMethod.NONE)
+                ('acc', Accuracy, AverageMethod.MICRO),
             ]
         })
 
@@ -256,21 +256,21 @@ class MBModel(MBSegModel):
         loss = self.cls_loss_fn(logit, cls)
         self.log('val/cls_loss', loss, sync_dist=True)
         prob = logit.softmax(dim=-1)
-        for k, metric in self.metrics.items():
+        for k, metric in self.cls_metrics.items():
             metric(prob, cls)
 
     def on_validation_epoch_start(self):
         super().on_validation_epoch_start()
-        for k, metric in self.metrics.items():
+        for k, metric in self.cls_metrics.items():
             metric.reset()
 
     def validation_epoch_end(self, *args) -> None:
         super().validation_epoch_end(*args)
-        for k, metric in self.metrics.items():
+        for k, metric in self.cls_metrics.items():
             m = metric.compute()
             if metric.average == AverageMethod.NONE:
                 for i, subgroup in enumerate(SUBGROUPS):
                     self.log(f'val/{k}/{subgroup}', m[i], sync_dist=True)
                 self.log(f'val/{k}/avg', m.mean(), sync_dist=True)
             else:
-                self.log(f'val/{k}', m)
+                self.log(f'val/{k}', m, sync_dist=True)

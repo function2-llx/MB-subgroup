@@ -30,6 +30,7 @@ def fit_or_eval():
         datamodule.val_id = val_id
         pl.seed_everything(args.seed)
         output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}' / 'cls'
+        seg_output_dir = args.seg_output_dir / f'run-{args.seed}' / f'fold-{val_id}' / 'seg'
         output_dir.mkdir(exist_ok=True, parents=True)
         if args.do_train:
             log_dir = output_dir
@@ -48,7 +49,7 @@ def fit_or_eval():
             callbacks=[
                 ModelCheckpoint(
                     dirpath=output_dir,
-                    filename=f'ep{{epoch}}-{args.monitor.replace("/", " ")}={{{args.monitor}:.3f}}',
+                    filename=f'best-ep{{epoch}}',
                     auto_insert_metric_name=False,
                     monitor=args.monitor,
                     mode=args.monitor_mode,
@@ -74,13 +75,13 @@ def fit_or_eval():
             # limit_test_batches=1,
         )
         model = MBModel(args)
-        seg_ckpt_path = output_dir.parent / 'seg' / 'last.ckpt'
+        seg_ckpt_path = seg_output_dir / 'last.ckpt'
         missing_keys, unexpected_keys = model.load_state_dict(
             torch.load(seg_ckpt_path)['state_dict'],
             strict=False,
         )
         assert len(unexpected_keys) == 0
-        assert set(missing_keys) == {'cls_head.weight', 'cls_head.bias'}
+        assert set(missing_keys) == {'cls_head.weight', 'cls_head.bias', 'cls_loss_fn.weight'}
         print(f'load seg model weights from {seg_ckpt_path}')
 
         last_ckpt_path = args.ckpt_path

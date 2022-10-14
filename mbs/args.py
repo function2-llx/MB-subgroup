@@ -12,6 +12,7 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     mc_seg: bool = field(default=True)
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
+    pool_shape: list[int] = field(default_factory=lambda: [1, 1, 1])
     seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
     seg_weights: list[float] = field(default=None)
     test_size: int = field(default=None)
@@ -24,8 +25,8 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     def __post_init__(self):
         assert self.mc_seg
         if self.seg_weights is None:
-            self.seg_weights = [1.] * len(self.seg_classes)
-        assert len(self.seg_classes) == len(self.seg_weights)
+            self.seg_weights = [1.] * self.num_seg_classes
+        assert len(self.seg_weights) == self.num_seg_classes
         super().__post_init__()
 
     @property
@@ -42,15 +43,24 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 
 @dataclass
 class MBArgs(MBSegArgs):
+    seg_output_dir: Path = field(default=None)
     seg_pred_dir: Path = field(default=None)
     th: float = field(default=0.3)
-    monitor: str = field(default='val/auc/avg')
-    monitor_mode: str = field(default='max')
+    monitor: str = field(default='val/cls_loss')
+    monitor_mode: str = field(default='min')
     per_device_eval_batch_size: int = field(default=4)
+    cls_weights: list[float] = field(default=None)
 
     @property
     def num_cls_classes(self):
         return len(SUBGROUPS)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.seg_output_dir is None:
+            self.seg_output_dir = self.output_dir
+        if self.cls_weights is None:
+            self.cls_weights = [1.] * self.num_cls_classes
 
 @dataclass
 class MBSegPredArgs(MBSegArgs):
