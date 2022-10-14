@@ -9,12 +9,11 @@ sample_size: 192
 sample_slices: 24
 input_modalities:
   - T1
-  - T1C
   - T2
 seg_classes:
   - ST
   - AT
-  - CT
+seg_weights: [0, 1]
 spacing: [0.46875, 0.46875, -1]
 learning_rate: 3e-5
 train_batch_size: 2

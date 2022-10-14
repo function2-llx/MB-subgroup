@@ -23,11 +23,14 @@ def process(data: dict):
         'case': data[MBDataKey.CASE],
         'split': data['split'],
     }
+    st_pred = data[f'{SegClass.ST}-pred'][None]
     for i, seg_class in enumerate(args.seg_classes):
         seg = data[seg_class][None]
         pred = data[f'{seg_class}-pred'][None]
         ret[f'dice-{seg_class}'] = compute_meandice(pred, seg).item()
         ret[f'recall-{seg_class}'] = ((pred * seg).sum() / seg.sum()).item()
+        if seg_class != SegClass.ST:
+            ret[f'recall-{seg_class}-st'] = ((st_pred * seg).sum() / seg.sum()).item()
     return ret
 
 def main():
@@ -49,6 +52,7 @@ def main():
     suffix = f'th{args.th}'
     if args.do_post:
         suffix += '-post'
+    print(suffix)
     for split, data in cohort.items():
         for x in data:
             x['split'] = split

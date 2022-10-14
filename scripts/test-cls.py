@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+import itertools
 import json
 
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 from torch import nn
-from torchmetrics import AUROC
+import torchmetrics
 from torchmetrics.utilities.enums import AverageMethod
 
 from mbs.model import MBModel
@@ -28,23 +29,30 @@ class MBTester(pl.LightningModule):
     def __init__(self, args: MBTestArgs):
         super().__init__()
         self.args = args
-        self.models = nn.ModuleList([
-            MBModel.load_from_checkpoint(
-                self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
-                strict=True,
-                args=args,
-            )
-            for seed in args.p_seeds
-            # for fold_id in range(args.num_folds)
-            for fold_id in [4]
-        ])
-        self.auroc = AUROC(num_classes=args.num_cls_classes, average=AverageMethod.NONE)
+        self.models = nn.ModuleList()
+        for seed, fold_id in itertools.product(args.p_seeds, range(args.num_folds)):
+            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls' / 'last.ckpt'
+            self.models.append(MBModel.load_from_checkpoint(ckpt_path, strict=True, args=args))
+            print(f'load model from {ckpt_path}')
+
+        self.metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
+            k: metric_cls(num_classes=len(SUBGROUPS), average=average)
+            for k, metric_cls, average in [
+                ('auroc', torchmetrics.AUROC, AverageMethod.NONE),
+                ('recall', torchmetrics.Recall, AverageMethod.NONE),
+                ('precision', torchmetrics.Precision, AverageMethod.NONE),
+                ('f1', torchmetrics.F1Score, AverageMethod.NONE),
+                ('acc', torchmetrics.Accuracy, AverageMethod.MICRO),
+            ]
+        })
         self.case_outputs = []
-        self.whole_results = {}
+        self.report = {}
 
     def on_test_epoch_start(self) -> None:
-        self.auroc.reset()
+        for k, m in self.metrics.items():
+            m.reset()
         self.case_outputs.clear()
+        self.report = {}
 
     def test_step(self, batch: dict, *args, **kwargs):
         prob = None
@@ -55,8 +63,9 @@ class MBTester(pl.LightningModule):
             else:
                 prob += logit.softmax(dim=-1)
         prob /= len(self.models)
-        self.auroc(prob, batch[DataKey.CLS])
         cls = batch[DataKey.CLS]
+        for k, metric in self.metrics.items():
+            metric(prob, cls)
         for i, case in enumerate(batch[MBDataKey.CASE]):
             self.case_outputs.append({
                 'case': case,
@@ -69,11 +78,18 @@ class MBTester(pl.LightningModule):
             })
 
     def test_epoch_end(self, *args) -> None:
-        auroc = self.auroc.compute()
-        for i, sg in enumerate(SUBGROUPS):
-            self.whole_results[sg] = auroc[i].item()
-        self.whole_results['macro avg'] = auroc.mean().item()
-        print(self.whole_results)
+        self.report['n'] = len(self.case_outputs)
+        for k, metric in self.metrics.items():
+            m = metric.compute()
+            if metric.average == AverageMethod.NONE:
+                result = {}
+                for i, sg in enumerate(SUBGROUPS):
+                    result[sg] = m[i].item()
+                result['macro avg'] = m.mean().item()
+                self.report[k] = result
+            else:
+                self.report[k] = m.item()
+        print(json.dumps(self.report, indent=4, ensure_ascii=False))
 
 def main():
     parser = UMeIParser((MBTestArgs,), use_conf=True)
@@ -95,7 +111,7 @@ def main():
     results_df.to_csv(args.output_dir / 'test-results.csv', index=False)
     results_df.to_excel(args.output_dir / 'test-results.xlsx', index=False)
     with open(args.output_dir / 'whole-result.json', 'w') as f:
-        json.dump(tester.whole_results, f, indent=4, ensure_ascii=False)
+        json.dump(tester.report, f, indent=4, ensure_ascii=False)
 
 if __name__ == '__main__':
     main()

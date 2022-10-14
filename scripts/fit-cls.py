@@ -29,7 +29,7 @@ def fit_or_eval():
     for val_id in args.fold_ids:
         datamodule.val_id = val_id
         pl.seed_everything(args.seed)
-        output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}'
+        output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}' / 'cls'
         output_dir.mkdir(exist_ok=True, parents=True)
         if args.do_train:
             log_dir = output_dir
@@ -74,9 +74,9 @@ def fit_or_eval():
             # limit_test_batches=1,
         )
         model = MBModel(args)
-        seg_ckpt_path = output_dir / 'seg' / 'last.ckpt'
+        seg_ckpt_path = output_dir.parent / 'seg' / 'last.ckpt'
         missing_keys, unexpected_keys = model.load_state_dict(
-            torch.load(output_dir / 'seg' / 'last.ckpt')['state_dict'],
+            torch.load(seg_ckpt_path)['state_dict'],
             strict=False,
         )
         assert len(unexpected_keys) == 0

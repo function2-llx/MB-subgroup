@@ -13,6 +13,7 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
     seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
+    seg_weights: list[float] = field(default=None)
     test_size: int = field(default=None)
     pad_crop_size: list[int] = field(default=None)
     do_post: bool = field(default=False)
@@ -22,6 +23,9 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
 
     def __post_init__(self):
         assert self.mc_seg
+        if self.seg_weights is None:
+            self.seg_weights = [1.] * len(self.seg_classes)
+        assert len(self.seg_classes) == len(self.seg_weights)
         super().__post_init__()
 
     @property

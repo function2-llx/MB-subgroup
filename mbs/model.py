@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import itertools
 from typing import Type
 
@@ -7,7 +8,8 @@ import einops
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
-from torchmetrics import Recall, AUROC
+import torchmetrics
+from torchmetrics import Accuracy, F1Score, Precision, Recall, AUROC
 from torchmetrics.utilities.enums import AverageMethod
 
 import monai
@@ -27,13 +29,13 @@ from mbs.utils.enums import MBDataKey, SUBGROUPS, SegClass
 
 class MBPatchMerging(PatchMergingV2):
     def __init__(
-        self,
-        dim: int,
-        out_dim: int,
-        norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
-        spatial_dims: int = 3,
-        *,
-        z_stride: int
+            self,
+            dim: int,
+            out_dim: int,
+            norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
+            spatial_dims: int = 3,
+            *,
+            z_stride: int
     ):
         super().__init__(dim, norm_layer, spatial_dims)
         self.out_dim = out_dim
@@ -61,13 +63,13 @@ class MBPatchMerging(PatchMergingV2):
 
 class MBBackbone(UEncoderBase):
     def __init__(
-        self,
-        args: MBSegArgs,
-        drop_path_rate: float = 0.0,
-        mlp_ratio: float = 4.0,
-        qkv_bias: bool = True,
-        drop_rate: float = 0.0,
-        attn_drop_rate: float = 0.0,
+            self,
+            args: MBSegArgs,
+            drop_path_rate: float = 0.0,
+            mlp_ratio: float = 4.0,
+            qkv_bias: bool = True,
+            drop_rate: float = 0.0,
+            attn_drop_rate: float = 0.0,
     ):
         super().__init__()
         self.conv_stem = nn.ModuleList([
@@ -226,33 +228,49 @@ class MBModel(MBSegModel):
         super().__init__(args)
         self.cls_loss_fn = nn.CrossEntropyLoss()
         # TODO: adjust weight
-        self.seg_loss_fn = FocalLoss(include_background=self.args.dice_include_background, to_onehot_y=not args.mc_seg)
-        # self.seg_loss_fn = DiceFocalLoss(
-        #     include_background=self.args.dice_include_background,
-        #     to_onehot_y=not args.mc_seg,
-        #     sigmoid=args.mc_seg,
-        #     softmax=not args.mc_seg,
-        #     squared_pred=self.args.squared_dice,
-        #     smooth_nr=self.args.dice_nr,
-        #     smooth_dr=self.args.dice_dr,
-        # )
+        self.seg_loss_fn = FocalLoss(
+            include_background=self.args.include_background,
+            to_onehot_y=not args.mc_seg,
+            weight=torch.tensor(args.seg_weights),
+        )
         self.auroc = AUROC(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
+        self.recall = Recall(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
+        self.prec = Precision(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
+        self.f1 = F1Score(num_classes=len(SUBGROUPS), average=AverageMethod.NONE)
+        self.acc = Accuracy(num_classes=len(SUBGROUPS))
+        self.metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
+            k: metric_cls(num_classes=len(SUBGROUPS), average=average)
+            for k, metric_cls, average in [
+                ('auroc', AUROC, AverageMethod.NONE),
+                ('recall', Recall, AverageMethod.NONE),
+                ('precision', Precision, AverageMethod.NONE),
+                ('f1', F1Score, AverageMethod.NONE),
+                ('acc', Accuracy, AverageMethod.NONE)
+            ]
+        })
 
     def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
         super().validation_step(batch, *args, **kwargs)
+        cls = batch[DataKey.CLS]
         logit = self.forward_cls(batch[DataKey.IMG])
-        loss = self.cls_loss_fn(logit, batch[DataKey.CLS])
+        loss = self.cls_loss_fn(logit, cls)
         self.log('val/cls_loss', loss, sync_dist=True)
         prob = logit.softmax(dim=-1)
-        self.auroc(prob, batch[DataKey.CLS])
+        for k, metric in self.metrics.items():
+            metric(prob, cls)
 
     def on_validation_epoch_start(self):
         super().on_validation_epoch_start()
-        self.auroc.reset()
+        for k, metric in self.metrics.items():
+            metric.reset()
 
     def validation_epoch_end(self, *args) -> None:
         super().validation_epoch_end(*args)
-        auroc = self.auroc.compute()
-        for i, subgroup in enumerate(SUBGROUPS):
-            self.log(f'val/auc/{subgroup}', auroc[i], sync_dist=True)
-        self.log(f'val/auc/avg', auroc.mean(), sync_dist=True)
+        for k, metric in self.metrics.items():
+            m = metric.compute()
+            if metric.average == AverageMethod.NONE:
+                for i, subgroup in enumerate(SUBGROUPS):
+                    self.log(f'val/{k}/{subgroup}', m[i], sync_dist=True)
+                self.log(f'val/{k}/avg', m.mean(), sync_dist=True)
+            else:
+                self.log(f'val/{k}', m)

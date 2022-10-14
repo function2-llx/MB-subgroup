@@ -23,7 +23,7 @@ warmup_epochs: 0
 num_seg_heads: 3
 flip_p: 0.5
 rotate_p: 0
-dice_include_background: true
+include_background: true
 #dice_nr: 1e-5
 #dice_dr: 1e-5
 #crop_pos: 1
