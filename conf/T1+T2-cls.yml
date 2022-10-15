@@ -28,7 +28,6 @@ include_background: true
 #crop_pos: 1
 #squared_dice: true
 output_dir: output/T1+T2
-pool_shape: [2, 2, 2]
 seg_pred_dir: output/T1+T2/predict-42+233/sw0.8
-cls_weights: [1, 0.8, 0.8, 0.5]
+#cls_weights: [1, 0.8, 0.8, 0.5]
 th: 0.4

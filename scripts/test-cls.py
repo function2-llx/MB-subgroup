@@ -31,14 +31,14 @@ class MBTester(pl.LightningModule):
         self.args = args
         self.models = nn.ModuleList()
         for seed, fold_id in itertools.product(args.p_seeds, range(args.num_folds)):
-            # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls' / 'last.ckpt'
-            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
-            for filepath in ckpt_path.iterdir():
-                if filepath.name.startswith('best'):
-                    ckpt_path = filepath
-                    break
-            else:
-                raise RuntimeError
+            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls' / 'last.ckpt'
+            # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
+            # for filepath in ckpt_path.iterdir():
+            #     if filepath.name.startswith('best'):
+            #         ckpt_path = filepath
+            #         break
+            # else:
+            #     raise RuntimeError
 
             self.models.append(MBModel.load_from_checkpoint(ckpt_path, strict=True, args=args))
             print(f'load model from {ckpt_path}')

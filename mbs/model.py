@@ -15,7 +15,7 @@ from torchmetrics.utilities.enums import AverageMethod
 import monai
 from monai.losses import FocalLoss
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
-from monai.networks.layers import Act, Norm
+from monai.networks.layers import Act, Norm, Pool
 from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
@@ -130,9 +130,19 @@ class MBBackbone(UEncoderBase):
             for i in range(args.vit_stages)
         ])
         if args.num_cls_classes is not None:
-            self.cls_pool = nn.AdaptiveAvgPool3d(tuple(args.pool_shape))
+            self.post_layer = UnetResBlock(
+                spatial_dims=3,
+                in_channels=args.feature_channels[-1],
+                out_channels=args.feature_channels[-1] << 1,
+                kernel_size=3,
+                stride=2,
+                act_name=Act.GELU,
+                norm_name=Norm.LAYERND,
+            )
+            self.pool = Pool[args.pool_name, 3](1)
         else:
-            self.cls_pool = None
+            self.post_layer = None
+            self.pool = None
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> UEncoderOutput:
         hidden_states = []
@@ -149,8 +159,9 @@ class MBBackbone(UEncoderBase):
             cls_feature=hidden_states[-1],
             hidden_states=hidden_states,
         )
-        if self.cls_pool is not None:
-            ret.cls_feature = self.cls_pool(hidden_states[-1]).flatten(1)
+        if self.pool is not None:
+            z = self.post_layer(hidden_states[-1])
+            ret.cls_feature = self.pool(z).flatten(1)
         return ret
 
 class MBSegModel(SegModel):

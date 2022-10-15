@@ -12,7 +12,7 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     mc_seg: bool = field(default=True)
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
-    pool_shape: list[int] = field(default_factory=lambda: [1, 1, 1])
+    pool_name: str = field(default='adaptiveavg', metadata={'choices': ['adaptiveavg', 'adaptivemax']})
     seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
     seg_weights: list[float] = field(default=None)
     test_size: int = field(default=None)
