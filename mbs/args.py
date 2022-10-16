@@ -50,6 +50,8 @@ class MBArgs(MBSegArgs):
     monitor_mode: str = field(default='min')
     per_device_eval_batch_size: int = field(default=4)
     cls_weights: list[float] = field(default=None)
+    finetune_lr: float = field(default=1e-4)
+    cls_hidden_size: int = field(default=None)
 
     @property
     def num_cls_classes(self):
@@ -59,8 +61,8 @@ class MBArgs(MBSegArgs):
         super().__post_init__()
         if self.seg_output_dir is None:
             self.seg_output_dir = self.output_dir
-        if self.cls_weights is None:
-            self.cls_weights = [1.] * self.num_cls_classes
+        if self.cls_hidden_size is None:
+            self.cls_hidden_size = self.feature_channels[-1] << 1
 
 @dataclass
 class MBSegPredArgs(MBSegArgs):

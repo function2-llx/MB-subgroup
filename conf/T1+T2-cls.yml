@@ -15,9 +15,12 @@ seg_classes:
   - AT
 seg_weights: [0, 1]
 spacing: [0.46875, 0.46875, -1]
-learning_rate: 1e-5
+learning_rate: 5e-5
+finetune_lr: 1e-5
+weight_decay: 1e-5
 train_batch_size: 8
-num_train_epochs: 100
+num_train_epochs: 50
+seg_loss_factor: 0.5
 warmup_epochs: 10
 num_seg_heads: 3
 flip_p: 0.5
@@ -29,5 +32,5 @@ include_background: true
 #squared_dice: true
 output_dir: output/T1+T2
 seg_pred_dir: output/T1+T2/predict-42+233/sw0.8
-#cls_weights: [1, 0.8, 0.8, 0.5]
 th: 0.4
+cls_hidden_size: 192

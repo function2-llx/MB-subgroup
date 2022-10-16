@@ -3,6 +3,7 @@ import itertools
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 import pandas as pd
 
 import monai
@@ -25,7 +26,7 @@ def load_cohort():
         patient_img_dir = DATA_DIR / 'image' / patient
         data.setdefault(str(info['split']), []).append({
             MBDataKey.CASE: patient,
-            MBDataKey.SUBGROUP: SUBGROUPS.index(info['subgroup']),
+            MBDataKey.SUBGROUP_ID: SUBGROUPS.index(info['subgroup']),
             **{
                 img_type: patient_img_dir / f'{img_type}.nii'
                 for img_type in list(Modality) + list(SegClass)
@@ -36,7 +37,7 @@ def load_cohort():
 
 def get_classes(data: list[dict]) -> list[str]:
     return [
-        x[MBDataKey.SUBGROUP]
+        x[MBDataKey.SUBGROUP_ID]
         for x in data
     ]
 
@@ -131,6 +132,13 @@ class MBDataModule(MBCVDataModule):
                 x[f'{seg_cls}-pred'] = seg_pred_dir / f'{seg_cls}.nii.gz'
                 # x[f'{seg_cls}-pred'] = DATA_DIR / 'image' / x[MBDataKey.CASE] / f'{seg_cls}.nii'
 
+        if args.cls_weights is None:
+            cls_cnt = np.zeros(args.num_cls_classes, dtype=np.float)
+            for i in range(args.num_folds):
+                for x in self.cohort[str(i)]:
+                    cls_cnt[x[MBDataKey.SUBGROUP_ID]] += 1
+            args.cls_weights = (1. / cls_cnt).tolist()
+
     @property
     def train_transform(self):
         img_keys = self.args.input_modalities
@@ -159,7 +167,7 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP, names=DataKey.CLS),
+            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])
@@ -187,7 +195,7 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP, names=DataKey.CLS),
+            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             # monai.transforms.SelectItemsD([DataKey.IMG, DataKey.CLS, DataKey.SEG]),
             monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
@@ -216,7 +224,7 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP, names=DataKey.CLS),
+            monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])

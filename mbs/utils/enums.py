@@ -2,7 +2,7 @@ from monai.utils import StrEnum
 
 class MBDataKey(StrEnum):
     CASE = 'case'
-    SUBGROUP = 'subgroup'
+    SUBGROUP_ID = 'subgroup_id'
 
 class Modality(StrEnum):
     T1 = 'T1'

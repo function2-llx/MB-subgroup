@@ -5,6 +5,7 @@ import itertools
 from typing import Type
 
 import einops
+from einops.layers.torch import Rearrange
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
@@ -129,20 +130,7 @@ class MBBackbone(UEncoderBase):
             LayerNormNd(args.feature_channels[args.stem_stages + i])
             for i in range(args.vit_stages)
         ])
-        if args.num_cls_classes is not None:
-            self.post_layer = UnetResBlock(
-                spatial_dims=3,
-                in_channels=args.feature_channels[-1],
-                out_channels=args.feature_channels[-1] << 1,
-                kernel_size=3,
-                stride=2,
-                act_name=Act.GELU,
-                norm_name=Norm.LAYERND,
-            )
-            self.pool = Pool[args.pool_name, 3](1)
-        else:
-            self.post_layer = None
-            self.pool = None
+        self.pool = None
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> UEncoderOutput:
         hidden_states = []
@@ -160,7 +148,7 @@ class MBBackbone(UEncoderBase):
             hidden_states=hidden_states,
         )
         if self.pool is not None:
-            z = self.post_layer(hidden_states[-1])
+            z = hidden_states[-1]
             ret.cls_feature = self.pool(z).flatten(1)
         return ret
 
@@ -260,6 +248,21 @@ class MBModel(MBSegModel):
             ]
         })
 
+        self.cls_head = nn.Sequential(
+            UnetResBlock(
+                spatial_dims=3,
+                in_channels=args.feature_channels[-1],
+                out_channels=args.cls_hidden_size,
+                kernel_size=3,
+                stride=2,
+                act_name=Act.GELU,
+                norm_name=Norm.LAYERND,
+            ),
+            Pool[args.pool_name, 3](1),
+            Rearrange('n c 1 1 1 -> n c'),
+            nn.Linear(args.cls_hidden_size, args.num_cls_classes),
+        )
+
     def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
         super().validation_step(batch, *args, **kwargs)
         cls = batch[DataKey.CLS]
@@ -285,3 +288,19 @@ class MBModel(MBSegModel):
                 self.log(f'val/{k}/avg', m.mean(), sync_dist=True)
             else:
                 self.log(f'val/{k}', m, sync_dist=True)
+
+    def get_grouped_parameters(self) -> list[dict]:
+        return [
+            {
+                'params': itertools.chain(
+                    self.encoder.parameters(),
+                    self.decoder.parameters(),
+                    self.seg_heads.parameters(),
+                ),
+                'lr': self.args.finetune_lr,
+            },
+            {
+                'params': self.cls_head.parameters(),
+                'lr': self.args.learning_rate,
+            }
+        ]

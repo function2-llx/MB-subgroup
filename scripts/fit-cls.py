@@ -81,9 +81,9 @@ def fit_or_eval():
             strict=False,
         )
         assert len(unexpected_keys) == 0
-        missing_keys = set(filter(lambda k: not k.startswith('encoder.post_layer.'), missing_keys))
         print(missing_keys)
-        assert missing_keys == {'cls_head.weight', 'cls_head.bias', 'cls_loss_fn.weight'}
+        for k in missing_keys:
+            assert k.startswith('cls_head') or k.startswith('cls_loss_fn')
         print(f'load seg model weights from {seg_ckpt_path}')
 
         last_ckpt_path = args.ckpt_path
@@ -117,8 +117,9 @@ def main():
     global args, datamodule
     parser = UMeIParser((MBArgs, ), use_conf=True)
     args = parser.parse_args_into_dataclasses()[0]
-    print(args)
     datamodule = MBDataModule(args)
+    print(args)
+    datamodule.train_data()
     assert args.do_train ^ args.do_eval
     fit_or_eval()
 
