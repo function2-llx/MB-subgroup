@@ -30,6 +30,7 @@ include_background: true
 #dice_dr: 1e-5
 #crop_pos: 1
 #squared_dice: true
+do_post: true
 output_dir: output/T1+T2
 seg_pred_dir: output/T1+T2/predict-42+233/sw0.8
 th: 0.4
