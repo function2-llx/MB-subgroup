@@ -9,6 +9,7 @@ from einops.layers.torch import Rearrange
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
+from torch.optim import RAdam
 import torchmetrics
 from torchmetrics import Accuracy, F1Score, Precision, Recall, AUROC
 from torchmetrics.utilities.enums import AverageMethod
