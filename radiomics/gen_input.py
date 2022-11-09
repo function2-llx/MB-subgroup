@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 
 from mbs.datamodule import load_cohort
@@ -9,6 +11,8 @@ name_mapping = {
     'G3': 'group3',
     'G4': 'group4',
 }
+
+PARENT = Path(__file__).parent
 
 def main():
     cohort = load_cohort()
@@ -28,7 +32,7 @@ def main():
                     'split': split,
                 })
 
-    pd.DataFrame.from_records(inputs).to_csv('extractive.csv', index=False)
+    pd.DataFrame.from_records(inputs).to_csv(PARENT / 'batch.csv', index=False)
 
 if __name__ == '__main__':
     main()

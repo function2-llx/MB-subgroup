@@ -7,9 +7,9 @@ from mbs.utils.enums import MBDataKey
 PARENT = Path(__file__).parent
 
 def main():
-    df = pd.read_csv(PARENT / 'extractive.csv').drop(columns=['Image', 'Mask'])
+    df = pd.read_csv(PARENT / 'extractive-n.csv').drop(columns=['Image', 'Mask'])
     shared_names = {MBDataKey.CASE, 'molecular', 'split'}
-    pd.concat(
+    ret = pd.concat(
         [
             df[df['modality'] == modality].set_index(MBDataKey.CASE, drop=True)
             .drop(columns='modality')
@@ -17,7 +17,8 @@ def main():
             for modality in ['t1', 't2']
         ],
         axis='columns',
-    ).T.drop_duplicates().T.to_csv(PARENT / 'features.csv')
+    )
+    ret.loc[:, ~ret.columns.duplicated()].to_csv(PARENT / 'features-n.csv')
 
 if __name__ == '__main__':
     main()
