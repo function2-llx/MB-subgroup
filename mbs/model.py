@@ -168,6 +168,7 @@ class MBSegModel(SegModel):
     def build_decoder(self, encoder_feature_sizes: list[int]):
         return CNNDecoder(
             feature_channels=self.args.feature_channels,
+            z_kernel_sizes=self.args.z_kernel_sizes,
             z_strides=self.args.z_strides,
             num_layers=self.args.num_stages,
         )

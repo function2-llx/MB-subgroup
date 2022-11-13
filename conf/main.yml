@@ -3,8 +3,8 @@ z_strides: [1, 1, 1, 2, 2]
 z_kernel_sizes: [1, 1, 1, 3, 3, 3]
 swin_window_size: [6, 6, 4]
 vit_depths: [2, 2, 6, 2]
-vit_num_heads: [8, 16, 24, 24]
-feature_channels: [32, 64, 128, 256, 384, 384]
+vit_num_heads: [6, 12, 24, 24]
+feature_channels: [24, 48, 96, 192, 384, 384]
 pad_crop_size: [512, 512, 24]
 sample_size: 192
 sample_slices: 16
