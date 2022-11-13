@@ -18,12 +18,11 @@ DATASET_ROOT = Path(__file__).parent
 DATA_DIR = DATASET_ROOT / 'origin'
 
 def load_cohort():
-    cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1')
-    cohort.set_index('name', inplace=True)
+    cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1').set_index('name')
     data = {}
     for patient, info in cohort.iterrows():
         patient = str(patient)
-        patient_img_dir = DATA_DIR / 'image' / patient
+        patient_img_dir = DATA_DIR / info['group'] / patient
         data.setdefault(str(info['split']), []).append({
             MBDataKey.CASE: patient,
             MBDataKey.SUBGROUP_ID: SUBGROUPS.index(info['subgroup']),
@@ -35,7 +34,7 @@ def load_cohort():
 
     return data
 
-def get_classes(data: list[dict]) -> list[str]:
+def get_classes(data: list[dict]) -> list:
     return [
         x[MBDataKey.SUBGROUP_ID]
         for x in data
@@ -50,10 +49,13 @@ class MBCVDataModule(CVDataModule):
         super().__init__(args)
 
     def get_cv_partitions(self):
-        return [
+        ret = [
             self.cohort[str(fold_id)]
             for fold_id in range(self.args.num_folds)
         ]
+        # trick: select training data for fold-i is by deleting the i-th item
+        ret.append(self.cohort[DataSplit.TRAIN])
+        return ret
 
     def test_data(self) -> Sequence:
         return self.cohort[DataSplit.TEST]

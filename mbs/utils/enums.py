@@ -4,6 +4,10 @@ class MBDataKey(StrEnum):
     CASE = 'case'
     SUBGROUP_ID = 'subgroup_id'
 
+class MBGroup(StrEnum):
+    CHILDREN = 'children'
+    ADULT = 'adult'
+
 class Modality(StrEnum):
     T1 = 'T1'
     T1C = 'T1C'

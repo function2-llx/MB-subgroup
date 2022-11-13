@@ -9,7 +9,6 @@ from einops.layers.torch import Rearrange
 import torch
 from torch import nn
 from torch.nn import functional as torch_f
-from torch.optim import RAdam
 import torchmetrics
 from torchmetrics import Accuracy, F1Score, Precision, Recall, AUROC
 from torchmetrics.utilities.enums import AverageMethod
@@ -79,7 +78,7 @@ class MBBackbone(UEncoderBase):
                 spatial_dims=3,
                 in_channels=args.num_input_channels,
                 out_channels=args.feature_channels[0],
-                kernel_size=3,
+                kernel_size=(3, 3, args.z_kernel_sizes[0]),
                 stride=1,
                 act_name=Act.GELU,
                 norm_name=Norm.LAYERND,
@@ -91,20 +90,23 @@ class MBBackbone(UEncoderBase):
                     spatial_dims=3,
                     in_channels=args.feature_channels[i - 1],
                     out_channels=args.feature_channels[i],
-                    kernel_size=3,
+                    kernel_size=(3, 3, args.z_kernel_sizes[i]),
                     stride=(2, 2, args.z_strides[i - 1]),
                     act_name=Act.GELU,
                     norm_name=Norm.LAYERND,
                 )
             )
-        self.patch_embed = Convolution(
-            spatial_dims=3,
-            in_channels=args.feature_channels[args.stem_stages - 1],
-            out_channels=args.feature_channels[args.stem_stages],
-            strides=(2, 2, args.z_strides[args.stem_stages - 1]),
-            kernel_size=3,
-            conv_only=True,
-        )
+        self.downsamples = nn.ModuleList([
+            Convolution(
+                spatial_dims=3,
+                in_channels=args.feature_channels[i - 1],
+                out_channels=args.feature_channels[i],
+                strides=(2, 2, args.z_strides[i - 1]),
+                kernel_size=(3, 3, args.z_kernel_sizes[i]),
+                conv_only=True,
+            )
+            for i in range(args.stem_stages, args.num_stages)
+        ])
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(args.vit_depths))]
         self.layers = nn.ModuleList([
             BasicLayer(
@@ -117,11 +119,7 @@ class MBBackbone(UEncoderBase):
                 qkv_bias=qkv_bias,
                 drop=drop_rate,
                 attn_drop=attn_drop_rate,
-                downsample=MBPatchMerging(
-                    dim=args.feature_channels[args.stem_stages + i_layer],
-                    out_dim=args.feature_channels[args.stem_stages + i_layer + 1],
-                    z_stride=args.z_strides[args.stem_stages + i_layer],
-                ) if i_layer + 1 < args.vit_stages else None,
+                downsample=None,
                 use_checkpoint=args.gradient_checkpointing,
             )
             for i_layer in range(args.vit_stages)
@@ -138,12 +136,11 @@ class MBBackbone(UEncoderBase):
         for conv in self.conv_stem:
             x = conv(x)
             hidden_states.append(x)
-        x = self.patch_embed(x)
-        for layer, norm in zip(self.layers, self.norms):
-            z, z_ds = layer(x)
+        for layer, norm, downsample in zip(self.layers, self.norms, self.downsamples):
+            x = downsample(x)
+            z, _ = layer(x)
             z = norm(z)
             hidden_states.append(z)
-            x = z_ds
         ret = UEncoderOutput(
             cls_feature=hidden_states[-1],
             hidden_states=hidden_states,

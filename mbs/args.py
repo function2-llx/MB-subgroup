@@ -11,6 +11,7 @@ from mbs.utils.enums import Modality, SUBGROUPS, SegClass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     mc_seg: bool = field(default=True)
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
+    z_kernel_sizes: list[int] = field(default=None)
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
     pool_name: str = field(default='adaptiveavg', metadata={'choices': ['adaptiveavg', 'adaptivemax']})
     seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
