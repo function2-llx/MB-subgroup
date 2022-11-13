@@ -28,39 +28,39 @@ from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
 from mbs.utils.enums import MBDataKey, SUBGROUPS, SegClass
 
-class MBPatchMerging(PatchMergingV2):
-    def __init__(
-            self,
-            dim: int,
-            out_dim: int,
-            norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
-            spatial_dims: int = 3,
-            *,
-            z_stride: int
-    ):
-        super().__init__(dim, norm_layer, spatial_dims)
-        self.out_dim = out_dim
-        self.z_stride = z_stride
-        self.reduction = nn.Linear(4 * z_stride * dim, out_dim, bias=False)
-        self.norm = norm_layer(4 * z_stride * dim)
-
-    def forward(self, x):
-        x_shape = x.size()
-        if len(x_shape) == 5:
-            b, d, h, w, c = x_shape
-            pad_input = (h % 2 == 1) or (w % 2 == 1) or (d % self.z_stride == 1)
-            if pad_input:
-                x = torch_f.pad(x, (0, 0, 0, w % 2, 0, h % 2, 0, d % self.z_stride))
-            x = torch.cat(
-                [
-                    x[:, i::2, j::2, k::self.z_stride, :]
-                    for i, j, k in itertools.product(range(2), range(2), range(self.z_stride))
-                ],
-                dim=-1,
-            )
-        x = self.norm(x)
-        x = self.reduction(x)
-        return x
+# class MBPatchMerging(PatchMergingV2):
+#     def __init__(
+#             self,
+#             dim: int,
+#             out_dim: int,
+#             norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
+#             spatial_dims: int = 3,
+#             *,
+#             z_stride: int
+#     ):
+#         super().__init__(dim, norm_layer, spatial_dims)
+#         self.out_dim = out_dim
+#         self.z_stride = z_stride
+#         self.reduction = nn.Linear(4 * z_stride * dim, out_dim, bias=False)
+#         self.norm = norm_layer(4 * z_stride * dim)
+#
+#     def forward(self, x):
+#         x_shape = x.size()
+#         if len(x_shape) == 5:
+#             b, d, h, w, c = x_shape
+#             pad_input = (h % 2 == 1) or (w % 2 == 1) or (d % self.z_stride == 1)
+#             if pad_input:
+#                 x = torch_f.pad(x, (0, 0, 0, w % 2, 0, h % 2, 0, d % self.z_stride))
+#             x = torch.cat(
+#                 [
+#                     x[:, i::2, j::2, k::self.z_stride, :]
+#                     for i, j, k in itertools.product(range(2), range(2), range(self.z_stride))
+#                 ],
+#                 dim=-1,
+#             )
+#         x = self.norm(x)
+#         x = self.reduction(x)
+#         return x
 
 class MBBackbone(UEncoderBase):
     def __init__(

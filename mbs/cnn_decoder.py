@@ -13,7 +13,7 @@ class CNNDecoder(UDecoderBase):
         z_kernel_sizes: list[int] = None,
         z_strides: list[int] = None,
         num_layers: int = 4,
-        norm_name: tuple | str = 'layernd',
+        norm_name: tuple | str = 'instance',
         spatial_dims: int = 3,
     ) -> None:
         super().__init__()
@@ -46,7 +46,7 @@ class CNNDecoder(UDecoderBase):
                 spatial_dims=spatial_dims,
                 in_channels=feature_channels[i],
                 out_channels=feature_channels[i],
-                kernel_size=(3, 3, z_kernel_sizes[i]),
+                kernel_size=1,
                 stride=1,
                 norm_name=norm_name,
             )
