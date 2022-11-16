@@ -52,6 +52,7 @@ class MBArgs(MBSegArgs):
     per_device_eval_batch_size: int = field(default=4)
     cls_weights: list[float] = field(default=None)
     finetune_lr: float = field(default=1e-4)
+    cls_conv: bool = field(default=True)
     cls_hidden_size: int = field(default=None)
 
     @property

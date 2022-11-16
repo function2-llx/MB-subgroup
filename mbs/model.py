@@ -17,7 +17,6 @@ import monai
 from monai.losses import FocalLoss
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Act, Norm, Pool
-from monai.networks.nets import PatchMergingV2
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
 from umei import SegModel
@@ -247,20 +246,33 @@ class MBModel(MBSegModel):
             ]
         })
 
-        self.cls_head = nn.Sequential(
-            UnetResBlock(
-                spatial_dims=3,
-                in_channels=args.feature_channels[-1],
-                out_channels=args.cls_hidden_size,
-                kernel_size=3,
-                stride=2,
-                act_name=Act.GELU,
-                norm_name=Norm.LAYERND,
-            ),
-            Pool[args.pool_name, 3](1),
-            Rearrange('n c 1 1 1 -> n c'),
-            nn.Linear(args.cls_hidden_size, args.num_cls_classes),
-        )
+        if args.cls_conv:
+            self.cls_head = nn.Sequential(
+                UnetResBlock(
+                    spatial_dims=3,
+                    in_channels=args.feature_channels[-1],
+                    out_channels=args.cls_hidden_size,
+                    kernel_size=3,
+                    stride=2,
+                    # act_name=Act.GELU,
+                    norm_name=Norm.INSTANCE,
+                    # norm_name=Norm.LAYERND,
+                ),
+                # nn.Conv3d(args.cls_hidden_size, args.cls_hidden_size, (3, 3, 2)),
+                # LayerNormNd(args.cls_hidden_size),
+                # nn.LeakyReLU(),
+                Pool[args.pool_name, 3](1),
+                Rearrange('n c 1 1 1 -> n c'),
+                nn.Linear(args.cls_hidden_size, args.num_cls_classes),
+            )
+        else:
+            self.cls_head = nn.Sequential(
+                Pool[args.pool_name, 3](1),
+                Rearrange('n c 1 1 1 -> n c'),
+                nn.Linear(args.feature_channels[-1], args.cls_hidden_size),
+                nn.PReLU(args.cls_hidden_size),
+                nn.Linear(args.cls_hidden_size, args.num_cls_classes),
+            )
 
     def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
         super().validation_step(batch, *args, **kwargs)
