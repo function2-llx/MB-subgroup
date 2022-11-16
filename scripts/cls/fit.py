@@ -119,7 +119,6 @@ def main():
     args = parser.parse_args_into_dataclasses()[0]
     datamodule = MBDataModule(args)
     print(args)
-    datamodule.train_data()
     assert args.do_train ^ args.do_eval
     fit_or_eval()
 

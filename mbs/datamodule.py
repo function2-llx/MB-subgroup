@@ -6,6 +6,7 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
+from mbs.transforms import CropBBoxCenterD
 import monai
 from monai.utils import GridSampleMode
 from umei.datamodule import CVDataModule
@@ -145,27 +146,29 @@ class MBDataModule(MBCVDataModule):
     def train_transform(self):
         img_keys = self.args.input_modalities
         seg_keys = self.args.seg_classes
-        seg_pred_keys = list(map(lambda x: f'{x}-pred', self.args.seg_classes))
-        all_keys = img_keys + seg_keys + seg_pred_keys
+        bbox_src_key = f'{SegClass.AT}-pred'
+        # seg_pred_keys = list(map(lambda x: f'{x}-pred', self.args.seg_classes))
+        all_keys = img_keys + seg_keys + [bbox_src_key]
         return monai.transforms.Compose([
             monai.transforms.LoadImageD(all_keys),
             monai.transforms.EnsureChannelFirstD(all_keys),
             monai.transforms.OrientationD(all_keys, axcodes='RAS'),
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
             monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(img_keys + seg_keys, spatial_size=self.args.pad_crop_size),
-            monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
-            monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
-            monai.transforms.RandSpatialCropD(
-                all_keys,
-                roi_size=self.args.sample_shape,
-                random_size=False,
-            ),
-            monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
-            monai.transforms.RandRotate90D(all_keys, prob=self.args.rotate_p),
+            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
+            CropBBoxCenterD(img_keys + seg_keys, bbox_src_key, crop_size=self.args.sample_shape),
+            # monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
+            # monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
+            # monai.transforms.RandSpatialCropD(
+            #     all_keys,
+            #     roi_size=self.args.sample_shape,
+            #     random_size=False,
+            # ),
+            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+            monai.transforms.RandFlipD(img_keys + seg_keys, prob=self.args.flip_p, spatial_axis=0),
+            monai.transforms.RandFlipD(img_keys + seg_keys, prob=self.args.flip_p, spatial_axis=1),
+            monai.transforms.RandFlipD(img_keys + seg_keys, prob=self.args.flip_p, spatial_axis=2),
+            monai.transforms.RandRotate90D(img_keys + seg_keys, prob=self.args.rotate_p),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
@@ -178,22 +181,24 @@ class MBDataModule(MBCVDataModule):
     def val_transform(self):
         img_keys = self.args.input_modalities
         seg_keys = self.args.seg_classes
-        seg_pred_keys = list(map(lambda x: f'{x}-pred', self.args.seg_classes))
-        all_keys = img_keys + seg_keys + seg_pred_keys
+        bbox_src_key = f'{SegClass.AT}-pred'
+        # seg_pred_keys = list(map(lambda x: f'{x}-pred', self.args.seg_classes))
+        all_keys = img_keys + seg_keys + [bbox_src_key]
         return monai.transforms.Compose([
             monai.transforms.LoadImageD(all_keys),
             monai.transforms.EnsureChannelFirstD(all_keys),
             monai.transforms.OrientationD(all_keys, axcodes='RAS'),
             monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
             monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(img_keys + seg_keys, spatial_size=self.args.pad_crop_size),
-            monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
-            monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
-            monai.transforms.CenterSpatialCropD(
-                all_keys,
-                roi_size=self.args.sample_shape,
-            ),
-            monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
+            CropBBoxCenterD(img_keys + seg_keys, bbox_src_key, crop_size=self.args.sample_shape),
+            # monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
+            # monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
+            # monai.transforms.CenterSpatialCropD(
+            #     all_keys,
+            #     roi_size=self.args.sample_shape,
+            # ),
+            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(img_keys + seg_keys, lambda t: t.as_tensor(), track_meta=False),
             monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),

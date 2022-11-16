@@ -152,3 +152,25 @@ class CreateForegroundMaskD(monai.transforms.MapTransform):
         d = dict(data)
         d[self.mask_key] = np.logical_or.reduce([d[key] > 0 for key in self.key_iterator(d)]).astype(np.uint8)
         return d
+
+class CropBBoxCenterD(monai.transforms.MapTransform):
+    def __init__(self, keys, bbox_src_key: str, crop_size: Sequence[int]):
+        super().__init__(keys)
+        self.bbox_src_key = bbox_src_key
+        self.bbox = monai.transforms.BoundingRect()
+        self.crop_size = crop_size
+
+    def __call__(self, data):
+        d = dict(data)
+        bbox_src = d[self.bbox_src_key]
+        assert bbox_src.shape[0] == 1
+        bbox = self.bbox(bbox_src)[0]
+        center = [
+            bbox[i << 1 | 1] + bbox[i << 1] >> 1
+            for i in range(len(bbox) >> 1)
+        ]
+        cropper = monai.transforms.Compose([
+            monai.transforms.SpatialCropD(self.keys, roi_center=center, roi_size=self.crop_size),
+            monai.transforms.ResizeWithPadOrCropD(self.keys, spatial_size=self.crop_size),
+        ])
+        return cropper(d)

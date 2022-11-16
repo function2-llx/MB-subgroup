@@ -31,6 +31,9 @@ def process(data: dict):
         ret[f'recall-{seg_class}'] = ((pred * seg).sum() / seg.sum()).item()
         if seg_class != SegClass.ST:
             ret[f'recall-{seg_class}-st'] = ((st_pred * seg).sum() / seg.sum()).item()
+    bbox = data[f'{SegClass.ST}-pred_bbox'][0]
+    for i in range(3):
+        ret[f'b{i}'] = bbox[i << 1 | 1] - bbox[i << 1]
     return ret
 
 def main():
@@ -46,6 +49,7 @@ def main():
         monai.transforms.OrientationD(all_keys, axcodes='RAS'),
         monai.transforms.SpacingD(all_keys, pixdim=args.spacing, mode=GridSampleMode.NEAREST),
         monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=args.pad_crop_size),
+        monai.transforms.BoundingRectD(f'{SegClass.ST}-pred'),
         monai.transforms.LambdaD(all_keys, lambda x: x.as_tensor()),
     ])
     cohort = load_cohort()
