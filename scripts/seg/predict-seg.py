@@ -48,7 +48,7 @@ class MBSegPredictor(pl.LightningModule):
             pred_prob = torch.load(prob_save_path, map_location=self.device)
         else:
             for model in self.models:
-                prob = model.infer_logit(img).sigmoid()
+                prob = model.infer_logit(img, progress=False).sigmoid()
                 if pred_prob is None:
                     pred_prob = prob
                 else:

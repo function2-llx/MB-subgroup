@@ -6,7 +6,7 @@ vit_num_heads: [3, 6, 12, 24]
 feature_channels: [16, 24, 48, 96, 192, 384]
 pad_crop_size: [512, 512, 24]
 sample_size: 192
-sample_slices: 24
+sample_slices: 16
 input_modalities:
   - T1
   - T1C
