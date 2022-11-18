@@ -31,7 +31,7 @@ def fit_or_eval():
     for val_id in args.fold_ids:
         datamodule.val_id = val_id
         pl.seed_everything(args.seed)
-        output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}' / 'seg'
+        output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}'
         output_dir.mkdir(exist_ok=True, parents=True)
         if args.do_train:
             log_dir = output_dir

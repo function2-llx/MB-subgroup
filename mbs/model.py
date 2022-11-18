@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import itertools
-from typing import Type
 
 import einops
 from einops.layers.torch import Rearrange
 import torch
 from torch import nn
-from torch.nn import functional as torch_f
 import torchmetrics
-from torchmetrics import Accuracy, F1Score, Precision, Recall, AUROC
+from torchmetrics import AUROC, Accuracy, F1Score, Precision, Recall
 from torchmetrics.utilities.enums import AverageMethod
 
 import monai
@@ -25,41 +23,7 @@ from umei.utils import DataKey
 
 from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
-from mbs.utils.enums import MBDataKey, SUBGROUPS, SegClass
-
-# class MBPatchMerging(PatchMergingV2):
-#     def __init__(
-#             self,
-#             dim: int,
-#             out_dim: int,
-#             norm_layer: Type[nn.LayerNorm] = nn.LayerNorm,
-#             spatial_dims: int = 3,
-#             *,
-#             z_stride: int
-#     ):
-#         super().__init__(dim, norm_layer, spatial_dims)
-#         self.out_dim = out_dim
-#         self.z_stride = z_stride
-#         self.reduction = nn.Linear(4 * z_stride * dim, out_dim, bias=False)
-#         self.norm = norm_layer(4 * z_stride * dim)
-#
-#     def forward(self, x):
-#         x_shape = x.size()
-#         if len(x_shape) == 5:
-#             b, d, h, w, c = x_shape
-#             pad_input = (h % 2 == 1) or (w % 2 == 1) or (d % self.z_stride == 1)
-#             if pad_input:
-#                 x = torch_f.pad(x, (0, 0, 0, w % 2, 0, h % 2, 0, d % self.z_stride))
-#             x = torch.cat(
-#                 [
-#                     x[:, i::2, j::2, k::self.z_stride, :]
-#                     for i, j, k in itertools.product(range(2), range(2), range(self.z_stride))
-#                 ],
-#                 dim=-1,
-#             )
-#         x = self.norm(x)
-#         x = self.reduction(x)
-#         return x
+from mbs.utils.enums import MBDataKey, SegClass
 
 class MBBackbone(UEncoderBase):
     def __init__(
@@ -79,8 +43,7 @@ class MBBackbone(UEncoderBase):
                 out_channels=args.feature_channels[0],
                 kernel_size=(3, 3, args.z_kernel_sizes[0]),
                 stride=1,
-                act_name=Act.GELU,
-                norm_name=Norm.LAYERND,
+                norm_name=args.conv_norm,
             )
         ])
         for i in range(1, args.stem_stages):
@@ -91,8 +54,7 @@ class MBBackbone(UEncoderBase):
                     out_channels=args.feature_channels[i],
                     kernel_size=(3, 3, args.z_kernel_sizes[i]),
                     stride=(2, 2, args.z_strides[i - 1]),
-                    act_name=Act.GELU,
-                    norm_name=Norm.LAYERND,
+                    norm_name=args.conv_norm,
                 )
             )
         self.downsamples = nn.ModuleList([
@@ -137,8 +99,7 @@ class MBBackbone(UEncoderBase):
             hidden_states.append(x)
         for layer, norm, downsample in zip(self.layers, self.norms, self.downsamples):
             x = downsample(x)
-            z, _ = layer(x)
-            z = norm(z)
+            z = norm(layer(x))
             hidden_states.append(z)
         ret = UEncoderOutput(
             cls_feature=hidden_states[-1],
@@ -170,6 +131,7 @@ class MBSegModel(SegModel):
             z_kernel_sizes=self.args.z_kernel_sizes,
             z_strides=self.args.z_strides,
             num_layers=self.args.num_stages,
+            norm_name=self.args.conv_norm,
         )
 
     def on_test_start(self) -> None:
@@ -236,7 +198,7 @@ class MBModel(MBSegModel):
             weight=torch.tensor(args.seg_weights),
         )
         self.cls_metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
-            k: metric_cls(num_classes=len(SUBGROUPS), average=average)
+            k: metric_cls(num_classes=args.num_cls_classes, average=average)
             for k, metric_cls, average in [
                 ('auroc', AUROC, AverageMethod.NONE),
                 ('recall', Recall, AverageMethod.NONE),
@@ -247,24 +209,30 @@ class MBModel(MBSegModel):
         })
 
         if args.cls_conv:
-            self.cls_head = nn.Sequential(
+            modules = [
                 UnetResBlock(
                     spatial_dims=3,
                     in_channels=args.feature_channels[-1],
                     out_channels=args.cls_hidden_size,
                     kernel_size=3,
                     stride=2,
-                    # act_name=Act.GELU,
-                    norm_name=Norm.INSTANCE,
-                    # norm_name=Norm.LAYERND,
+                    norm_name=args.conv_norm,
                 ),
-                # nn.Conv3d(args.cls_hidden_size, args.cls_hidden_size, (3, 3, 2)),
-                # LayerNormNd(args.cls_hidden_size),
-                # nn.LeakyReLU(),
+            ]
+            if self.args.addi_conv:
+                modules.extend([
+                    nn.Conv3d(args.cls_hidden_size, args.cls_hidden_size, (3, 3, 2)),
+                    # LayerNormNd(args.cls_hidden_size),
+                    nn.LeakyReLU(),
+                ])
+
+            modules.extend([
                 Pool[args.pool_name, 3](1),
                 Rearrange('n c 1 1 1 -> n c'),
                 nn.Linear(args.cls_hidden_size, args.num_cls_classes),
-            )
+            ])
+
+            self.cls_head = nn.Sequential(*modules)
         else:
             self.cls_head = nn.Sequential(
                 Pool[args.pool_name, 3](1),
@@ -294,8 +262,8 @@ class MBModel(MBSegModel):
         for k, metric in self.cls_metrics.items():
             m = metric.compute()
             if metric.average == AverageMethod.NONE:
-                for i, subgroup in enumerate(SUBGROUPS):
-                    self.log(f'val/{k}/{subgroup}', m[i], sync_dist=True)
+                for i, cls in enumerate(self.args.cls_names):
+                    self.log(f'val/{k}/{cls}', m[i], sync_dist=True)
                 self.log(f'val/{k}/avg', m.mean(), sync_dist=True)
             else:
                 self.log(f'val/{k}', m, sync_dist=True)
