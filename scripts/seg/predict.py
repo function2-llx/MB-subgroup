@@ -97,7 +97,7 @@ class MBSegPredictionDataModule(MBSegDataModule):
                 transform=self.predict_transform,
             ),
             num_workers=self.args.dataloader_num_workers,
-            batch_size=self.args.per_device_eval_batch_size,
+            batch_size=1,
             pin_memory=True,
             # persistent_workers=True if self.args.dataloader_num_workers > 0 else False,
             persistent_workers=False,

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Mapping
 import itertools
 
@@ -27,13 +25,13 @@ from mbs.utils.enums import MBDataKey, SegClass
 
 class MBBackbone(UEncoderBase):
     def __init__(
-            self,
-            args: MBSegArgs,
-            drop_path_rate: float = 0.0,
-            mlp_ratio: float = 4.0,
-            qkv_bias: bool = True,
-            drop_rate: float = 0.0,
-            attn_drop_rate: float = 0.0,
+        self,
+        args: MBSegArgs,
+        drop_path_rate: float = 0.0,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        drop_rate: float = 0.0,
+        attn_drop_rate: float = 0.0,
     ):
         super().__init__()
         self.conv_stem = nn.ModuleList([
@@ -44,6 +42,7 @@ class MBBackbone(UEncoderBase):
                 kernel_size=(3, 3, args.z_kernel_sizes[0]),
                 stride=1,
                 norm_name=args.conv_norm,
+                act_name=args.conv_act,
             )
         ])
         for i in range(1, args.stem_stages):
@@ -55,6 +54,7 @@ class MBBackbone(UEncoderBase):
                     kernel_size=(3, 3, args.z_kernel_sizes[i]),
                     stride=(2, 2, args.z_strides[i - 1]),
                     norm_name=args.conv_norm,
+                    act_name=args.conv_act,
                 )
             )
         self.downsamples = nn.ModuleList([
@@ -63,7 +63,9 @@ class MBBackbone(UEncoderBase):
                 in_channels=args.feature_channels[i - 1],
                 out_channels=args.feature_channels[i],
                 strides=(2, 2, args.z_strides[i - 1]),
-                kernel_size=(3, 3, args.z_kernel_sizes[i]),
+                kernel_size=(2, 2, args.z_strides[i - 1]),
+                padding=0,
+                bias=False,
                 conv_only=True,
             )
             for i in range(args.stem_stages, args.num_stages)
@@ -99,8 +101,8 @@ class MBBackbone(UEncoderBase):
             hidden_states.append(x)
         for layer, norm, downsample in zip(self.layers, self.norms, self.downsamples):
             x = downsample(x)
-            z = norm(layer(x))
-            hidden_states.append(z)
+            x = norm(layer(x))
+            hidden_states.append(x)
         ret = UEncoderOutput(
             cls_feature=hidden_states[-1],
             hidden_states=hidden_states,
@@ -125,7 +127,7 @@ class MBSegModel(SegModel):
     def build_encoder(self):
         return MBBackbone(self.args)
 
-    def build_decoder(self, encoder_feature_sizes: list[int]):
+    def build_decoder(self):
         return CNNDecoder(
             feature_channels=self.args.feature_channels,
             z_kernel_sizes=self.args.z_kernel_sizes,

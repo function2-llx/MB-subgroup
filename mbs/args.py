@@ -6,6 +6,7 @@ from pathlib import Path
 from umei.args import AugArgs, CVArgs, SegArgs, UMeIArgs
 
 from mbs.utils.enums import Modality, SUBGROUPS, SegClass
+from monai.networks.layers import Act
 
 @dataclass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
@@ -23,6 +24,7 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     val_cache_num: int = field(default=50)
     train_batch_size: int = field(default=8)
     conv_norm: str = field(default='instance', metadata={'choices': ['instance', 'group', 'batch', 'syncbatch']})
+    conv_act: str = field(default='leakyrelu', metadata={'choices': ['relu', 'leakyrelu']})
 
     def __post_init__(self):
         assert self.mc_seg
@@ -61,52 +63,58 @@ class MBArgs(MBSegArgs):
 
     @property
     def cls_map(self):
-        if self.cls_scheme == '4way':
-            return {
-                name: i
-                for i, name in enumerate(SUBGROUPS)
-            }
-        if self.cls_scheme == '3way':
-            return {
-                'WNT': 0,
-                'SHH': 1,
-                'G3': 2,
-                'G4': 2,
-            }
-        if self.cls_scheme == 'WS-G34':
-            return {
-                'WNT': 0,
-                'SHH': 0,
-                'G3': 1,
-                'G4': 1,
-            }
-        if self.cls_scheme == 'WS':
-            return {
-                'WNT': 0,
-                'SHH': 1,
-                'G3': -1,
-                'G4': -1,
-            }
-        if self.cls_scheme == 'G34':
-            return {
-                'WNT': -1,
-                'SHH': -1,
-                'G3': 0,
-                'G4': 1,
-            }
+        match self.cls_scheme:
+            case '4way':
+                return {
+                    name: i
+                    for i, name in enumerate(SUBGROUPS)
+                }
+            case '3way':
+                return {
+                    'WNT': 0,
+                    'SHH': 1,
+                    'G3': 2,
+                    'G4': 2,
+                }
+            case 'WS-G34':
+                return {
+                    'WNT': 0,
+                    'SHH': 0,
+                    'G3': 1,
+                    'G4': 1,
+                }
+            case 'WS':
+                return {
+                    'WNT': 0,
+                    'SHH': 1,
+                    'G3': -1,
+                    'G4': -1,
+                }
+            case 'G34':
+                return {
+                    'WNT': -1,
+                    'SHH': -1,
+                    'G3': 0,
+                    'G4': 1,
+                }
+            case _:
+                raise ValueError
 
     @property
     def cls_names(self):
-        if self.cls_scheme == '4way':
-            return SUBGROUPS
-        if self.cls_scheme == '3way':
-            return ['WNT', 'SHH', 'G34']
-        if self.cls_scheme == 'WS-G':
-            return ['WS', 'G']
-        if self.cls_scheme == 'WS':
-            return ['WNT', 'SHH']
-        if self.cls_scheme == 'G34':
-            return ['G3', 'G4']
+        match self.cls_scheme:
+            case '4way':
+                return SUBGROUPS
+            case '3way':
+                return ['WNT', 'SHH', 'G34']
+            case 'WS-G34':
+                return ['WS', 'G34']
+            case 'WS':
+                return ['WNT', 'SHH']
+            case 'G34':
+                return ['G3', 'G4']
+            case _:
+                raise ValueError
 
     @property
     def num_cls_classes(self):
