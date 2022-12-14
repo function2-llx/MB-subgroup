@@ -60,6 +60,8 @@ class MBArgs(MBSegArgs):
     cls_hidden_size: int = field(default=None)
     addi_conv: bool = field(default=False)
     cls_scheme: str = field(default='4way', metadata={'choices': ['4way', '3way', 'WS-G34', 'WS', 'G34']})
+    seg_inputs: list[str] = field(default_factory=lambda: list)
+    crop_ref: SegClass = field(default=SegClass.ST)
 
     @property
     def cls_map(self):
@@ -119,6 +121,10 @@ class MBArgs(MBSegArgs):
     @property
     def num_cls_classes(self):
         return len(self.cls_names)
+
+    @property
+    def num_input_channels(self) -> int:
+        return super().num_input_channels + len(self.seg_inputs)
 
     def __post_init__(self):
         super().__post_init__()

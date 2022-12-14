@@ -76,15 +76,7 @@ def fit_or_eval():
         model = MBModel(args)
         if args.seg_output_dir is not None:
             seg_ckpt_path = args.seg_output_dir / f'run-{args.seg_seed}' / f'fold-{val_id}' / 'last.ckpt'
-            missing_keys, unexpected_keys = model.load_state_dict(
-                torch.load(seg_ckpt_path)['state_dict'],
-                strict=False,
-            )
-            assert len(unexpected_keys) == 0
-            print(missing_keys)
-            for k in missing_keys:
-                assert k.startswith('cls_head') or k.startswith('cls_loss_fn')
-            print(f'load seg model weights from {seg_ckpt_path}')
+            model.load_seg_state_dict(seg_ckpt_path)
 
         last_ckpt_path = args.ckpt_path
         if last_ckpt_path is None:

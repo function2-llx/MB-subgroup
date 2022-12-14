@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 import itertools
+from pathlib import Path
 
 import einops
 from einops.layers.torch import Rearrange
@@ -243,6 +244,24 @@ class MBModel(MBSegModel):
                 nn.PReLU(args.cls_hidden_size),
                 nn.Linear(args.cls_hidden_size, args.num_cls_classes),
             )
+
+    def load_seg_state_dict(self, seg_ckpt_path: Path):
+        seg_state_dict = torch.load(seg_ckpt_path)['state_dict']
+        input_weight_key = 'encoder.conv_stem.0.conv1.conv.weight'
+        input_weight = seg_state_dict[input_weight_key]
+        shape = input_weight.shape
+        new_input_weight = torch.zeros(shape[0], self.args.num_input_channels, *shape[2:], dtype=input_weight.dtype)
+        new_input_weight[:, :len(self.args.input_modalities)] = input_weight
+        seg_state_dict[input_weight_key] = new_input_weight
+        missing_keys, unexpected_keys = self.load_state_dict(
+            seg_state_dict,
+            strict=False,
+        )
+        assert len(unexpected_keys) == 0
+        print(missing_keys)
+        for k in missing_keys:
+            assert k.startswith('cls_head') or k.startswith('cls_loss_fn')
+        print(f'load seg model weights from {seg_ckpt_path}')
 
     def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
         super().validation_step(batch, *args, **kwargs)

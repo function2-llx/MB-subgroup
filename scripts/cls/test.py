@@ -34,7 +34,7 @@ class MBTester(pl.LightningModule):
             for _ in range(args.num_folds)
         ])
         for seed, fold_id in itertools.product(args.p_seeds, range(args.num_folds)):
-            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls' / args.cls_scheme / 'last.ckpt'
+            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
             # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
             # for filepath in ckpt_path.iterdir():
             #     if filepath.name.startswith('best'):

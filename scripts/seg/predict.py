@@ -20,12 +20,10 @@ from mbs.utils.enums import MBDataKey
 from mbs.utils import SEG_PROB_FILENAME
 
 class MBSegPredictor(pl.LightningModule):
-    models: nn.ModuleList | Sequence[MBSegModel]
-
     def __init__(self, args: MBSegPredArgs):
         super().__init__()
         self.args = args
-        self.models = nn.ModuleList([
+        self.models: nn.ModuleList | Sequence[MBSegModel] = nn.ModuleList([
             MBSegModel.load_from_checkpoint(
                 self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
                 strict=True,
