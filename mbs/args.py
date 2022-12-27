@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,11 +9,12 @@ from monai.networks.layers import Act
 @dataclass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     mc_seg: bool = field(default=True)
+    include_background: bool = field(default=True)
     z_strides: list[int] = field(default=None, metadata={'help': 'z-stride for each downsampling'})
     z_kernel_sizes: list[int] = field(default=None)
     input_modalities: list[Modality] = field(default=None, metadata={'choices': list(Modality)})
     pool_name: str = field(default='adaptiveavg', metadata={'choices': ['adaptiveavg', 'adaptivemax']})
-    seg_classes: list[SegClass] = field(default=None, metadata={'choices': list(SegClass)})
+    seg_classes: list[SegClass] = field(default_factory=lambda: [], metadata={'choices': list(SegClass)})
     seg_weights: list[float] = field(default=None)
     test_size: int = field(default=None)
     pad_crop_size: list[int] = field(default=None)
@@ -131,7 +130,7 @@ class MBArgs(MBSegArgs):
         if self.seg_seed is None:
             self.seg_seed = self.seed
         if self.cls_hidden_size is None:
-            self.cls_hidden_size = self.feature_channels[-1] << 1
+            self.cls_hidden_size = self.feature_channels[-1]
 
 @dataclass
 class MBSegPredArgs(MBSegArgs):

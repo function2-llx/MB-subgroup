@@ -19,8 +19,11 @@ datamodule: MBDataModule
 def fit_or_eval():
     log_dir = None
     test_outputs = []
+    seg_indicator = ''
+    if args.seg_output_dir is not None:
+        seg_indicator = f'seg-{args.seg_seed}'
     if args.do_eval:
-        log_dir = args.output_dir / f'run-{args.seed}' / 'eval'
+        log_dir = args.output_dir / seg_indicator / f'run-{args.seed}' / 'eval'
         eval_suffix = ''
         if args.do_tta:
             eval_suffix += '-tta'
@@ -29,7 +32,7 @@ def fit_or_eval():
     for val_id in args.fold_ids:
         datamodule.val_id = val_id
         pl.seed_everything(args.seed)
-        output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}' / args.cls_scheme
+        output_dir = args.output_dir / seg_indicator / f'run-{args.seed}' / f'fold-{val_id}' / args.cls_scheme
         output_dir.mkdir(exist_ok=True, parents=True)
         if args.do_train:
             log_dir = output_dir

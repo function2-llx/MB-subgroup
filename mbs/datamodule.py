@@ -9,6 +9,7 @@ import pandas as pd
 
 from mbs.transforms import CropBBoxCenterD
 import monai
+from monai.data import CacheDataset
 from monai.utils import GridSampleMode
 from umei.datamodule import CVDataModule
 from umei.utils import DataKey, DataSplit
@@ -140,7 +141,7 @@ class MBDataModule(MBCVDataModule):
                 # x[f'{seg_cls}-pred'] = DATA_DIR / 'image' / x[MBDataKey.CASE] / f'{seg_cls}.nii'
 
         if args.cls_weights is None:
-            cls_cnt = np.zeros(args.num_cls_classes, dtype=np.float)
+            cls_cnt = np.zeros(args.num_cls_classes, dtype=np.float64)
             for i in range(args.num_folds):
                 for x in self.cohort[str(i)]:
                     cls_cnt[x[DataKey.CLS]] += 1
@@ -190,7 +191,7 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.ConcatItemsD(img_keys + pred_keys, name=DataKey.IMG),
             # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            # monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])
 
     @property
@@ -220,9 +221,16 @@ class MBDataModule(MBCVDataModule):
             monai.transforms.ConcatItemsD(img_keys + pred_keys, name=DataKey.IMG),
             # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])
 
-    @property
-    def test_transform(self):
-        return self.val_transform
+    def val_dataloader(self):
+        return [
+            super().val_dataloader(),
+            self.build_eval_dataloader(CacheDataset(
+                self.test_data(),
+                transform=self.val_transform,
+                cache_num=self.args.val_cache_num,
+                num_workers=self.args.dataloader_num_workers,
+            ))
+        ]

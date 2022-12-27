@@ -12,13 +12,14 @@ from torchmetrics.utilities.enums import AverageMethod
 
 import monai
 from monai.losses import FocalLoss
+from monai.metrics import DiceMetric
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Act, Norm, Pool
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
 from umei import SegModel
 from umei.models.layernorm import LayerNormNd
-from umei.utils import DataKey
+from umei.utils import DataKey, DataSplit
 
 from mbs.args import MBArgs, MBSegArgs
 from mbs.cnn_decoder import CNNDecoder
@@ -200,16 +201,24 @@ class MBModel(MBSegModel):
             to_onehot_y=not args.mc_seg,
             weight=torch.tensor(args.seg_weights),
         )
-        self.cls_metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
-            k: metric_cls(num_classes=args.num_cls_classes, average=average)
-            for k, metric_cls, average in [
-                ('auroc', AUROC, AverageMethod.NONE),
-                ('recall', Recall, AverageMethod.NONE),
-                ('precision', Precision, AverageMethod.NONE),
-                ('f1', F1Score, AverageMethod.NONE),
-                ('acc', Accuracy, AverageMethod.MICRO),
-            ]
+        self.val_keys = [DataSplit.VAL, DataSplit.TEST]
+        self.cls_metrics: Mapping[str, Mapping[str, torchmetrics.Metric]] = nn.ModuleDict({
+            split: nn.ModuleDict({
+                k: metric_cls(num_classes=args.num_cls_classes, average=average)
+                for k, metric_cls, average in [
+                    ('auroc', AUROC, AverageMethod.NONE),
+                    ('recall', Recall, AverageMethod.NONE),
+                    ('precision', Precision, AverageMethod.NONE),
+                    ('f1', F1Score, AverageMethod.NONE),
+                    ('acc', Accuracy, AverageMethod.MICRO),
+                ]
+            })
+            for split in self.val_keys
         })
+        self.dice_metrics = {
+            split: DiceMetric(include_background=True)
+            for split in self.val_keys
+        }
 
         if args.cls_conv:
             modules = [
@@ -263,31 +272,48 @@ class MBModel(MBSegModel):
             assert k.startswith('cls_head') or k.startswith('cls_loss_fn')
         print(f'load seg model weights from {seg_ckpt_path}')
 
-    def validation_step(self, batch: dict[str, torch.Tensor], *args, **kwargs):
-        super().validation_step(batch, *args, **kwargs)
+    def validation_step(self, batch: dict[str, torch.Tensor], batch_idx, dl_idx: int):
+        split = self.val_keys[dl_idx]
+        # adapt implementation of super class
+        self.dice_metric = self.dice_metrics[split]
+        super().validation_step(batch, batch_idx, dl_idx)
         cls = batch[DataKey.CLS]
         logit = self.forward_cls(batch[DataKey.IMG])
+
         loss = self.cls_loss_fn(logit, cls)
-        self.log('val/cls_loss', loss, sync_dist=True)
+        self.log(f'{split}/cls_loss', loss, sync_dist=True, add_dataloader_idx=False)
         prob = logit.softmax(dim=-1)
-        for k, metric in self.cls_metrics.items():
+        for k, metric in self.cls_metrics[split].items():
             metric(prob, cls)
 
     def on_validation_epoch_start(self):
         super().on_validation_epoch_start()
-        for k, metric in self.cls_metrics.items():
-            metric.reset()
+        for split in self.val_keys:
+            for k, metric in self.cls_metrics[split].items():
+                metric.reset()
 
     def validation_epoch_end(self, *args) -> None:
         super().validation_epoch_end(*args)
-        for k, metric in self.cls_metrics.items():
-            m = metric.compute()
-            if metric.average == AverageMethod.NONE:
-                for i, cls in enumerate(self.args.cls_names):
-                    self.log(f'val/{k}/{cls}', m[i], sync_dist=True)
-                self.log(f'val/{k}/avg', m.mean(), sync_dist=True)
-            else:
-                self.log(f'val/{k}', m, sync_dist=True)
+        for split in self.val_keys:
+            for k, metric in self.cls_metrics[split].items():
+                m = metric.compute()
+                if metric.average == AverageMethod.NONE:
+                    for i, cls in enumerate(self.args.cls_names):
+                        self.log(f'{split}/{k}/{cls}', m[i], sync_dist=True)
+                    self.log(f'{split}/{k}/avg', m.mean(), sync_dist=True)
+                else:
+                    self.log(f'{split}/{k}', m, sync_dist=True)
+
+    def get_lr_scheduler(self, optimizer):
+        from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+        return ReduceLROnPlateau(
+            optimizer,
+            mode=self.args.monitor_mode,
+            factor=self.args.lr_reduce_factor,
+            patience=self.args.patience,
+            verbose=True,
+        )
 
     def get_grouped_parameters(self) -> list[dict]:
         return [

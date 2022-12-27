@@ -15,18 +15,18 @@ seg_classes:
   - ST
   - AT
   - CT
-seg_weights: [0.3, 1, 1]
+#seg_weights: [0.3, 1, 1]
 spacing: [0.46875, 0.46875, -1]
 learning_rate: 1e-4
 finetune_lr: 1e-5
 train_batch_size: 8
 eval_batch_size: 16
 num_train_epochs: 50
-seg_loss_factor: 0.3
+seg_loss_factor: 0
 warmup_epochs: 5
 num_seg_heads: 4
 flip_p: 0.5
-include_background: true
+#include_background: true
 #dice_nr: 1e-5
 #dice_dr: 1e-5
 #crop_pos: 1
