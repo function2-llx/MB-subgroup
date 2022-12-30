@@ -22,6 +22,13 @@ from mbs.datamodule import MBDataModule
 @dataclass
 class MBTestArgs(MBArgs):
     p_seeds: list[int] = field(default=None)
+    p_seg_seeds: list[int] = field(default=None)
+    val_cache_num: int = field(default=0)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.p_seg_seeds is None:
+            self.p_seg_seeds = self.p_seeds
 
 class MBTester(pl.LightningModule):
     models: nn.ModuleList | Sequence[Sequence[MBModel]]
@@ -33,8 +40,8 @@ class MBTester(pl.LightningModule):
             nn.ModuleList()
             for _ in range(args.num_folds)
         ])
-        for seed, fold_id in itertools.product(args.p_seeds, range(args.num_folds)):
-            ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
+        for (seed, seg_seed), fold_id in itertools.product(zip(args.p_seeds, args.p_seg_seeds), range(args.num_folds)):
+            ckpt_path = self.args.output_dir / f'seg-{seg_seed}' / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
             # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
             # for filepath in ckpt_path.iterdir():
             #     if filepath.name.startswith('best'):
@@ -99,6 +106,7 @@ class MBTester(pl.LightningModule):
     def test_epoch_end(self, *args) -> None:
         self.test_report['n'] = len(self.case_outputs)
         self.test_report['seeds'] = self.args.p_seeds
+        self.test_report['seg_seeds'] = self.args.p_seg_seeds
         for k, metric in self.metrics.items():
             m = metric.compute()
             if metric.average == AverageMethod.NONE:
@@ -128,7 +136,7 @@ def run_cv():
     for i in range(args.num_folds):
         tester.val_fold = i
         datamodule.val_id = i
-        trainer.test(tester, dataloaders=datamodule.val_dataloader())
+        trainer.test(tester, dataloaders=datamodule.val_dataloader(include_test=False))
     results_df = pd.DataFrame.from_records(tester.case_outputs)
     results_df.to_csv(output_dir / 'cv-results.csv', index=False)
     results_df.to_excel(output_dir / 'cv-results.xlsx', index=False)

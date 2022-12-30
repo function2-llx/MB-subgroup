@@ -77,7 +77,9 @@ def fit_or_eval():
             # limit_test_batches=1,
         )
         model = MBModel(args)
-        if args.seg_output_dir is not None:
+        if args.seg_output_dir is None:
+            print('[INFO] train classification model from scratch')
+        else:
             seg_ckpt_path = args.seg_output_dir / f'run-{args.seg_seed}' / f'fold-{val_id}' / 'last.ckpt'
             model.load_seg_state_dict(seg_ckpt_path)
 

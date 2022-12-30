@@ -270,7 +270,7 @@ class MBModel(MBSegModel):
         print(missing_keys)
         for k in missing_keys:
             assert k.startswith('cls_head') or k.startswith('cls_loss_fn')
-        print(f'load seg model weights from {seg_ckpt_path}')
+        print(f'[INFO] load seg model weights from {seg_ckpt_path}')
 
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx, dl_idx: int):
         split = self.val_keys[dl_idx]

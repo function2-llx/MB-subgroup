@@ -60,7 +60,8 @@ class MBCVDataModule(CVDataModule):
             for fold_id in range(self.args.num_folds)
         ]
         # trick: select training data for fold-i is by deleting the i-th item
-        ret.append(self.cohort[DataSplit.TRAIN])
+        if self.args.include_adults:
+            ret.append(self.cohort[DataSplit.TRAIN])
         return ret
 
     def test_data(self) -> Sequence:
@@ -188,7 +189,7 @@ class MBDataModule(MBCVDataModule):
             # monai.transforms.RandRotate90D(all_keys, prob=self.args.rotate_p),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys + pred_keys, name=DataKey.IMG),
+            monai.transforms.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
             # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
@@ -218,19 +219,26 @@ class MBDataModule(MBCVDataModule):
             # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
             monai.transforms.NormalizeIntensityD(img_keys),
             monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys + pred_keys, name=DataKey.IMG),
+            monai.transforms.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
             # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
             monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])
 
-    def val_dataloader(self):
+    def val_dataloader(self, *, include_test: bool = True):
+        val_dl = super().val_dataloader()
+        if not include_test:
+            return val_dl
         return [
-            super().val_dataloader(),
+            val_dl,
             self.build_eval_dataloader(CacheDataset(
                 self.test_data(),
-                transform=self.val_transform,
+                transform=self.test_transform,
                 cache_num=self.args.val_cache_num,
                 num_workers=self.args.dataloader_num_workers,
             ))
         ]
+
+    @property
+    def test_transform(self):
+        return self.val_transform

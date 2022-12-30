@@ -20,10 +20,11 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     pad_crop_size: list[int] = field(default=None)
     do_post: bool = field(default=False)
     train_cache_num: int = field(default=200)
-    val_cache_num: int = field(default=50)
+    val_cache_num: int = field(default=100)
     train_batch_size: int = field(default=8)
     conv_norm: str = field(default='instance', metadata={'choices': ['instance', 'group', 'batch', 'syncbatch']})
     conv_act: str = field(default='leakyrelu', metadata={'choices': ['relu', 'leakyrelu']})
+    include_adults: bool = field(default=True)
 
     def __post_init__(self):
         assert self.mc_seg
@@ -59,7 +60,7 @@ class MBArgs(MBSegArgs):
     cls_hidden_size: int = field(default=None)
     addi_conv: bool = field(default=False)
     cls_scheme: str = field(default='4way', metadata={'choices': ['4way', '3way', 'WS-G34', 'WS', 'G34']})
-    seg_inputs: list[str] = field(default_factory=lambda: list)
+    seg_inputs: list[str] = field(default_factory=list)
     crop_ref: SegClass = field(default=SegClass.ST)
 
     @property
