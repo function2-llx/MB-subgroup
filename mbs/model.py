@@ -11,10 +11,10 @@ from torchmetrics import AUROC, Accuracy, F1Score, Precision, Recall
 from torchmetrics.utilities.enums import AverageMethod
 
 import monai
-from monai.losses import FocalLoss
+from monai.losses import DiceFocalLoss
 from monai.metrics import DiceMetric
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
-from monai.networks.layers import Act, Norm, Pool
+from monai.networks.layers import Pool
 from monai.networks.nets.swin_unetr import BasicLayer
 from monai.umei import UEncoderBase, UEncoderOutput
 from umei import SegModel
@@ -196,10 +196,15 @@ class MBModel(MBSegModel):
     def __init__(self, args: MBArgs):
         super().__init__(args)
         self.cls_loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(args.cls_weights))
-        self.seg_loss_fn = FocalLoss(
+        self.seg_loss_fn = DiceFocalLoss(
             include_background=self.args.include_background,
             to_onehot_y=not args.mc_seg,
-            weight=torch.tensor(args.seg_weights),
+            sigmoid=args.mc_seg,
+            softmax=not args.mc_seg,
+            squared_pred=self.args.squared_dice,
+            smooth_nr=self.args.dice_nr,
+            smooth_dr=self.args.dice_dr,
+            focal_weight=args.seg_weights,
         )
         self.val_keys = [DataSplit.VAL, DataSplit.TEST]
         self.cls_metrics: Mapping[str, Mapping[str, torchmetrics.Metric]] = nn.ModuleDict({
@@ -220,12 +225,13 @@ class MBModel(MBSegModel):
             for split in self.val_keys
         }
 
+        cls_feature_size = args.cls_hidden_size + args.clinical_feature_size
         if args.cls_conv:
             modules = [
                 UnetResBlock(
                     spatial_dims=3,
                     in_channels=args.feature_channels[-1],
-                    out_channels=args.cls_hidden_size,
+                    out_channels=cls_feature_size,
                     kernel_size=3,
                     stride=2,
                     norm_name=args.conv_norm,
@@ -233,7 +239,7 @@ class MBModel(MBSegModel):
             ]
             if self.args.addi_conv:
                 modules.extend([
-                    nn.Conv3d(args.cls_hidden_size, args.cls_hidden_size, (3, 3, 2)),
+                    nn.Conv3d(cls_feature_size, cls_feature_size, (3, 3, 2)),
                     # LayerNormNd(args.cls_hidden_size),
                     nn.LeakyReLU(),
                 ])
@@ -241,18 +247,25 @@ class MBModel(MBSegModel):
             modules.extend([
                 Pool[args.pool_name, 3](1),
                 Rearrange('n c 1 1 1 -> n c'),
-                nn.Linear(args.cls_hidden_size, args.num_cls_classes),
+                nn.Linear(cls_feature_size, args.num_cls_classes),
             ])
 
             self.cls_head = nn.Sequential(*modules)
         else:
-            self.cls_head = nn.Sequential(
-                Pool[args.pool_name, 3](1),
-                Rearrange('n c 1 1 1 -> n c'),
-                nn.Linear(args.feature_channels[-1], args.cls_hidden_size),
-                nn.PReLU(args.cls_hidden_size),
-                nn.Linear(args.cls_hidden_size, args.num_cls_classes),
-            )
+            if args.cls_hidden_size is None:
+                self.cls_head = nn.Sequential(
+                    Pool[args.pool_name, 3](1),
+                    Rearrange('n c 1 1 1 -> n c'),
+                    nn.Linear(args.feature_channels[-1] + args.clinical_feature_size, args.num_cls_classes),
+                )
+            else:
+                self.cls_head = nn.Sequential(
+                    Pool[args.pool_name, 3](1),
+                    Rearrange('n c 1 1 1 -> n c'),
+                    nn.Linear(args.feature_channels[-1], cls_feature_size),
+                    nn.PReLU(cls_feature_size),
+                    nn.Linear(cls_feature_size, args.num_cls_classes),
+                )
 
     def load_seg_state_dict(self, seg_ckpt_path: Path):
         seg_state_dict = torch.load(seg_ckpt_path)['state_dict']

@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 import itertools
 import json
+from pathlib import Path
 
+from matplotlib import pyplot as plt
+import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
+from sklearn.metrics import auc, roc_auc_score, roc_curve
+
 import torch
 from torch import nn
 import torchmetrics
@@ -40,8 +46,11 @@ class MBTester(pl.LightningModule):
             nn.ModuleList()
             for _ in range(args.num_folds)
         ])
+        seg_indicator = ''
+        if args.seg_output_dir is not None:
+            seg_indicator = f'seg-{args.seg_seed}'
         for (seed, seg_seed), fold_id in itertools.product(zip(args.p_seeds, args.p_seg_seeds), range(args.num_folds)):
-            ckpt_path = self.args.output_dir / f'seg-{seg_seed}' / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
+            ckpt_path = self.args.output_dir / seg_indicator / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
             # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
             # for filepath in ckpt_path.iterdir():
             #     if filepath.name.startswith('best'):
@@ -119,19 +128,83 @@ class MBTester(pl.LightningModule):
                 self.test_report[k] = m.item()
         print(json.dumps(self.test_report, indent=4, ensure_ascii=False))
 
+def plot_roc(y_true: np.ndarray, y_score: np.ndarray, target_names: list[str], output_dir: Path):
+    target_names = deepcopy(target_names)
+    y_true = np.eye(len(target_names))[y_true]
+    # y_score = np.array(self.y_score)
+    fig, ax = plt.subplots()
+    lw = 2
+    ax.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    if len(target_names) == 2 and target_names[0] == target_names[1]:
+        target_names.pop()
+    for i, name in enumerate(target_names):
+        fpr, tpr, thresholds = roc_curve(y_true[:, i], y_score[:, i])
+        ax.plot(fpr, tpr, lw=lw, label=f'{name}, AUC = %0.2f' % auc(fpr, tpr))
+        ax.set_xlim(0.0, 1.0)
+        ax.set_ylim(0.0, 1.05)
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title('ROC curves')
+        ax.legend(loc="lower right")
+    fig.savefig(output_dir / 'test-roc.pdf')
+    fig.savefig(output_dir / 'test-roc.png')
+
+def plot_roc_curve(y_test, y_score, model_name, output_dir):
+    import seaborn as sns
+    sns.set()
+    fig = plt.figure(figsize=(7, 7))
+
+    ns_preds = [0 for _ in range(len(y_test))]
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test, ns_preds)
+
+    plt.plot(ns_fpr, ns_tpr, linestyle='--', label='No Skill')
+    fpr, tpr, thresholds = roc_curve(y_test, y_score)
+    auc = roc_auc_score(y_test, y_score)
+    plt.plot(fpr, tpr, marker='.', label=model_name)
+    plt.xlabel('1 - Specificity (False Positive Rate)', fontsize=16)
+    plt.ylabel('Sensitivity (True Positive Rate)', fontsize=16)
+
+    plt.legend(loc='lower right')
+    plt.title(f'{model_name}: ROC Curve for Test Set', fontsize=20, fontweight="semibold")
+    short_auc = round(auc, 4)
+    plt.text(.93, .1, "AUC: " + str(short_auc),
+             horizontalalignment="center", verticalalignment="center",
+             fontsize=14, fontweight="semibold")
+    print(233)
+    fig.savefig(output_dir / 'test-roc-a.pdf')
+    fig.savefig(output_dir / 'test-roc-a.png')
+
+    # plt.show()
+
 def run_test():
-    (output_dir := args.output_dir / args.cls_scheme).mkdir(parents=True, exist_ok=True)
+    (output_dir := args.output_dir / 'eval-test' / args.cls_scheme).mkdir(parents=True, exist_ok=True)
     tester.reset()
     tester.val_fold = 'test'
     trainer.test(tester, dataloaders=datamodule.test_dataloader())
     results_df = pd.DataFrame.from_records(tester.case_outputs)
+    cls_names = args.cls_names
+    y_true = np.array([
+        args.cls_names.index(case['true'])
+        for case in tester.case_outputs
+    ])
+    y_score = np.array([
+        case['prob']
+        for case in tester.case_outputs
+    ])
+    if len(cls_names) == 2:
+        cls_names = [args.cls_scheme, args.cls_scheme]
+    plot_roc(y_true, y_score, cls_names, output_dir)
+    if len(cls_names) == 2:
+        plot_roc_curve(y_true, y_score[:, 1], 'swt', output_dir)
+
     results_df.to_csv(output_dir / 'test-results.csv', index=False)
     results_df.to_excel(output_dir / 'test-results.xlsx', index=False)
     with open(output_dir / 'test-report.json', 'w') as f:
         json.dump(tester.test_report, f, indent=4, ensure_ascii=False)
 
 def run_cv():
-    (output_dir := args.output_dir / args.cls_scheme).mkdir(parents=True, exist_ok=True)
+    (output_dir := args.output_dir / 'eval-cv' / args.cls_scheme).mkdir(parents=True, exist_ok=True)
     tester.reset()
     for i in range(args.num_folds):
         tester.val_fold = i

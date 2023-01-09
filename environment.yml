@@ -3,6 +3,7 @@ channels:
   - defaults
 dependencies:
   - python=3.10.8
+  - notebook=6.5.2
   - ruamel.yaml=0.17.21
   - aenum==3.1.11
   - numpy=1.24.0
@@ -25,6 +26,7 @@ dependencies:
   - pip=22.3.1
   - pip:
     - pyradiomics==3.0.1
+    - xgboost
     - einops==0.6.0
     - pytorch-lightning==1.8.6
     - transformers==4.25.1

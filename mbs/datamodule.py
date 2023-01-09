@@ -1,15 +1,17 @@
 from collections.abc import Callable
 from functools import cached_property
 import itertools
+import math
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
+import torch
 
 from mbs.transforms import CropBBoxCenterD
 import monai
-from monai.data import CacheDataset
+from monai.data import CacheDataset, MetaTensor
 from monai.utils import GridSampleMode
 from umei.datamodule import CVDataModule
 from umei.utils import DataKey, DataSplit
@@ -22,9 +24,24 @@ DATA_DIR = DATASET_ROOT / 'origin'
 
 def load_cohort():
     cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1').set_index('name')
+    clinical = pd.read_excel(DATA_DIR / 'clinical-com.xlsx', dtype=str).set_index('住院号')
     data = {}
     for patient, info in cohort.iterrows():
         patient = str(patient)
+        num = patient[:6]
+        sex: str = clinical.loc[num, 'sex']
+        sex_vec = torch.zeros(2)
+        if sex.lower() == 'f':
+            sex_vec[0] = 1
+        if sex.lower() == 'm':
+            sex_vec[1] = 1
+        age = clinical.loc[num, 'age']
+        age_vec = torch.zeros(2)
+        if not pd.isna(age):
+            age_vec[0] = 1
+            age_vec[1] = parse_age(age) / 100
+        clinical_vec = torch.cat([sex_vec, age_vec])
+
         patient_img_dir = DATA_DIR / info['group'] / patient
         data.setdefault(str(info['split']), []).append({
             MBDataKey.CASE: patient,
@@ -33,6 +50,7 @@ def load_cohort():
                 img_type: patient_img_dir / f'{img_type}.nii'
                 for img_type in list(Modality) + list(SegClass)
             },
+            DataKey.CLINICAL: clinical_vec,
         })
 
     return data
@@ -155,6 +173,8 @@ class MBDataModule(MBCVDataModule):
             for x in fold:
                 subgroup = SUBGROUPS[x[MBDataKey.SUBGROUP_ID]]
                 x[DataKey.CLS] = self.args.cls_map[subgroup]
+                if not self.args.use_clinical:
+                    x.pop(DataKey.CLINICAL)
         return {
             k: list(filter(lambda x: x[DataKey.CLS] != -1, fold))
             for k, fold in cohort.items()
@@ -218,11 +238,11 @@ class MBDataModule(MBCVDataModule):
             # ),
             # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
             monai.transforms.NormalizeIntensityD(img_keys),
-            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
+            monai.transforms.LambdaD(all_keys, MetaTensor.as_tensor, track_meta=False),
             monai.transforms.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
             # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
             monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+            # monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
         ])
 
     def val_dataloader(self, *, include_test: bool = True):
@@ -242,3 +262,15 @@ class MBDataModule(MBCVDataModule):
     @property
     def test_transform(self):
         return self.val_transform
+
+def parse_age(age: str) -> float:
+    if pd.isna(age):
+        return math.nan
+
+    match age[-1].lower():
+        case 'y':
+            return float(age[:-1])
+        case 'm':
+            return float(age[:-1]) / 12
+        case _:
+            raise ValueError

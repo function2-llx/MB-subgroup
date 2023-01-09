@@ -62,6 +62,7 @@ class MBArgs(MBSegArgs):
     cls_scheme: str = field(default='4way', metadata={'choices': ['4way', '3way', 'WS-G34', 'WS', 'G34']})
     seg_inputs: list[str] = field(default_factory=list)
     crop_ref: SegClass = field(default=SegClass.ST)
+    use_clinical: bool = field(default=False)
 
     @property
     def cls_map(self):
@@ -126,11 +127,15 @@ class MBArgs(MBSegArgs):
     def num_input_channels(self) -> int:
         return super().num_input_channels + len(self.seg_inputs)
 
+    @property
+    def clinical_feature_size(self) -> int:
+        return 4 * self.use_clinical
+
     def __post_init__(self):
         super().__post_init__()
         if self.seg_seed is None:
             self.seg_seed = self.seed
-        if self.cls_hidden_size is None:
+        if self.cls_conv and self.cls_hidden_size is None:
             self.cls_hidden_size = self.feature_channels[-1]
 
 @dataclass

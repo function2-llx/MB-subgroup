@@ -1,0 +1,44 @@
+num_stages: 6
+z_strides: [1, 1, 1, 2, 2]
+z_kernel_sizes: [1, 1, 1, 3, 3, 3]
+swin_window_size: [8, 6, 4]
+vit_depths: [2, 2, 18, 2]
+vit_num_heads: [3, 6, 12, 24]
+feature_channels: [24, 48, 96, 192, 384, 768]
+pad_crop_size: [512, 512, 24]
+sample_shape: [256, 192, 16]
+input_modalities:
+  - T1
+  - T1C
+  - T2
+seg_classes:
+  - ST
+  - AT
+  - CT
+#seg_weights: [0.3, 1, 1]
+spacing: [0.46875, 0.46875, -1]
+learning_rate: 1e-4
+finetune_lr: 1e-5
+train_batch_size: 8
+eval_batch_size: 16
+num_train_epochs: 50
+seg_loss_factor: 0
+warmup_epochs: 5
+num_seg_heads: 4
+flip_p: 0.5
+#include_background: true
+#dice_nr: 1e-5
+#dice_dr: 1e-5
+#crop_pos: 1
+#squared_dice: true
+do_post: true
+seg_output_dir: output/seg
+seg_pred_dir: output/seg/predict-42+233/sw0.8
+th: 0.4
+cls_hidden_size: 192
+cls_scheme: 3way
+crop_ref: ST
+seg_inputs:
+  - ST
+  - AT
+  - CT
