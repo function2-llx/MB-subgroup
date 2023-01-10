@@ -36,7 +36,7 @@ seg_output_dir: output/seg
 seg_pred_dir: output/seg/predict-42+233/sw0.8
 th: 0.4
 cls_hidden_size: 192
-cls_scheme: 3way
+cls_scheme: 4way
 crop_ref: ST
 seg_inputs:
   - ST

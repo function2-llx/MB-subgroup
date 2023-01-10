@@ -46,10 +46,10 @@ class MBTester(pl.LightningModule):
             nn.ModuleList()
             for _ in range(args.num_folds)
         ])
-        seg_indicator = ''
-        if args.seg_output_dir is not None:
-            seg_indicator = f'seg-{args.seg_seed}'
         for (seed, seg_seed), fold_id in itertools.product(zip(args.p_seeds, args.p_seg_seeds), range(args.num_folds)):
+            seg_indicator = ''
+            if args.seg_output_dir is not None:
+                seg_indicator = f'seg-{seg_seed}'
             ckpt_path = self.args.output_dir / seg_indicator / f'run-{seed}' / f'fold-{fold_id}' / args.cls_scheme / 'last.ckpt'
             # ckpt_path = self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'cls'
             # for filepath in ckpt_path.iterdir():

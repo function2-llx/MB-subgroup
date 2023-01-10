@@ -4,7 +4,6 @@ from pathlib import Path
 from umei.args import AugArgs, CVArgs, SegArgs, UMeIArgs
 
 from mbs.utils.enums import Modality, SUBGROUPS, SegClass
-from monai.networks.layers import Act
 
 @dataclass
 class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
@@ -45,6 +44,59 @@ class MBSegArgs(SegArgs, CVArgs, AugArgs, UMeIArgs):
     def stem_stages(self) -> int:
         return self.num_stages - self.vit_stages
 
+def cls_map(cls_scheme: str) -> dict[str, int]:
+    match cls_scheme:
+        case '4way':
+            return {
+                name: i
+                for i, name in enumerate(SUBGROUPS)
+            }
+        case '3way':
+            return {
+                'WNT': 0,
+                'SHH': 1,
+                'G3': 2,
+                'G4': 2,
+            }
+        case 'WS-G34':
+            return {
+                'WNT': 0,
+                'SHH': 0,
+                'G3': 1,
+                'G4': 1,
+            }
+        case 'WS':
+            return {
+                'WNT': 0,
+                'SHH': 1,
+                'G3': -1,
+                'G4': -1,
+            }
+        case 'G34':
+            return {
+                'WNT': -1,
+                'SHH': -1,
+                'G3': 0,
+                'G4': 1,
+            }
+        case _:
+            raise ValueError
+
+def cls_names(cls_scheme: str) -> list[str]:
+    match cls_scheme:
+        case '4way':
+            return SUBGROUPS
+        case '3way':
+            return ['WNT', 'SHH', 'G34']
+        case 'WS-G34':
+            return ['WS', 'G34']
+        case 'WS':
+            return ['WNT', 'SHH']
+        case 'G34':
+            return ['G3', 'G4']
+        case _:
+            raise ValueError
+
 @dataclass
 class MBArgs(MBSegArgs):
     seg_output_dir: Path = field(default=None)
@@ -66,58 +118,11 @@ class MBArgs(MBSegArgs):
 
     @property
     def cls_map(self):
-        match self.cls_scheme:
-            case '4way':
-                return {
-                    name: i
-                    for i, name in enumerate(SUBGROUPS)
-                }
-            case '3way':
-                return {
-                    'WNT': 0,
-                    'SHH': 1,
-                    'G3': 2,
-                    'G4': 2,
-                }
-            case 'WS-G34':
-                return {
-                    'WNT': 0,
-                    'SHH': 0,
-                    'G3': 1,
-                    'G4': 1,
-                }
-            case 'WS':
-                return {
-                    'WNT': 0,
-                    'SHH': 1,
-                    'G3': -1,
-                    'G4': -1,
-                }
-            case 'G34':
-                return {
-                    'WNT': -1,
-                    'SHH': -1,
-                    'G3': 0,
-                    'G4': 1,
-                }
-            case _:
-                raise ValueError
+        return cls_map(self.cls_scheme)
 
     @property
     def cls_names(self):
-        match self.cls_scheme:
-            case '4way':
-                return SUBGROUPS
-            case '3way':
-                return ['WNT', 'SHH', 'G34']
-            case 'WS-G34':
-                return ['WS', 'G34']
-            case 'WS':
-                return ['WNT', 'SHH']
-            case 'G34':
-                return ['G3', 'G4']
-            case _:
-                raise ValueError
+        return cls_names(self.cls_scheme)
 
     @property
     def num_cls_classes(self):
