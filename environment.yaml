@@ -1,0 +1,31 @@
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.10
+  - notebook
+  - pytorch::pytorch=1.13
+  - pytorch::torchvision=0.14
+  - pytorch::pytorch-cuda=11.7
+  - pytorch-lightning
+  - torchmetrics
+  - transformers
+  - wandb
+  - scikit-learn
+  - pandas
+  - openpyxl
+  - seaborn
+  - nibabel
+  - pydicom
+  - fslpy
+
+  - pip
+  - pip:
+    - pyradiomics
+    - xgboost
+    - einops
+    - git+https://github.com/julien-blanchon/hiddenlayer.git
+    - -e third-party/MONAI
+    - -e third-party/HD-BET

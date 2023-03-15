@@ -103,7 +103,8 @@ class MBBackbone(UEncoderBase):
             hidden_states.append(x)
         for layer, norm, downsample in zip(self.layers, self.norms, self.downsamples):
             x = downsample(x)
-            x = norm(layer(x))
+            # x = norm(layer(x))
+            x = layer(x)
             hidden_states.append(x)
         ret = UEncoderOutput(
             cls_feature=hidden_states[-1],
@@ -123,8 +124,8 @@ class MBSegModel(SegModel):
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
         ])
         self.test_outputs = []
-        self.recall = Recall(num_classes=args.num_seg_classes, average=None, multiclass=False)
-        self.recall_u = Recall(num_classes=args.num_seg_classes, average=None, multiclass=False)
+        self.recall = Recall(task='binary', num_classes=args.num_seg_classes, average=None)
+        self.recall_u = Recall(task='binary', num_classes=args.num_seg_classes, average=None)
 
     def build_encoder(self):
         return MBBackbone(self.args)
@@ -209,7 +210,7 @@ class MBModel(MBSegModel):
         self.val_keys = [DataSplit.VAL, DataSplit.TEST]
         self.cls_metrics: Mapping[str, Mapping[str, torchmetrics.Metric]] = nn.ModuleDict({
             split: nn.ModuleDict({
-                k: metric_cls(num_classes=args.num_cls_classes, average=average)
+                k: metric_cls(task='multiclass', num_classes=args.num_cls_classes, average=average)
                 for k, metric_cls, average in [
                     ('auroc', AUROC, AverageMethod.NONE),
                     ('recall', Recall, AverageMethod.NONE),
@@ -225,13 +226,12 @@ class MBModel(MBSegModel):
             for split in self.val_keys
         }
 
-        cls_feature_size = args.cls_hidden_size + args.clinical_feature_size
         if args.cls_conv:
             modules = [
                 UnetResBlock(
                     spatial_dims=3,
                     in_channels=args.feature_channels[-1],
-                    out_channels=cls_feature_size,
+                    out_channels=args.cls_feature_size,
                     kernel_size=3,
                     stride=2,
                     norm_name=args.conv_norm,
@@ -247,7 +247,7 @@ class MBModel(MBSegModel):
             modules.extend([
                 Pool[args.pool_name, 3](1),
                 Rearrange('n c 1 1 1 -> n c'),
-                nn.Linear(cls_feature_size, args.num_cls_classes),
+                nn.Linear(args.cls_feature_size, args.num_cls_classes),
             ])
 
             self.cls_head = nn.Sequential(*modules)
@@ -256,15 +256,15 @@ class MBModel(MBSegModel):
                 self.cls_head = nn.Sequential(
                     Pool[args.pool_name, 3](1),
                     Rearrange('n c 1 1 1 -> n c'),
-                    nn.Linear(args.feature_channels[-1] + args.clinical_feature_size, args.num_cls_classes),
+                    nn.Linear(args.cls_feature_size, args.num_cls_classes),
                 )
             else:
                 self.cls_head = nn.Sequential(
                     Pool[args.pool_name, 3](1),
                     Rearrange('n c 1 1 1 -> n c'),
-                    nn.Linear(args.feature_channels[-1], cls_feature_size),
-                    nn.PReLU(cls_feature_size),
-                    nn.Linear(cls_feature_size, args.num_cls_classes),
+                    nn.Linear(args.feature_channels[-1], args.cls_feature_size),
+                    nn.PReLU(args.cls_feature_size),
+                    nn.Linear(args.cls_feature_size, args.num_cls_classes),
                 )
 
     def load_seg_state_dict(self, seg_ckpt_path: Path):

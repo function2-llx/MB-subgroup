@@ -62,7 +62,7 @@ class MBTester(pl.LightningModule):
             print(f'load model from {ckpt_path}')
 
         self.metrics: Mapping[str, torchmetrics.Metric] = nn.ModuleDict({
-            k: metric_cls(num_classes=self.args.num_cls_classes, average=average)
+            k: metric_cls(task='multiclass', num_classes=self.args.num_cls_classes, average=average)
             for k, metric_cls, average in [
                 ('auroc', torchmetrics.AUROC, AverageMethod.NONE),
                 ('recall', torchmetrics.Recall, AverageMethod.NONE),

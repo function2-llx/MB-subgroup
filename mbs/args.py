@@ -143,6 +143,11 @@ class MBArgs(MBSegArgs):
         if self.cls_conv and self.cls_hidden_size is None:
             self.cls_hidden_size = self.feature_channels[-1]
 
+    @property
+    def cls_feature_size(self):
+        return (self.feature_channels[-1] if self.cls_hidden_size is None else self.cls_hidden_size) \
+               + self.clinical_feature_size
+
 @dataclass
 class MBSegPredArgs(MBSegArgs):
     p_seeds: list[int] = field(default=None)
