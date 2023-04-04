@@ -6,11 +6,13 @@ channels:
 dependencies:
   - python=3.10
   - notebook
-  - pytorch::pytorch=1.13
-  - pytorch::torchvision=0.14
-  - pytorch::pytorch-cuda=11.7
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::pytorch-cuda=11.8
+  - timm
   - pytorch-lightning
   - torchmetrics
+  - einops
   - transformers
   - wandb
   - scikit-learn
@@ -25,7 +27,4 @@ dependencies:
   - pip:
     - pyradiomics
     - xgboost
-    - einops
-    - git+https://github.com/julien-blanchon/hiddenlayer.git
     - -e third-party/MONAI
-    - -e third-party/HD-BET
