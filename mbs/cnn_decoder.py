@@ -4,9 +4,9 @@ import torch
 from torch import nn
 
 from monai.networks.blocks import Convolution, UnetUpBlock
-from monai.umei import UDecoderBase, UDecoderOutput
+from monai.umei import Decoder, DecoderOutput
 
-class CNNDecoder(UDecoderBase):
+class CNNDecoder(Decoder):
     def __init__(
         self,
         feature_channels: list[int],

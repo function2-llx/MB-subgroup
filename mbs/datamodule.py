@@ -15,7 +15,7 @@ from monai.utils import GridSampleMode
 from umei.datamodule import CVDataModule
 from umei.utils import DataKey, DataSplit
 
-from mbs.args import MBArgs, MBSegArgs
+from mbs.args import MBArgs, MBSegConf
 from mbs.utils.enums import MBDataKey, Modality, SUBGROUPS, SegClass
 from mbs.transforms import CropBBoxCenterD
 
@@ -62,9 +62,9 @@ def get_classes(data: list[dict]) -> list:
     ]
 
 class MBCVDataModule(CVDataModule):
-    args: MBSegArgs
+    args: MBSegConf
 
-    def __init__(self, args: MBSegArgs):
+    def __init__(self, args: MBSegConf):
         super().__init__(args)
 
     @cached_property
@@ -89,7 +89,7 @@ class MBCVDataModule(CVDataModule):
         return list(itertools.chain(*self.cohort.values()))
 
 class MBSegDataModule(MBCVDataModule):
-    args: MBSegArgs
+    args: MBSegConf
 
     @property
     def train_transform(self) -> Callable:

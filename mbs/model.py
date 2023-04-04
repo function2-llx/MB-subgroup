@@ -21,14 +21,14 @@ from umei import SegModel
 from umei.models.layernorm import LayerNormNd
 from umei.utils import DataKey, DataSplit
 
-from mbs.args import MBArgs, MBSegArgs
+from mbs.args import MBArgs, MBSegConf
 from mbs.cnn_decoder import CNNDecoder
 from mbs.utils.enums import MBDataKey, SegClass
 
 class MBBackbone(UEncoderBase):
     def __init__(
         self,
-        args: MBSegArgs,
+        args: MBSegConf,
         drop_path_rate: float = 0.0,
         mlp_ratio: float = 4.0,
         qkv_bias: bool = True,
@@ -116,9 +116,9 @@ class MBBackbone(UEncoderBase):
         return ret
 
 class MBSegModel(SegModel):
-    args: MBSegArgs
+    args: MBSegConf
 
-    def __init__(self, args: MBSegArgs):
+    def __init__(self, args: MBSegConf):
         super().__init__(args)
         self.post_transform = monai.transforms.Compose([
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),

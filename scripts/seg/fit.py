@@ -3,20 +3,19 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, ModelSummary
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
+from pytorch_lightning.cli import LightningCLI
 import torch
 import wandb
 
-from umei.utils import UMeIParser
-
-from mbs.args import MBSegArgs
+from mbs.args import MBSegConf
 from mbs.datamodule import MBSegDataModule
 from mbs.model import MBSegModel
 
 task_name = 'mb-seg'
-args: MBSegArgs
+args: MBSegConf
 datamodule: MBSegDataModule
 
-def fit_or_eval():
+def do_train():
     log_dir = None
     test_outputs = []
     if args.do_eval:
@@ -103,13 +102,14 @@ def fit_or_eval():
         pd.DataFrame.from_records(test_outputs).to_excel(log_dir / 'results.xlsx', index=False)
         pd.DataFrame.from_records(test_outputs).to_csv(log_dir / 'results.csv', index=False)
 
+def do_eval():
+    pass
+
 def main():
-    global args, datamodule
-    parser = UMeIParser((MBSegArgs, ), use_conf=True)
-    args = parser.parse_args_into_dataclasses()[0]
-    print(args)
-    datamodule = MBSegDataModule(args)
-    fit_or_eval()
+    # args = parser.parse_args_into_dataclasses()[0]
+    # print(args)
+    # datamodule = MBSegDataModule(args)
+
 
 if __name__ == '__main__':
     main()

@@ -8,7 +8,7 @@ from umei.utils import DataKey, DataSplit, UMeIParser
 from umei.utils.index_tracker import IndexTracker
 
 from mbs.utils.enums import MBDataKey, Modality, SegClass
-from mbs.args import MBSegArgs
+from mbs.args import MBSegConf
 from mbs.datamodule import MBSegDataModule, DATA_DIR, load_cohort
 from mbs.model import MBSegModel
 
@@ -31,8 +31,8 @@ def main():
     cohort.set_index('name', inplace=True)
     if val_id is None:
         val_id = int(cohort.loc[plot_case, 'split'])
-    parser = UMeIParser((MBSegArgs, ), use_conf=True)
-    args: MBSegArgs = parser.parse_args_into_dataclasses()[0]
+    parser = UMeIParser((MBSegConf,), use_conf=True)
+    args: MBSegConf = parser.parse_args_into_dataclasses()[0]
     dm = MBSegDataModule(args)
     dm.val_id = val_id
     output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}'
