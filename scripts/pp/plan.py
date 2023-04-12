@@ -15,12 +15,12 @@ SUBGROUP_KEY = 'Subgroup'
 def read_subgroup_tables():
     subgroup_tables = pd.read_excel(DATA_DIR / 'subgroup.xlsx', sheet_name=['儿童', '成人'])
     for group, rename in [
-        ('儿童', MBGroup.CHILDREN),
+        ('儿童', MBGroup.CHILD),
         ('成人', MBGroup.ADULT),
     ]:
         subgroup_tables[rename] = subgroup_tables.pop(group)
 
-    subgroup_tables[MBGroup.CHILDREN].rename(
+    subgroup_tables[MBGroup.CHILD].rename(
         columns={
             '住院号': 'No.',
             '分子亚型': SUBGROUP_KEY,
@@ -84,7 +84,7 @@ def process_patient(patient_dir: Path):
 
             subgroup = subgroup[0]
 
-    if group == MBGroup.CHILDREN and patient_num in (adult_table := subgroup_tables[MBGroup.ADULT]).index:
+    if group == MBGroup.CHILD and patient_num in (adult_table := subgroup_tables[MBGroup.ADULT]).index:
         if subgroup == adult_table.loc[patient_num, SUBGROUP_KEY]:
             note = 'duplicate'
         else:
@@ -92,7 +92,7 @@ def process_patient(patient_dir: Path):
             note = 'duplicate & inconsistent subgroup'
             mismatch_subgroup.append(patient)
 
-    if group == MBGroup.ADULT and patient_num in subgroup_tables[MBGroup.CHILDREN].index:
+    if group == MBGroup.ADULT and patient_num in subgroup_tables[MBGroup.CHILD].index:
         exclude = True
         note = 'duplicate in children group'
 
@@ -115,7 +115,7 @@ def process_patient(patient_dir: Path):
 def main():
     with ExcelWriter(DATA_DIR / 'plan.xlsx') as writer:
         data = [process_patient(patient_dir) for patient_dir in tqdm(list((DATA_DIR / 'image').iterdir()))]
-        pd.DataFrame.from_records(data).to_excel(writer, sheet_name=MBGroup.CHILDREN, index=False)
+        pd.DataFrame.from_records(data).to_excel(writer, sheet_name=MBGroup.CHILD, index=False)
         adult_data = [process_patient(patient_dir) for patient_dir in tqdm(list((DATA_DIR / 'adult').iterdir()))]
         pd.DataFrame.from_records(adult_data).to_excel(writer, sheet_name=MBGroup.ADULT, index=False)
         merge_data = list(filter(

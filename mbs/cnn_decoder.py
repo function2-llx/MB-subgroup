@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from monai.networks.blocks import Convolution, UnetUpBlock
-from monai.umei import Decoder, DecoderOutput
+from monai.luolib import Decoder, DecoderOutput
 
 class CNNDecoder(Decoder):
     def __init__(

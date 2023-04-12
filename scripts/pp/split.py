@@ -4,13 +4,13 @@ from sklearn.model_selection import train_test_split
 from mbs.datamodule import DATA_DIR
 from mbs.utils.enums import MBGroup
 from monai.data import partition_dataset_classes
-from umei.utils import DataSplit
+from luolib.utils import DataSplit
 
 SEED = 2333
 
 def main():
     cohort = pd.read_excel(DATA_DIR / 'plan.xlsx', sheet_name='merge').set_index('name')
-    children_idx = cohort['group'] == MBGroup.CHILDREN
+    children_idx = cohort['group'] == MBGroup.CHILD
     children_cohort = cohort[children_idx]
     cohort.loc[~children_idx, 'split'] = DataSplit.TRAIN
     names, subgroups = children_cohort.index, children_cohort['subgroup']
@@ -23,7 +23,6 @@ def main():
     )
     for name in test_names:
         cohort.loc[name, 'split'] = DataSplit.TEST
-
 
     cv_parts = partition_dataset_classes(
         fit_names,

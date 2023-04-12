@@ -9,13 +9,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-import monai
+from monai import transforms as monai_t
 from monai.data import CacheDataset, MetaTensor
 from monai.utils import GridSampleMode
-from umei.datamodule import CVDataModule
-from umei.utils import DataKey, DataSplit
+from luolib.datamodule import SegDataModule, CrossValDataModule, ExpDataModuleBase
+from luolib.utils import DataKey, DataSplit
 
-from mbs.args import MBArgs, MBSegConf
+from mbs.conf import MBSegConf
 from mbs.utils.enums import MBDataKey, Modality, SUBGROUPS, SegClass
 from mbs.transforms import CropBBoxCenterD
 
@@ -61,7 +61,7 @@ def get_classes(data: list[dict]) -> list:
         for x in data
     ]
 
-class MBCVDataModule(CVDataModule):
+class MBDataModuleBase(CrossValDataModule):
     args: MBSegConf
 
     def __init__(self, args: MBSegConf):
@@ -88,7 +88,7 @@ class MBCVDataModule(CVDataModule):
     def all_data(self) -> Sequence:
         return list(itertools.chain(*self.cohort.values()))
 
-class MBSegDataModule(MBCVDataModule):
+class MBSegDataModule(SegDataModule, MBDataModuleBase):
     args: MBSegConf
 
     @property
@@ -96,14 +96,14 @@ class MBSegDataModule(MBCVDataModule):
         img_keys = self.args.input_modalities
         seg_keys = self.args.seg_classes
         all_keys = img_keys + seg_keys
-        return monai.transforms.Compose([
-            monai.transforms.LoadImageD(all_keys),
-            monai.transforms.EnsureChannelFirstD(all_keys),
-            monai.transforms.OrientationD(all_keys, axcodes='RAS'),
-            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
-            monai.transforms.RandCropByPosNegLabelD(
+        return monai_t.Compose([
+            monai_t.LoadImageD(all_keys),
+            monai_t.EnsureChannelFirstD(all_keys),
+            monai_t.OrientationD(all_keys, axcodes='RAS'),
+            monai_t.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
+            monai_t.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+            monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
+            monai_t.RandCropByPosNegLabelD(
                 all_keys,
                 label_key=SegClass.ST,
                 spatial_size=self.args.sample_shape,
@@ -111,15 +111,15 @@ class MBSegDataModule(MBCVDataModule):
                 neg=self.args.crop_neg,
                 num_samples=self.args.num_crop_samples,
             ),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
-            monai.transforms.RandRotate90D(all_keys, prob=self.args.rotate_p),
-            monai.transforms.NormalizeIntensityD(img_keys),
-            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG]),
+            monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
+            monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
+            monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
+            monai_t.RandRotate90D(all_keys, prob=self.args.rotate_p),
+            monai_t.NormalizeIntensityD(img_keys),
+            monai_t.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
+            monai_t.ConcatItemsD(img_keys, name=DataKey.IMG),
+            monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
+            monai_t.SelectItemsD([DataKey.IMG, DataKey.SEG]),
         ])
 
     @property
@@ -127,141 +127,141 @@ class MBSegDataModule(MBCVDataModule):
         img_keys = self.args.input_modalities
         seg_keys = self.args.seg_classes
         all_keys = img_keys + seg_keys
-        return monai.transforms.Compose([
-            monai.transforms.LoadImageD(all_keys),
-            monai.transforms.EnsureChannelFirstD(all_keys),
-            monai.transforms.OrientationD(all_keys, axcodes='RAS'),
-            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
-            monai.transforms.NormalizeIntensityD(img_keys),
-            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
+        return monai_t.Compose([
+            monai_t.LoadImageD(all_keys),
+            monai_t.EnsureChannelFirstD(all_keys),
+            monai_t.OrientationD(all_keys, axcodes='RAS'),
+            monai_t.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
+            monai_t.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+            monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
+            monai_t.NormalizeIntensityD(img_keys),
+            monai_t.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
+            monai_t.ConcatItemsD(img_keys, name=DataKey.IMG),
+            monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
+            monai_t.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
         ])
 
     @property
     def test_transform(self):
         return self.val_transform
 
-class MBDataModule(MBCVDataModule):
-    args: MBArgs
-
-    def __init__(self, args: MBArgs):
-        super().__init__(args)
-        suffix = f'th{args.th}'
-        if args.do_post:
-            suffix += '-post'
-        for x in itertools.chain(*self.cohort.values()):
-            seg_pred_dir = args.seg_pred_dir / x[MBDataKey.CASE] / suffix
-            for seg_cls in args.seg_classes:
-                x[f'{seg_cls}-pred'] = seg_pred_dir / f'{seg_cls}.nii.gz'
-                # x[f'{seg_cls}-pred'] = DATA_DIR / 'image' / x[MBDataKey.CASE] / f'{seg_cls}.nii'
-
-        if args.cls_weights is None:
-            cls_cnt = np.zeros(args.num_cls_classes, dtype=np.float64)
-            for i in range(args.num_folds):
-                for x in self.cohort[str(i)]:
-                    cls_cnt[x[DataKey.CLS]] += 1
-            args.cls_weights = (1. / cls_cnt).tolist()
-
-    @cached_property
-    def cohort(self):
-        cohort = super().cohort
-        for fold in cohort.values():
-            for x in fold:
-                subgroup = SUBGROUPS[x[MBDataKey.SUBGROUP_ID]]
-                x[DataKey.CLS] = self.args.cls_map[subgroup]
-                if not self.args.use_clinical:
-                    x.pop(DataKey.CLINICAL)
-        return {
-            k: list(filter(lambda x: x[DataKey.CLS] != -1, fold))
-            for k, fold in cohort.items()
-        }
-
-    @property
-    def train_transform(self):
-        img_keys = self.args.input_modalities
-        seg_keys = self.args.seg_classes
-        pred_keys = [f'{seg_cls}-pred' for seg_cls in self.args.seg_classes]
-        bbox_src_key = f'{self.args.crop_ref}-pred'
-        all_keys = img_keys + seg_keys + pred_keys
-        return monai.transforms.Compose([
-            monai.transforms.LoadImageD(all_keys),
-            monai.transforms.EnsureChannelFirstD(all_keys),
-            monai.transforms.OrientationD(all_keys, axcodes='RAS'),
-            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
-            CropBBoxCenterD(all_keys, bbox_src_key, crop_size=self.args.sample_shape),
-            # monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
-            # monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
-            # monai.transforms.RandSpatialCropD(
-            #     all_keys,
-            #     roi_size=self.args.sample_shape,
-            #     random_size=False,
-            # ),
-            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
-            monai.transforms.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
-            # monai.transforms.RandRotate90D(all_keys, prob=self.args.rotate_p),
-            monai.transforms.NormalizeIntensityD(img_keys),
-            monai.transforms.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
-            # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
-            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
-        ])
-
-    @property
-    def val_transform(self):
-        img_keys = self.args.input_modalities
-        seg_keys = self.args.seg_classes
-        pred_keys = [f'{seg_cls}-pred' for seg_cls in self.args.seg_classes]
-        bbox_src_key = f'{self.args.crop_ref}-pred'
-        all_keys = img_keys + seg_keys + pred_keys
-        return monai.transforms.Compose([
-            monai.transforms.LoadImageD(all_keys),
-            monai.transforms.EnsureChannelFirstD(all_keys),
-            monai.transforms.OrientationD(all_keys, axcodes='RAS'),
-            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
-            monai.transforms.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),  # adjust affine
-            CropBBoxCenterD(all_keys, bbox_src_key, crop_size=self.args.sample_shape),
-            # monai.transforms.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
-            # monai.transforms.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
-            # monai.transforms.CenterSpatialCropD(
-            #     all_keys,
-            #     roi_size=self.args.sample_shape,
-            # ),
-            # monai.transforms.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
-            monai.transforms.NormalizeIntensityD(img_keys),
-            monai.transforms.LambdaD(all_keys, MetaTensor.as_tensor, track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
-            # monai.transforms.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
-            monai.transforms.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            # monai.transforms.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
-        ])
-
-    def val_dataloader(self, *, include_test: bool = True):
-        val_dl = super().val_dataloader()
-        if not include_test:
-            return val_dl
-        return [
-            val_dl,
-            self.build_eval_dataloader(CacheDataset(
-                self.test_data(),
-                transform=self.test_transform,
-                cache_num=self.args.val_cache_num,
-                num_workers=self.args.dataloader_num_workers,
-            ))
-        ]
-
-    @property
-    def test_transform(self):
-        return self.val_transform
+# class MBDataModule(MBDataModuleBase):
+#     args: MBArgs
+#
+#     def __init__(self, args: MBArgs):
+#         super().__init__(args)
+#         suffix = f'th{args.th}'
+#         if args.do_post:
+#             suffix += '-post'
+#         for x in itertools.chain(*self.cohort.values()):
+#             seg_pred_dir = args.seg_pred_dir / x[MBDataKey.CASE] / suffix
+#             for seg_cls in args.seg_classes:
+#                 x[f'{seg_cls}-pred'] = seg_pred_dir / f'{seg_cls}.nii.gz'
+#                 # x[f'{seg_cls}-pred'] = DATA_DIR / 'image' / x[MBDataKey.CASE] / f'{seg_cls}.nii'
+#
+#         if args.cls_weights is None:
+#             cls_cnt = np.zeros(args.num_cls_classes, dtype=np.float64)
+#             for i in range(args.num_folds):
+#                 for x in self.cohort[str(i)]:
+#                     cls_cnt[x[DataKey.CLS]] += 1
+#             args.cls_weights = (1. / cls_cnt).tolist()
+#
+#     @cached_property
+#     def cohort(self):
+#         cohort = super().cohort
+#         for fold in cohort.values():
+#             for x in fold:
+#                 subgroup = SUBGROUPS[x[MBDataKey.SUBGROUP_ID]]
+#                 x[DataKey.CLS] = self.args.cls_map[subgroup]
+#                 if not self.args.use_clinical:
+#                     x.pop(DataKey.CLINICAL)
+#         return {
+#             k: list(filter(lambda x: x[DataKey.CLS] != -1, fold))
+#             for k, fold in cohort.items()
+#         }
+#
+#     @property
+#     def train_transform(self):
+#         img_keys = self.args.input_modalities
+#         seg_keys = self.args.seg_classes
+#         pred_keys = [f'{seg_cls}-pred' for seg_cls in self.args.seg_classes]
+#         bbox_src_key = f'{self.args.crop_ref}-pred'
+#         all_keys = img_keys + seg_keys + pred_keys
+#         return monai_t.Compose([
+#             monai_t.LoadImageD(all_keys),
+#             monai_t.EnsureChannelFirstD(all_keys),
+#             monai_t.OrientationD(all_keys, axcodes='RAS'),
+#             monai_t.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
+#             monai_t.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+#             monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),
+#             CropBBoxCenterD(all_keys, bbox_src_key, crop_size=self.args.sample_shape),
+#             # monai_t.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
+#             # monai_t.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
+#             # monai_t.RandSpatialCropD(
+#             #     all_keys,
+#             #     roi_size=self.args.sample_shape,
+#             #     random_size=False,
+#             # ),
+#             # monai_t.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+#             monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=0),
+#             monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=1),
+#             monai_t.RandFlipD(all_keys, prob=self.args.flip_p, spatial_axis=2),
+#             # monai_t.RandRotate90D(all_keys, prob=self.args.rotate_p),
+#             monai_t.NormalizeIntensityD(img_keys),
+#             monai_t.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
+#             monai_t.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
+#             # monai_t.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
+#             monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
+#             monai_t.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+#         ])
+#
+#     @property
+#     def val_transform(self):
+#         img_keys = self.args.input_modalities
+#         seg_keys = self.args.seg_classes
+#         pred_keys = [f'{seg_cls}-pred' for seg_cls in self.args.seg_classes]
+#         bbox_src_key = f'{self.args.crop_ref}-pred'
+#         all_keys = img_keys + seg_keys + pred_keys
+#         return monai_t.Compose([
+#             monai_t.LoadImageD(all_keys),
+#             monai_t.EnsureChannelFirstD(all_keys),
+#             monai_t.OrientationD(all_keys, axcodes='RAS'),
+#             monai_t.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
+#             monai_t.SpacingD(seg_keys, pixdim=self.args.spacing, mode=GridSampleMode.NEAREST),
+#             monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.args.pad_crop_size),  # adjust affine
+#             CropBBoxCenterD(all_keys, bbox_src_key, crop_size=self.args.sample_shape),
+#             # monai_t.CropForegroundD(all_keys, source_key=f'{SegClass.ST}-pred'),
+#             # monai_t.MaskIntensityD(all_keys, mask_key=f'{SegClass.ST}-pred'),
+#             # monai_t.CenterSpatialCropD(
+#             #     all_keys,
+#             #     roi_size=self.args.sample_shape,
+#             # ),
+#             # monai_t.SpatialPadD(all_keys, spatial_size=self.args.sample_shape),
+#             monai_t.NormalizeIntensityD(img_keys),
+#             monai_t.LambdaD(all_keys, MetaTensor.as_tensor, track_meta=False),
+#             monai_t.ConcatItemsD(img_keys + [f'{seg_cls}-pred' for seg_cls in self.args.seg_inputs], name=DataKey.IMG),
+#             # monai_t.CopyItemsD(MBDataKey.SUBGROUP_ID, names=DataKey.CLS),
+#             monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
+#             # monai_t.SelectItemsD([MBDataKey.CASE, DataKey.IMG, DataKey.CLS, DataKey.SEG]),
+#         ])
+#
+#     def val_dataloader(self, *, include_test: bool = True):
+#         val_dl = super().val_dataloader()
+#         if not include_test:
+#             return val_dl
+#         return [
+#             val_dl,
+#             self.build_eval_dataloader(CacheDataset(
+#                 self.test_data(),
+#                 transform=self.test_transform,
+#                 cache_num=self.args.val_cache_num,
+#                 num_workers=self.args.dataloader_num_workers,
+#             ))
+#         ]
+#
+#     @property
+#     def test_transform(self):
+#         return self.val_transform
 
 def parse_age(age: str) -> float:
     if pd.isna(age):

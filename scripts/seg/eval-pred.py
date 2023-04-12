@@ -7,7 +7,6 @@ from tqdm.contrib.concurrent import process_map
 import monai
 from monai.metrics import compute_meandice
 from monai.utils import GridSampleMode
-from umei.utils import UMeIParser
 
 from mbs.args import MBSegPredArgs
 from mbs.datamodule import load_cohort

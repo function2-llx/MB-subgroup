@@ -16,10 +16,10 @@ from monai.metrics import DiceMetric
 from monai.networks.blocks import Convolution, UnetBasicBlock, UnetResBlock
 from monai.networks.layers import Pool
 from monai.networks.nets.swin_unetr import BasicLayer
-from monai.umei import UEncoderBase, UEncoderOutput
-from umei import SegModel
-from umei.models.layernorm import LayerNormNd
-from umei.utils import DataKey, DataSplit
+from monai.luolib import UEncoderBase, UEncoderOutput
+from luolib import SegModel
+from luolib.models.layernorm import LayerNormNd
+from luolib.utils import DataKey, DataSplit
 
 from mbs.args import MBArgs, MBSegConf
 from mbs.cnn_decoder import CNNDecoder

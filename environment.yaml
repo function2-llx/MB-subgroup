@@ -28,4 +28,5 @@ dependencies:
   - pip:
     - pyradiomics
     - xgboost
+    - cytoolz
     - -e third-party/MONAI

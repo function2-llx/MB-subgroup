@@ -6,7 +6,7 @@ from pytorch_lightning.strategies import DDPStrategy
 import torch
 import wandb
 
-from umei.utils import UMeIParser
+from luolib.utils import UMeIParser
 
 from mbs.args import MBArgs
 from mbs.datamodule import MBDataModule

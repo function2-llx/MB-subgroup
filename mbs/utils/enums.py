@@ -5,7 +5,7 @@ class MBDataKey(StrEnum):
     SUBGROUP_ID = 'subgroup_id'
 
 class MBGroup(StrEnum):
-    CHILDREN = 'children'
+    CHILD = 'child'
     ADULT = 'adult'
 
 class Modality(StrEnum):
