@@ -1,147 +1,81 @@
-from collections.abc import Callable
 from functools import cached_property
 import itertools
 import math
-from pathlib import Path
 from typing import Sequence
 
-import numpy as np
 import pandas as pd
-import torch
 
-from monai import transforms as monai_t
-from monai.data import CacheDataset, MetaTensor
-from monai.utils import GridSampleMode
-from luolib.datamodule import SegDataModule, CrossValDataModule, ExpDataModuleBase
-from luolib.utils import DataKey, DataSplit
+from luolib.datamodule import CrossValDataModule
+from luolib.utils import DataSplit
 
-from mbs.conf import MBSegConf
-from mbs.utils.enums import MBDataKey, Modality, SUBGROUPS, SegClass
-from mbs.transforms import CropBBoxCenterD
+from mbs.conf import MBConfBase
+from mbs.utils.enums import CLINICAL_DIR, MBDataKey, PROCESSED_DIR
 
-DATASET_ROOT = Path(__file__).parent
-DATA_DIR = DATASET_ROOT / 'origin'
-PROCESSED_DIR = DATASET_ROOT / 'processed'
+def load_clinical():
+    clinical = pd.read_excel(CLINICAL_DIR / 'clinical-com.xlsx', dtype='string').set_index('住院号')
+    return clinical
 
-def load_cohort():
-    cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1').set_index('name')
-    clinical = pd.read_excel(DATA_DIR / 'clinical-com.xlsx', dtype=str).set_index('住院号')
-    data = {}
-    for patient, info in cohort.iterrows():
-        patient = str(patient)
-        num = patient[:6]
-        sex: str = clinical.loc[num, 'sex']
-        sex_vec = torch.zeros(2)
-        if sex.lower() == 'f':
-            sex_vec[0] = 1
-        if sex.lower() == 'm':
-            sex_vec[1] = 1
-        age = clinical.loc[num, 'age']
-        age_vec = torch.zeros(2)
-        if not pd.isna(age):
-            age_vec[0] = 1
-            age_vec[1] = parse_age(age) / 100
-        clinical_vec = torch.cat([sex_vec, age_vec])
+# def load_split_cohort(data_dir: Path, requires_seg: bool):
+#     plan =  load_merged_plan()
+#     clinical = load_clinical()
+#     data = {}
+#     for number, info in plan.iterrows():
+#         sex: str = clinical.loc[number, 'sex']
+#         sex_vec = torch.zeros(2)
+#         if sex.lower() == 'f':
+#             sex_vec[0] = 1
+#         if sex.lower() == 'm':
+#             sex_vec[1] = 1
+#         age = clinical.loc[number, 'age']
+#         age_vec = torch.zeros(2)
+#         if not pd.isna(age):
+#             age_vec[0] = 1
+#             age_vec[1] = parse_age(age) / 100
+#         clinical_vec = torch.cat([sex_vec, age_vec])
+#
+#         case_data_dir = data_dir / number
+#         data.setdefault(str(info['split']), []).append({
+#             MBDataKey.NUMBER: number,
+#             MBDataKey.SUBGROUP: info['subgroup'],
+#             MBDataKey.SUBGROUP_ID: SUBGROUPS.index(info['subgroup']),
+#             **{
+#                 key: img_path
+#                 for key in [DataKey.IMG, DataKey.SEG] if (img_path := case_data_dir / f'{key}.npy').exists()
+#             },
+#             MBDataKey.CLINICAL: clinical_vec,
+#         })
+#
+#     return data
 
-        patient_img_dir = DATA_DIR / info['group'] / patient
-        data.setdefault(str(info['split']), []).append({
-            MBDataKey.CASE: patient,
-            MBDataKey.SUBGROUP_ID: SUBGROUPS.index(info['subgroup']),
-            **{
-                img_type: patient_img_dir / f'{img_type}.nii'
-                for img_type in list(Modality) + list(SegClass)
-            },
-            # DataKey.CLINICAL: clinical_vec,
-        })
-
-    return data
-
-def get_classes(data: list[dict]) -> list:
-    return [
-        x[MBDataKey.SUBGROUP_ID]
-        for x in data
-    ]
+# def get_classes(data: list[dict]) -> list:
+#     return [
+#         x[MBDataKey.SUBGROUP_ID]
+#         for x in data
+#     ]
 
 class MBDataModuleBase(CrossValDataModule):
-    conf: MBSegConf
+    conf: MBConfBase
 
     @cached_property
-    def cohort(self):
-        return load_cohort()
+    def split_cohort(self) -> dict[str, Sequence]:
+        raise NotImplementedError
 
     @cached_property
     def partitions(self):
         ret = [
-            self.cohort[str(fold_id)]
+            self.split_cohort[str(fold_id)]
             for fold_id in range(self.conf.num_folds)
         ]
         # trick: select training data for fold-i is by deleting the i-th item
         if self.conf.include_adults:
-            ret.append(self.cohort[DataSplit.TRAIN])
+            ret.append(self.split_cohort[DataSplit.TRAIN])
         return ret
 
     def test_data(self) -> Sequence:
-        return self.cohort[DataSplit.TEST]
+        return self.split_cohort[DataSplit.TEST]
 
     def all_data(self) -> Sequence:
-        return list(itertools.chain(*self.cohort.values()))
-
-class MBSegDataModule(SegDataModule, MBDataModuleBase):
-    conf: MBSegConf
-
-    @property
-    def train_transform(self) -> Callable:
-        img_keys = self.conf.input_modalities
-        seg_keys = self.conf.seg_classes
-        all_keys = img_keys + seg_keys
-        return monai_t.Compose([
-            monai_t.LoadImageD(all_keys),
-            monai_t.EnsureChannelFirstD(all_keys),
-            monai_t.OrientationD(all_keys, axcodes='RAS'),
-            monai_t.SpacingD(img_keys, pixdim=self.conf.spacing, mode=GridSampleMode.BILINEAR),
-            monai_t.SpacingD(seg_keys, pixdim=self.conf.spacing, mode=GridSampleMode.NEAREST),
-            monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.conf.pad_crop_size),
-            monai_t.RandCropByPosNegLabelD(
-                all_keys,
-                label_key=SegClass.ST,
-                spatial_size=self.conf.sample_shape,
-                pos=self.conf.crop_pos,
-                neg=self.conf.crop_neg,
-                num_samples=self.conf.num_crop_samples,
-            ),
-            monai_t.RandFlipD(all_keys, prob=self.conf.flip_p, spatial_axis=0),
-            monai_t.RandFlipD(all_keys, prob=self.conf.flip_p, spatial_axis=1),
-            monai_t.RandFlipD(all_keys, prob=self.conf.flip_p, spatial_axis=2),
-            monai_t.RandRotate90D(all_keys, prob=self.conf.rotate_p),
-            monai_t.NormalizeIntensityD(img_keys),
-            monai_t.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai_t.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai_t.SelectItemsD([DataKey.IMG, DataKey.SEG]),
-        ])
-
-    @property
-    def val_transform(self) -> Callable:
-        img_keys = self.conf.input_modalities
-        seg_keys = self.conf.seg_classes
-        all_keys = img_keys + seg_keys
-        return monai_t.Compose([
-            monai_t.LoadImageD(all_keys),
-            monai_t.EnsureChannelFirstD(all_keys),
-            monai_t.OrientationD(all_keys, axcodes='RAS'),
-            monai_t.SpacingD(img_keys, pixdim=self.conf.spacing, mode=GridSampleMode.BILINEAR),
-            monai_t.SpacingD(seg_keys, pixdim=self.conf.spacing, mode=GridSampleMode.NEAREST),
-            monai_t.ResizeWithPadOrCropD(all_keys, spatial_size=self.conf.pad_crop_size),
-            monai_t.NormalizeIntensityD(img_keys),
-            monai_t.LambdaD(all_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai_t.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai_t.ConcatItemsD(seg_keys, name=DataKey.SEG),
-            monai_t.SelectItemsD([DataKey.IMG, DataKey.SEG, MBDataKey.CASE]),
-        ])
-
-    @property
-    def test_transform(self):
-        return self.val_transform
+        return list(itertools.chain(*self.split_cohort.values()))
 
 # class MBDataModule(MBDataModuleBase):
 #     args: MBArgs
@@ -273,14 +207,13 @@ def parse_age(age: str) -> float:
         case _:
             raise ValueError
 
-SEG_REF = {
-    SegClass.AT: Modality.T2,
-    SegClass.CT: Modality.T1C,
-    SegClass.ST: Modality.T2,
-}
-
 def load_merged_plan():
     plan = pd.read_excel(PROCESSED_DIR / 'plan.xlsx', sheet_name='merge', dtype={MBDataKey.NUMBER: 'string'})
     plan.set_index(MBDataKey.NUMBER, inplace=True)
     assert plan.index.unique().size == plan.index.size
     return plan
+
+def load_split() -> pd.Series:
+    split = pd.read_excel(PROCESSED_DIR / 'split.xlsx', dtype=str)
+    split.set_index(MBDataKey.NUMBER, inplace=True)
+    return split['split']

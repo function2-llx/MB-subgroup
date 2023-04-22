@@ -2,8 +2,7 @@ import nibabel as nib
 import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
-from mbs.datamodule import DATA_DIR, PROCESSED_DIR
-from mbs.utils.enums import MBDataKey, Modality
+from mbs.utils.enums import MBDataKey, Modality, DATA_DIR, PROCESSED_DIR
 
 plan = pd.read_excel(PROCESSED_DIR / 'plan.xlsx', sheet_name='merge', dtype={MBDataKey.NUMBER: 'string'})
 plan.set_index(MBDataKey.NUMBER, inplace=True)

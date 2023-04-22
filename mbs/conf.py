@@ -1,46 +1,27 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from luolib.conf import SegExpConf, CrossValConf
+from luolib.conf import ClsExpConf, CrossValConf, SegExpConf
 
-from mbs.utils.enums import Modality, SUBGROUPS, SegClass
-
-class MBConfBase:
-    pass
+from mbs.utils.enums import SUBGROUPS, SegClass, PROCESSED_DIR
 
 @dataclass(kw_only=True)
-class MBSegConf(SegExpConf, CrossValConf):
+class MBConfBase(CrossValConf):
+    num_input_channels: int = 3
+    include_adults: bool = True
+    data_dir: Path = PROCESSED_DIR / 'cr-p10/normalized'
+
+@dataclass(kw_only=True)
+class MBSegConf(MBConfBase, SegExpConf):
+    conf_root: Path = Path('conf/tasks/seg')
+    output_root: Path = Path('output/seg')
+    num_seg_classes: int = 3
     multi_label: bool = True
-    input_modalities: list[Modality]
-    pool_name: str = 'adaptiveavg'
-    seg_classes: list[SegClass]
-    seg_weights: list[float]
-    test_size: int = field(default=None)
-    pad_crop_size: list[int]
-    do_post: bool = False
+    seg_weights: list[float] | None = None
+    # test_size: int = field(default=None)
+    # pad_crop_size: list[int]
     train_cache_num: int = 200
     val_cache_num: int = 100
-    train_batch_size: int = 8
-    include_adults: bool = True
-
-    def __post_init__(self):
-        assert self.mc_seg
-        if self.seg_weights is None:
-            self.seg_weights = [1.] * self.num_seg_classes
-        assert len(self.seg_weights) == self.num_seg_classes
-        super().__post_init__()
-
-    @property
-    def num_input_channels(self) -> int:
-        return len(self.input_modalities)
-
-    @property
-    def num_seg_classes(self) -> int:
-        return len(self.seg_classes)
-
-    @property
-    def stem_stages(self) -> int:
-        return self.num_stages - self.vit_stages
 
 def cls_map(cls_scheme: str) -> dict[str, int]:
     match cls_scheme:
@@ -96,7 +77,7 @@ def cls_names(cls_scheme: str) -> list[str]:
             raise ValueError
 
 @dataclass
-class MBClsConf(MBSegConf):
+class MBClsConf(MBConfBase, ClsExpConf):
     seg_output_dir: Path = field(default=None)
     seg_seed: int = field(default=None)
     seg_pred_dir: Path = field(default=None)

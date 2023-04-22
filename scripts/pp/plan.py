@@ -7,8 +7,7 @@ import pandas as pd
 import nibabel as nib
 from tqdm import tqdm
 
-from mbs.datamodule import DATA_DIR, PROCESSED_DIR, SEG_REF
-from mbs.utils.enums import MBDataKey, MBGroup, Modality, SegClass
+from mbs.utils.enums import MBDataKey, MBGroup, Modality, SegClass, DATA_DIR, PROCESSED_DIR, SEG_REF
 
 subgroup_tables = pd.read_excel(PROCESSED_DIR / 'subgroup.xlsx', sheet_name=list(MBGroup), dtype={'case': 'string'})
 

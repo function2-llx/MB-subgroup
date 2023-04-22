@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 import pandas as pd
 
-from mbs.args import cls_map, cls_names
+from mbs.conf import cls_map, cls_names
 from mbs.datamodule import DATA_DIR
 
 def main():

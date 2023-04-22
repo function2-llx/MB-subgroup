@@ -9,7 +9,7 @@ from monai.metrics import compute_meandice
 from monai.utils import GridSampleMode
 
 from mbs.args import MBSegPredArgs
-from mbs.datamodule import load_cohort
+from mbs.datamodule import load_split_cohort
 from mbs.utils.enums import MBDataKey, SegClass
 
 loader: Callable
@@ -51,7 +51,7 @@ def main():
         monai.transforms.BoundingRectD(f'{SegClass.ST}-pred'),
         monai.transforms.LambdaD(all_keys, lambda x: x.as_tensor()),
     ])
-    cohort = load_cohort()
+    cohort = load_split_cohort()
     suffix = f'th{args.th}'
     if args.do_post:
         suffix += '-post'

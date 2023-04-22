@@ -48,11 +48,11 @@ class CNNDecoder(Decoder):
             for i in range(num_layers - 1)
         ])
 
-    def forward(self, hidden_states: list[torch.Tensor], x_in: torch.Tensor) -> UDecoderOutput:
+    def forward(self, hidden_states: list[torch.Tensor], x_in: torch.Tensor) -> DecoderOutput:
         x = hidden_states[-1]
         feature_maps = []
         for z, lateral_conv, up in zip(hidden_states[-2::-1], self.lateral_convs[::-1], self.ups[::-1]):
             z = lateral_conv(z)
             x = up.forward(x, z)
             feature_maps.append(x)
-        return UDecoderOutput(feature_maps)
+        return DecoderOutput(feature_maps)

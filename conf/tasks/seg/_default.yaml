@@ -1,0 +1,19 @@
+_base:
+  - ${luolib.conf_root:}/aug/2D.yaml
+  - optimizer: ${luolib.conf_root:}/optimizer/adamw.yaml
+    scheduler: ${luolib.conf_root:}/scheduler/_step.yaml
+
+dataloader_num_workers: 8
+train_batch_size: 6
+gradient_clip_val: 1
+gradient_clip_algorithm: norm
+max_steps: 100000
+val_check_interval: 100
+save_top_k: 5
+scheduler:
+  name: cosine
+  frequency: 100
+  kwargs:
+    warmup_t: 5000
+    t_initial: ${max_steps}
+dummy_dim: 2

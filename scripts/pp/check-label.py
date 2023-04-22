@@ -1,7 +1,7 @@
 import pandas as pd
 
-from mbs.datamodule import DATA_DIR, PROCESSED_DIR, parse_age
-from mbs.utils.enums import MBDataKey, MBGroup
+from mbs.datamodule import parse_age
+from mbs.utils.enums import MBDataKey, MBGroup, DATA_DIR, PROCESSED_DIR
 
 clinical = pd.read_excel(DATA_DIR / 'clinical' / 'clinical-com.xlsx', dtype={'住院号': 'string'}).set_index('住院号')
 label_fix = pd.read_excel(DATA_DIR / 'MB-AX(2).xlsx', dtype={'病历号': 'string'}).set_index('病历号').drop_duplicates()

@@ -10,8 +10,8 @@ from nipype.interfaces.niftyreg.reg import RegAladinInputSpec
 import numpy as np
 from tqdm.contrib.concurrent import process_map
 
-from mbs.datamodule import PROCESSED_DIR, SEG_REF, load_merged_plan, DATA_DIR
-from mbs.utils.enums import MBDataKey, Modality, SegClass
+from mbs.datamodule import load_merged_plan
+from mbs.utils.enums import MBDataKey, Modality, SegClass, PROCESSED_DIR, DATA_DIR, SEG_REF
 
 plan = load_merged_plan()
 data_dir: Path

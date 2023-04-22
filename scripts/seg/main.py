@@ -11,7 +11,7 @@ from luolib.conf import parse_exp_conf
 
 from mbs.conf import MBSegConf
 from mbs.datamodule import MBSegDataModule
-from mbs.model import MBSegModel
+from mbs.models import MBSegModel
 
 task_name = 'mb-seg'
 
@@ -50,7 +50,7 @@ def do_train(conf: MBSegConf, datamodule: MBSegDataModule, val_id: int):
                 save_top_k=conf.save_top_k,
                 save_on_train_epoch_end=False,
             ),
-            LearningRateMonitor(logging_interval='epoch'),
+            LearningRateMonitor(logging_interval='step'),
             ModelSummary(max_depth=2),
         ],
         gradient_clip_val=conf.gradient_clip_val,
@@ -61,7 +61,8 @@ def do_train(conf: MBSegConf, datamodule: MBSegDataModule, val_id: int):
         max_epochs=conf.max_epochs,
         max_steps=conf.max_steps,
         num_sanity_val_steps=conf.num_sanity_val_steps,
-        check_val_every_n_epoch=conf.val_check_interval,
+        val_check_interval=conf.val_check_interval,
+        check_val_every_n_epoch=None,
     )
     model = MBSegModel(conf)
     trainer.fit(model, datamodule=datamodule, ckpt_path=MBSegConf.get_last_ckpt_path(conf))

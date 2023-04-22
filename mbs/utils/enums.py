@@ -1,11 +1,12 @@
+from pathlib import Path
+
 from monai.utils import StrEnum
 
 class MBDataKey(StrEnum):
     NUMBER = 'number'
     GROUP = 'group'
-    # CASE = 'case'
     SUBGROUP = 'subgroup'
-    SUBGROUP_ID = 'subgroup_id'
+    CLINICAL = 'clinical'
 
 class MBGroup(StrEnum):
     CHILD = 'child'
@@ -22,3 +23,12 @@ class SegClass(StrEnum):
     CT = 'CT'
 
 SUBGROUPS = ['WNT', 'SHH', 'G3', 'G4']
+DATASET_ROOT = Path(__file__).parents[1]
+DATA_DIR = DATASET_ROOT / 'origin'
+PROCESSED_DIR = DATASET_ROOT / 'processed'
+CLINICAL_DIR = DATA_DIR / 'clinical'
+SEG_REF = {
+    SegClass.AT: Modality.T2,
+    SegClass.CT: Modality.T1C,
+    SegClass.ST: Modality.T2,
+}

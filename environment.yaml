@@ -30,4 +30,5 @@ dependencies:
     - xgboost
     - cytoolz
     - antspyx
+    - openmim # mim install mmcv, pip install mmsegmentation
     - -e third-party/MONAI

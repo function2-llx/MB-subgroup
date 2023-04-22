@@ -9,8 +9,8 @@ from umei.utils.index_tracker import IndexTracker
 
 from mbs.utils.enums import MBDataKey, Modality, SegClass
 from mbs.args import MBSegConf
-from mbs.datamodule import MBSegDataModule, DATA_DIR, load_cohort
-from mbs.model import MBSegModel
+from mbs.datamodule import MBSegDataModule, DATA_DIR, load_split_cohort
+from mbs.models.lightning.seg_model import MBSegModel
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 # plot_case = None

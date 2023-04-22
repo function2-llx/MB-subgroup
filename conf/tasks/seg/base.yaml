@@ -1,0 +1,10 @@
+_base:
+  - _default.yaml
+  - ../../model/seg/swin3l+unet-fr.yaml
+sample_shape: [256, 192, 16]
+backbone:
+  kwargs:
+    drop_path_rate: 0.2
+optimizer:
+  lr: 1e-3
+  weight_decay: 5e-2

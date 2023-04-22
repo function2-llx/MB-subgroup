@@ -7,13 +7,13 @@ import monai
 from monai.utils import GridSampleMode
 
 from mbs.utils.enums import MBDataKey, Modality, SegClass
-from mbs.datamodule import DATA_DIR, load_cohort
+from mbs.datamodule import DATA_DIR, load_split_cohort
 
 img_keys = list(Modality)
 # seg_keys = list(SegClass)
 all_keys = img_keys
 
-cohort = list(itertools.chain(*load_cohort().values()))
+cohort = list(itertools.chain(*load_split_cohort().values()))
 
 loader = monai.transforms.Compose([
     monai.transforms.LoadImageD(all_keys),

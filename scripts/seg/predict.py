@@ -15,7 +15,7 @@ from umei.utils import DataKey, UMeIParser
 
 from mbs.args import MBSegPredArgs
 from mbs.datamodule import MBSegDataModule
-from mbs.model import MBSegModel
+from mbs.models.lightning.seg_model import MBSegModel
 from mbs.utils.enums import MBDataKey
 from mbs.utils import SEG_PROB_FILENAME
 
@@ -71,7 +71,7 @@ class MBSegPredictor(pl.LightningModule):
             )
 
 class MBSegPredictionDataModule(MBSegDataModule):
-    args: MBSegPredArgs
+    conf: MBSegPredArgs
 
     @property
     def predict_transform(self):

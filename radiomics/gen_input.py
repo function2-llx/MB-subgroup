@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from mbs.datamodule import load_cohort
+from mbs.datamodule import load_split_cohort
 from mbs.utils.enums import MBDataKey, Modality, SUBGROUPS, SegClass
 
 name_mapping = {
@@ -15,7 +15,7 @@ name_mapping = {
 PARENT = Path(__file__).parent
 
 def main():
-    cohort = load_cohort()
+    cohort = load_split_cohort()
     inputs = []
     for split, cases in cohort.items():
         for case in cases:
