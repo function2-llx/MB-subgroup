@@ -84,7 +84,7 @@ def register(number: str, cuda_id: int):
 def main():
     parser = ArgumentParser()
     parser.add_argument('--adjust_workers', type=int, default=1)
-    parser.add_argument('--register_workers', type=int, default=8)
+    parser.add_argument('--register_workers', type=int, default=16)
 
     args = parser.parse_args()
     # adjust_types = [Modality.T2, *[seg_class for seg_class, modality in SEG_REF.items() if modality == Modality.T2]]

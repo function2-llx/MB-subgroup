@@ -51,7 +51,7 @@ def load_cohort():
                 img_type: patient_img_dir / f'{img_type}.nii'
                 for img_type in list(Modality) + list(SegClass)
             },
-            DataKey.CLINICAL: clinical_vec,
+            # DataKey.CLINICAL: clinical_vec,
         })
 
     return data
@@ -278,3 +278,9 @@ SEG_REF = {
     SegClass.CT: Modality.T1C,
     SegClass.ST: Modality.T2,
 }
+
+def load_merged_plan():
+    plan = pd.read_excel(PROCESSED_DIR / 'plan.xlsx', sheet_name='merge', dtype={MBDataKey.NUMBER: 'string'})
+    plan.set_index(MBDataKey.NUMBER, inplace=True)
+    assert plan.index.unique().size == plan.index.size
+    return plan

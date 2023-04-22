@@ -18,7 +18,7 @@ class Modality(StrEnum):
 
 class SegClass(StrEnum):
     ST = 'ST'
-    CT = 'CT'
     AT = 'AT'
+    CT = 'CT'
 
 SUBGROUPS = ['WNT', 'SHH', 'G3', 'G4']
