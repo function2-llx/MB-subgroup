@@ -21,6 +21,7 @@ from mbs.transforms import CropBBoxCenterD
 
 DATASET_ROOT = Path(__file__).parent
 DATA_DIR = DATASET_ROOT / 'origin'
+PROCESSED_DIR = DATASET_ROOT / 'processed'
 
 def load_cohort():
     cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1').set_index('name')
