@@ -7,8 +7,8 @@ import pandas as pd
 import nibabel as nib
 from tqdm import tqdm
 
-from mbs.datamodule import DATA_DIR, PROCESSED_DIR
-from mbs.utils.enums import MBDataKey, MBGroup
+from mbs.datamodule import DATA_DIR, PROCESSED_DIR, SEG_REF
+from mbs.utils.enums import MBDataKey, MBGroup, Modality, SegClass
 
 subgroup_tables = pd.read_excel(PROCESSED_DIR / 'subgroup.xlsx', sheet_name=list(MBGroup), dtype={'case': 'string'})
 
@@ -20,29 +20,30 @@ def process_patient(patient_dir: Path):
     patient = patient_dir.name
     patient_num = patient[:6]
 
-    affine = None
-    shape = None
-    not_close = False
     exclude = False
     notes = []
-    # T2 is at firstm
-    for img_type in ['T2', 'T1', 'T1C', 'AT', 'CT', 'ST']:
+    affine = {}
+    shape = {}
+    for img_type in [*Modality, *SegClass]:
         img_path = patient_dir / f'{img_type}.nii'
         if not img_path.exists():
             print(patient, img_type)
             continue
         img: nib.Nifti1Image = nib.load(img_path)
-        if affine is None:
-            affine = img.affine
-            shape = img.shape
-        else:
-            if not np.allclose(img.affine, affine, atol=1e-2, rtol=1e-2):
-                not_close = True
-            if img.shape[2] != shape[2]:
-                notes.append(f'{img_type} slice number mismatch')
-                exclude = True
-    if not_close:
-        notes.append('affine not close')
+        affine[img_type] = img.affine
+        shape[img_type] = img.shape
+    for modality in [Modality.T1, Modality.T1C]:
+        if shape[modality][-1] != shape[Modality.T2][-1]:
+            notes.append(f'{modality} slice number mismatch')
+
+    for seg_class in SegClass:
+        if seg_class not in affine:
+            continue
+        if (match_type := SEG_REF.get(seg_class, None)) is not None:
+            if not np.allclose(affine[seg_class], affine[match_type], atol=1e-3, rtol=1e-3):
+                notes.append(f'{seg_class} affine not close to {match_type}')
+            if  shape[seg_class] != shape[match_type]:
+                notes.append(f'{seg_class} shape not equal to {match_type}')
 
     if patient_num not in cur_table.index:
         subgroup = ''
@@ -55,11 +56,11 @@ def process_patient(patient_dir: Path):
         'number': patient_num,
         'name': patient,
         **{
-            f'p{i}': np.linalg.norm(affine[:, i])
+            f'p{i}': np.linalg.norm(affine[Modality.T2][:, i])
             for i in range(3)
         },
         **{
-            f's{i}': shape[i]
+            f's{i}': shape[Modality.T2][i]
             for i in range(3)
         },
         'exclude': exclude,

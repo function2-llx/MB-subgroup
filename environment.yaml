@@ -22,11 +22,12 @@ dependencies:
   - seaborn
   - nibabel
   - pydicom
-  - fslpy
+  - nipype
 
   - pip
   - pip:
     - pyradiomics
     - xgboost
     - cytoolz
+    - antspyx
     - -e third-party/MONAI

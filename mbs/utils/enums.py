@@ -2,6 +2,7 @@ from monai.utils import StrEnum
 
 class MBDataKey(StrEnum):
     NUMBER = 'number'
+    GROUP = 'group'
     # CASE = 'case'
     SUBGROUP = 'subgroup'
     SUBGROUP_ID = 'subgroup_id'
