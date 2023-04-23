@@ -6,5 +6,4 @@ backbone:
   kwargs:
     drop_path_rate: 0.2
 optimizer:
-  lr: 1e-3
-  weight_decay: 5e-2
+  lr: 1e-4
