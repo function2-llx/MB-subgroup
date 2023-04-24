@@ -54,7 +54,7 @@ def main():
     global data_dir, output_dir
     parser = ArgumentParser()
     parser.add_argument('--workers', type=int, default=8)
-    parser.add_argument('--data_dir', type=Path, default=Path('mbs/processed/cr-p10/final'))
+    parser.add_argument('--data_dir', type=Path, default=Path('mbs/processed/cr-p10/register-crop'))
     args = parser.parse_args()
     data_dir = args.data_dir
 

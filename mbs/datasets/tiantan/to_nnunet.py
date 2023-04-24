@@ -12,8 +12,8 @@ from mbs.datasets.tiantan.args import MBArgs
 from mbs.datasets.tiantan.load import read_cohort_info
 from mbs.utils.dicom_utils import ScanProtocol
 
-args, = ArgParser([MBArgs], use_conf=False).parse_args_into_dataclasses()
-args: MBArgs
+conf, = ArgParser([MBArgs], use_conf=False).parse_args_into_dataclasses()
+conf: MBArgs
 
 task_id = '500'
 # Tiantan MB
@@ -45,10 +45,10 @@ def convert(info):
     patient = info['name(raw)']
     data = loader({
         **{
-            protocol: args.img_dir / patient / info[protocol.name]
+            protocol: conf.img_dir / patient / info[protocol.name]
             for protocol in list(ScanProtocol)
         },
-        'AT': args.seg_dir / patient / info['AT'],
+        'AT': conf.seg_dir / patient / info['AT'],
     })
     saver = monai.transforms.Compose([
         monai.transforms.Lambda(lambda data: {
@@ -88,7 +88,7 @@ def convert(info):
     saver(data)
 
 def main():
-    cohort = read_cohort_info(args)
+    cohort = read_cohort_info(conf)
     process_map(convert, [info for _, info in cohort.iterrows()])
     generate_dataset_json(
         output_file=str(target_base / 'dataset.json'),

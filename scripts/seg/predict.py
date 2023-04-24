@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence, Mapping
 
 import pytorch_lightning as pl
@@ -15,7 +16,8 @@ from monai.data import MetaTensor
 from mbs.conf import MBSegPredConf
 from mbs.datamodule import MBSegDataModule, load_split
 from mbs.models import MBSegModel
-from mbs.utils import SEG_PROB_FILENAME
+
+SEG_PROB_FILENAME = 'seg-prob.pt'
 
 class MBSegPredictor(pl.LightningModule):
     def __init__(self, conf: MBSegPredConf):
@@ -39,13 +41,12 @@ class MBSegPredictor(pl.LightningModule):
         conf = self.conf
         case: str = batch[DataKey.CASE][0]
         split = self.split[case]
+        if split not in ['train', 'test']:
+            assert split in range(conf.num_folds)
         img: MetaTensor = batch[DataKey.IMG]
-        pred_prob = None
-        case_dir = conf.p_output_dir / case
-        case_dir.mkdir(parents=True, exist_ok=True)
 
-        prob_save_path = self.conf.p_output_dir / case / SEG_PROB_FILENAME
-        if prob_save_path.exists() and not conf.overwrite:
+        pred_prob = None
+        if (prob_save_path := MBSegPredConf.get_case_save_dir(conf, case) / SEG_PROB_FILENAME).exists() and not conf.overwrite:
             pred_prob = torch.load(prob_save_path, map_location=self.device)
         else:
             cnt = 0
@@ -64,32 +65,28 @@ class MBSegPredictor(pl.LightningModule):
             torch.save(pred_prob, prob_save_path)
 
         pred = (pred_prob[0] > conf.th).long()
-        output_dir = case_dir / f'th{conf.th}'
-        output_dir.mkdir(exist_ok=True)
-        post_output_dir = case_dir / f'th{conf.th}-post'
-        post_output_dir.mkdir(exist_ok=True)
         for i, seg_class in enumerate(SegClass):
             class_pred = pred[i]
-            torch.save(class_pred, output_dir / f'{seg_class}.pt')
+            save_path = MBSegPredConf.get_save_path(conf, case, seg_class, False)
+            save_path.parent.mkdir(exist_ok=True, parents=True)
+            torch.save(class_pred, save_path)
             class_pred_post = self.post_transform(class_pred[None])[0]
-            torch.save(class_pred_post, post_output_dir / f'{seg_class}.pt')
+            post_save_path = MBSegPredConf.get_save_path(conf, case, seg_class, True)
+            post_save_path.parent.mkdir(exist_ok=True, parents=True)
+            torch.save(class_pred_post, post_save_path)
 
 class MBSegPredictionDataModule(MBSegDataModule):
     conf: MBSegPredConf
 
     def predict_data(self) -> Sequence:
         conf = self.conf
-        return self.all_data()[conf.l:conf.r]
+        all_data = list(itertools.chain(*self.split_cohort.values()))
+        return all_data[conf.l:conf.r]
 
 def main():
     torch.set_float32_matmul_precision('high')
-    # torch.multiprocessing.set_sharing_strategy('file_system')
     conf = parse_exp_conf(MBSegPredConf)
-    if conf.p_output_dir is None:
-        suffix = f'sw{conf.sw_overlap}'
-        if conf.do_tta:
-            suffix += '+tta'
-        conf.p_output_dir = conf.output_dir / f'predict-{"+".join(map(str, conf.p_seeds))}' / suffix
+    MBSegPredConf.default_pred_output_dir(conf)
     conf.log_dir = conf.p_output_dir
     conf.p_output_dir.mkdir(exist_ok=True, parents=True)
     MBSegPredConf.save_conf_as_file(conf)

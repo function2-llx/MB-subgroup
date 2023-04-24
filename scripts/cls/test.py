@@ -178,14 +178,14 @@ def plot_roc_curve(y_test, y_score, model_name, output_dir):
     # plt.show()
 
 def run_test():
-    (output_dir := args.output_dir / 'eval-test' / args.cls_scheme).mkdir(parents=True, exist_ok=True)
+    (output_dir := conf.output_dir / 'eval-test' / conf.cls_scheme).mkdir(parents=True, exist_ok=True)
     tester.reset()
     tester.val_fold = 'test'
     trainer.test(tester, dataloaders=datamodule.test_dataloader())
     results_df = pd.DataFrame.from_records(tester.case_outputs)
-    cls_names = args.cls_names
+    cls_names = conf.cls_names
     y_true = np.array([
-        args.cls_names.index(case['true'])
+        conf.cls_names.index(case['true'])
         for case in tester.case_outputs
     ])
     y_score = np.array([
@@ -193,7 +193,7 @@ def run_test():
         for case in tester.case_outputs
     ])
     if len(cls_names) == 2:
-        cls_names = [args.cls_scheme, args.cls_scheme]
+        cls_names = [conf.cls_scheme, conf.cls_scheme]
     plot_roc(y_true, y_score, cls_names, output_dir)
     if len(cls_names) == 2:
         plot_roc_curve(y_true, y_score[:, 1], 'swt', output_dir)
@@ -204,9 +204,9 @@ def run_test():
         json.dump(tester.test_report, f, indent=4, ensure_ascii=False)
 
 def run_cv():
-    (output_dir := args.output_dir / 'eval-cv' / args.cls_scheme).mkdir(parents=True, exist_ok=True)
+    (output_dir := conf.output_dir / 'eval-cv' / conf.cls_scheme).mkdir(parents=True, exist_ok=True)
     tester.reset()
-    for i in range(args.num_folds):
+    for i in range(conf.num_folds):
         tester.val_fold = i
         datamodule.val_id = i
         trainer.test(tester, dataloaders=datamodule.val_dataloader(include_test=False))
@@ -216,13 +216,13 @@ def run_cv():
     with open(output_dir / 'cv-report.json', 'w') as f:
         json.dump(tester.test_report, f, indent=4, ensure_ascii=False)
 
-args: MBTestArgs
+conf: MBTestArgs
 datamodule: MBDataModule
 trainer: pl.Trainer
 tester: MBTester
 
 def main():
-    global args, datamodule, trainer, tester
+    global conf, datamodule, trainer, tester
 
     parser = UMeIParser((MBTestArgs,), use_conf=True)
     args = parser.parse_args_into_dataclasses()[0]

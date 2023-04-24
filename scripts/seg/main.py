@@ -31,7 +31,7 @@ def do_train(conf: MBSegConf, datamodule: MBSegDataModule, val_id: int):
 
     trainer = pl.Trainer(
         logger=WandbLogger(
-            project=f'{task_name}-eval' if conf.do_eval else task_name,
+            project=task_name,
             name=str(conf.output_dir.relative_to(conf.output_root)),
             save_dir=str(conf.log_dir),
             group=conf.exp_name,

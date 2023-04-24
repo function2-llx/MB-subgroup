@@ -1,18 +1,6 @@
-backbone:
-  name: swin3d
-  kwargs:
-    in_channels: 3
-    patch_size: [4, 4, 1]
-    layer_channels: [128, 256, 512]
-    layer_depths: [2, 2, 20]
-    window_sizes:
-      - [8, 6, 2]
-      - [8, 6, 4]
-      - [8, 6, 4]
-    strides:
-      - [2, 2, 1]
-      - [2, 2, 2]
-    num_heads: [4, 8, 16]
+_base:
+  - backbone: ../backbone/swin-b-3l.yaml
+
 decoder:
   name: full-res-adapter
   kwargs:

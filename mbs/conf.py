@@ -1,7 +1,11 @@
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import torch.cuda
+
 from luolib.conf import ClsExpConf, CrossValConf, SegExpConf
+from luolib.types import tuple3_t
 
 from mbs.utils.enums import SUBGROUPS, SegClass, PROCESSED_DIR
 
@@ -31,6 +35,25 @@ class MBSegPredConf(MBSegConf):
     overwrite: bool = False
     l: int | None = None
     r: int | None = None
+
+    def default_pred_output_dir(self):
+        if self.p_output_dir is None:
+            suffix = f'sw{self.sw_overlap}'
+            if self.do_tta:
+                suffix += '+tta'
+            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix
+
+    def get_sub(self, post: bool):
+        suffix = f'th{self.th}'
+        if post:
+            suffix += '-post'
+        return suffix
+
+    def get_case_save_dir(self, case: str):
+        return self.p_output_dir / 'pred' / case
+
+    def get_save_path(self, case: str, seg_class: SegClass, post: bool, suffix: str = '.pt'):
+        return MBSegPredConf.get_case_save_dir(self, case) / MBSegPredConf.get_sub(self, post) / f'{seg_class}{suffix}'
 
 def cls_map(cls_scheme: str) -> dict[str, int]:
     match cls_scheme:
@@ -85,21 +108,30 @@ def cls_names(cls_scheme: str) -> list[str]:
         case _:
             raise ValueError
 
-@dataclass
+@dataclass(kw_only=True)
 class MBClsConf(MBConfBase, ClsExpConf):
-    seg_output_dir: Path = field(default=None)
-    seg_seed: int = field(default=None)
-    seg_pred_dir: Path = field(default=None)
-    th: float = field(default=0.3)
-    monitor: str = field(default='val/cls_loss')
-    monitor_mode: str = field(default='min')
-    per_device_eval_batch_size: int = field(default=4)
-    cls_weights: list[float] = field(default=None)
-    finetune_lr: float = field(default=1e-4)
-    cls_conv: bool = field(default=True)
-    cls_hidden_size: int = field(default=None)
-    addi_conv: bool = field(default=False)
-    cls_scheme: str = field(default='4way', metadata={'choices': ['4way', '3way', 'WS-G34', 'WS', 'G34']})
-    seg_inputs: list[str] = field(default_factory=list)
-    crop_ref: SegClass = field(default=SegClass.ST)
-    use_clinical: bool = field(default=False)
+    conf_root: Path = Path('conf/tasks/cls')
+    output_root: Path = Path('output/cls')
+    monitor: str = 'val/loss'
+    monitor_mode: str = 'min'
+    # include seed
+    pretrain_cv_dir: Path | None = None
+    seg_pred_dir: Path
+    th: float = 0.5
+    use_post: bool = True
+    eval_batch_size: int = 4 * torch.cuda.device_count()
+    # choices: 4way, 3way, WS-G34, WS, G34
+    # cls_scheme: str = '4way'
+    pool_types: list[str]
+    pooling_level_stride: list[int]
+    pooling_th: int
+
+    def get_pred_path(self, case: str, seg_class: SegClass, suffix: str = '.pt'):
+        return self.seg_pred_dir / 'pred' / case / MBSegPredConf.get_sub(self, self.use_post) / f'{seg_class}{suffix}'
+
+    def load_center(self) -> dict[str, tuple3_t[int]]:
+        center_file_path = self.seg_pred_dir / 'center' / f'{MBSegPredConf.get_sub(self, self.use_post)}.json'
+        center = json.loads(center_file_path.read_bytes())
+        for k, v in center.items():
+            center[k] = tuple(v)
+        return center

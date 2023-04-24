@@ -241,17 +241,17 @@ if __name__ == '__main__':
     and computes intermediate activations.
     Makes the visualization. """
 
-    args = get_args()
+    conf = get_args()
 
     # Can work with any model, but it assumes that the model has a
     # feature method, and a classifier method,
     # as in the VGG models in torchvision.
     model = models.resnet50(pretrained=True)
     grad_cam = GradCam(model=model, feature_module=model.layer4,
-                       target_layer_names=["2"], use_cuda=args.use_cuda)
+                       target_layer_names=["2"], use_cuda=conf.use_cuda)
 
     from torchvision.datasets.folder import default_loader
-    img = default_loader(args.image_path)
+    img = default_loader(conf.image_path)
     # img = cv2.imread(args.image_path, 1)
     img = np.float32(cv2.resize(img, (224, 224))) / 255
     input = preprocess_image(img)

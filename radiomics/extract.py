@@ -24,27 +24,27 @@ class RadiomicsArgs:
         self.seg_dir = Path(self.img_dir)
         self.output_dir = Path(self.output_dir)
 
-args: RadiomicsArgs
+conf: RadiomicsArgs
 extractor: RadiomicsFeatureExtractor
 
 def extract_patient(info):
     name = info['name(raw)']
     # print(patient)
     features = extractor.execute(
-        str(args.img_dir / name / info[args.protocol]),
-        str(args.seg_dir / name / info[args.seg]),
+        str(conf.img_dir / name / info[conf.protocol]),
+        str(conf.seg_dir / name / info[conf.seg]),
         voxelBased=False,
     )
     features['name'] = name
     return features
 
 def setup_logging():
-    handler = logging.FileHandler(Path(args.output_dir) / 'extract.log', mode='w')
+    handler = logging.FileHandler(Path(conf.output_dir) / 'extract.log', mode='w')
     radiomics.logger.addHandler(handler)
     radiomics.setVerbosity(logging.ERROR)
 
 def main():
-    global args, extractor
+    global conf, extractor
     parser = ArgParser([RadiomicsArgs])
     args, = parser.parse_args_into_dataclasses()
     setup_logging()

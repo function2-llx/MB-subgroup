@@ -84,7 +84,7 @@ def main():
     padding = args.padding
     data_dir = PROCESSED_DIR / f'cr-p{args.padding}' / 'pad'
     output_dir = PROCESSED_DIR / f'cr-p{args.padding}' / 'register-pad'
-    cropped_output_dir = PROCESSED_DIR / f'cr-p{args.padding}' / 'final'
+    cropped_output_dir = PROCESSED_DIR / f'cr-p{args.padding}' / 'register-crop'
     output_dir.mkdir(exist_ok=True)
     cropped_output_dir.mkdir(exist_ok=True)
 
