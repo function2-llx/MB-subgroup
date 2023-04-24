@@ -23,6 +23,15 @@ class MBSegConf(MBConfBase, SegExpConf):
     train_cache_num: int = 200
     val_cache_num: int = 100
 
+@dataclass(kw_only=True)
+class MBSegPredConf(MBSegConf):
+    p_seeds: list[int]
+    p_output_dir: Path | None = None
+    th: float = 0.5
+    overwrite: bool = False
+    l: int | None = None
+    r: int | None = None
+
 def cls_map(cls_scheme: str) -> dict[str, int]:
     match cls_scheme:
         case '4way':
@@ -94,24 +103,3 @@ class MBClsConf(MBConfBase, ClsExpConf):
     seg_inputs: list[str] = field(default_factory=list)
     crop_ref: SegClass = field(default=SegClass.ST)
     use_clinical: bool = field(default=False)
-
-    @property
-    def clinical_feature_size(self) -> int:
-        return 4 * self.use_clinical
-#
-# @dataclass
-# class MBSegPredArgs(MBSegArgs):
-#     p_seeds: list[int] = field(default=None)
-#     p_output_dir: Path = field(default=None)
-#     th: float = field(default=0.5)
-#     l: int = field(default=None)
-#     r: int = field(default=None)
-#
-#     def __post_init__(self):
-#         super().__post_init__()
-#         self.p_seeds = sorted(self.p_seeds)
-#         if self.p_output_dir is None:
-#             suffix = f'sw{self.sw_overlap}'
-#             if self.do_tta:
-#                 suffix += '+tta'
-#             self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix

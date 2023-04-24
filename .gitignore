@@ -161,5 +161,6 @@ wandb/
 *.nii.gz
 *.xlsx
 origin
+test.py
 test-ants.py
 test-intra.py

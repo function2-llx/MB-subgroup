@@ -1,122 +1,108 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Optional
+from collections.abc import Sequence, Mapping
 
-import nibabel as nib
 import pytorch_lightning as pl
 import torch
 from torch import nn
 
+from luolib.conf import parse_exp_conf
+from luolib.utils import DataKey
+from mbs.utils.enums import SegClass
 import monai
-from monai.data import DataLoader, Dataset, MetaTensor
-from monai.utils import GridSampleMode
-from umei.utils import DataKey, UMeIParser
+from monai.data import MetaTensor
 
-from mbs.args import MBSegPredArgs
-from mbs.datamodule import MBSegDataModule
-from mbs.models.lightning.seg_model import MBSegModel
-from mbs.utils.enums import MBDataKey
+from mbs.conf import MBSegPredConf
+from mbs.datamodule import MBSegDataModule, load_split
+from mbs.models import MBSegModel
 from mbs.utils import SEG_PROB_FILENAME
 
 class MBSegPredictor(pl.LightningModule):
-    def __init__(self, args: MBSegPredArgs):
+    def __init__(self, conf: MBSegPredConf):
         super().__init__()
-        self.args = args
-        self.models: nn.ModuleList | Sequence[MBSegModel] = nn.ModuleList([
-            MBSegModel.load_from_checkpoint(
-                self.args.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
+        self.conf = conf
+        self.split = load_split()
+        self.models: Mapping[str, MBSegModel] = nn.ModuleDict({
+            # pytorch forces model name to be string
+            f'{seed} {fold_id}': MBSegModel.load_from_checkpoint(
+                self.conf.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
                 strict=True,
-                args=args,
+                conf=conf,
             )
-            for seed in args.p_seeds for fold_id in range(args.num_folds)
-        ])
+            for seed in conf.p_seeds for fold_id in range(conf.num_folds)
+        })
         self.post_transform = monai.transforms.Compose([
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
         ])
 
     def predict_step(self, batch: dict[str, ...], *args, **kwargs):
-        case: str = batch[MBDataKey.CASE][0]
+        conf = self.conf
+        case: str = batch[DataKey.CASE][0]
+        split = self.split[case]
         img: MetaTensor = batch[DataKey.IMG]
-        pred_prob: Optional[torch.Tensor] = None
-        case_dir = self.args.p_output_dir / case
+        pred_prob = None
+        case_dir = conf.p_output_dir / case
         case_dir.mkdir(parents=True, exist_ok=True)
-        prob_save_path = self.args.p_output_dir / case / SEG_PROB_FILENAME
-        if prob_save_path.exists():
+
+        prob_save_path = self.conf.p_output_dir / case / SEG_PROB_FILENAME
+        if prob_save_path.exists() and not conf.overwrite:
             pred_prob = torch.load(prob_save_path, map_location=self.device)
         else:
-            for model in self.models:
-                prob = model.infer_logit(img, progress=False).sigmoid()
+            cnt = 0
+            for model_name, model in self.models.items():
+                seed, fold_id = map(int, model_name.split())
+                if split == fold_id:
+                    continue
+                cnt += 1
+                prob = model.infer(img, progress=False).sigmoid()
                 if pred_prob is None:
                     pred_prob = prob
                 else:
                     pred_prob += prob
-            pred_prob /= len(self.models)
+            pred_prob /= cnt
             prob_save_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(pred_prob, prob_save_path)
-        affine = img.affine[0].cpu().numpy()
-        for i, seg_class in enumerate(self.args.seg_classes):
-            pred = (pred_prob[0, i] > self.args.th).long()
-            pred = pred[None]   # add channel
-            (case_dir / f'th{self.args.th}').mkdir(exist_ok=True)
-            nib.save(
-                nib.Nifti1Image(pred[0].int().cpu().numpy(), affine=affine),
-                case_dir / f'th{self.args.th}' / f'{seg_class}.nii.gz',
-            )
-            pred_post = self.post_transform(pred)
-            (case_dir / f'th{self.args.th}-post').mkdir(exist_ok=True)
-            nib.save(
-                nib.Nifti1Image(pred_post[0].int().cpu().numpy(), affine=affine),
-                case_dir / f'th{self.args.th}-post' / f'{seg_class}.nii.gz',
-            )
+
+        pred = (pred_prob[0] > conf.th).long()
+        output_dir = case_dir / f'th{conf.th}'
+        output_dir.mkdir(exist_ok=True)
+        post_output_dir = case_dir / f'th{conf.th}-post'
+        post_output_dir.mkdir(exist_ok=True)
+        for i, seg_class in enumerate(SegClass):
+            class_pred = pred[i]
+            torch.save(class_pred, output_dir / f'{seg_class}.pt')
+            class_pred_post = self.post_transform(class_pred[None])[0]
+            torch.save(class_pred_post, post_output_dir / f'{seg_class}.pt')
 
 class MBSegPredictionDataModule(MBSegDataModule):
-    conf: MBSegPredArgs
+    conf: MBSegPredConf
 
-    @property
-    def predict_transform(self):
-        img_keys = self.args.input_modalities
-        return monai.transforms.Compose([
-            monai.transforms.LoadImageD(img_keys),
-            monai.transforms.EnsureChannelFirstD(img_keys),
-            monai.transforms.OrientationD(img_keys, axcodes='RAS'),
-            monai.transforms.SpacingD(img_keys, pixdim=self.args.spacing, mode=GridSampleMode.BILINEAR),
-            monai.transforms.ResizeWithPadOrCropD(img_keys, spatial_size=self.args.pad_crop_size),
-            monai.transforms.NormalizeIntensityD(img_keys),
-            # monai.transforms.LambdaD(img_keys, lambda t: t.as_tensor(), track_meta=False),
-            monai.transforms.ConcatItemsD(img_keys, name=DataKey.IMG),
-            monai.transforms.SelectItemsD([DataKey.IMG, MBDataKey.CASE]),
-        ])
-
-    def predict_dataloader(self):
-        return DataLoader(
-            dataset=Dataset(
-                self.all_data()[self.args.l:self.args.r],
-                transform=self.predict_transform,
-            ),
-            num_workers=self.args.dataloader_num_workers,
-            batch_size=1,
-            pin_memory=True,
-            # persistent_workers=True if self.args.dataloader_num_workers > 0 else False,
-            persistent_workers=False,
-        )
+    def predict_data(self) -> Sequence:
+        conf = self.conf
+        return self.all_data()[conf.l:conf.r]
 
 def main():
-    torch.multiprocessing.set_sharing_strategy('file_system')
-
-    parser = UMeIParser((MBSegPredArgs,), use_conf=True)
-    args: MBSegPredArgs = parser.parse_args_into_dataclasses()[0]
-    print(args)
-    predictor = MBSegPredictor(args)
+    torch.set_float32_matmul_precision('high')
+    # torch.multiprocessing.set_sharing_strategy('file_system')
+    conf = parse_exp_conf(MBSegPredConf)
+    if conf.p_output_dir is None:
+        suffix = f'sw{conf.sw_overlap}'
+        if conf.do_tta:
+            suffix += '+tta'
+        conf.p_output_dir = conf.output_dir / f'predict-{"+".join(map(str, conf.p_seeds))}' / suffix
+    conf.log_dir = conf.p_output_dir
+    conf.p_output_dir.mkdir(exist_ok=True, parents=True)
+    MBSegPredConf.save_conf_as_file(conf)
+    predictor = MBSegPredictor(conf)
     trainer = pl.Trainer(
         logger=False,
-        num_nodes=args.num_nodes,
+        num_nodes=1,
         accelerator='gpu',
-        devices=torch.cuda.device_count(),
-        precision=args.precision,
+        devices=1,
+        precision=conf.precision,
         benchmark=True,
     )
-    datamodule = MBSegPredictionDataModule(args)
+    datamodule = MBSegPredictionDataModule(conf)
     trainer.predict(predictor, datamodule=datamodule)
 
 if __name__ == '__main__':

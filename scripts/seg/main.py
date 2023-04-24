@@ -41,7 +41,7 @@ def do_train(conf: MBSegConf, datamodule: MBSegDataModule, val_id: int):
         callbacks=[
             ModelCheckpoint(
                 dirpath=conf.output_dir,
-                filename=f'step{{step}}-{conf.monitor.replace("/", "_")}={{{conf.monitor}:.3f}}',
+                filename=f'step{{step}}-{conf.monitor.replace("/", "_")}={{{conf.monitor}:.4f}}',
                 auto_insert_metric_name=False,
                 monitor=conf.monitor,
                 mode=conf.monitor_mode,
