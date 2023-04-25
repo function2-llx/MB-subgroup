@@ -64,7 +64,7 @@ class MBSegPredictor(pl.LightningModule):
             prob_save_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(pred_prob, prob_save_path)
 
-        pred = (pred_prob[0] > conf.th).long()
+        pred = pred_prob[0] > conf.th
         for i, seg_class in enumerate(SegClass):
             class_pred = pred[i]
             save_path = MBSegPredConf.get_save_path(conf, case, seg_class, False)

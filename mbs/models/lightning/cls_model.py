@@ -9,7 +9,6 @@ from mbs.conf import MBClsConf
 from mbs.datamodule import MBClsDataModule
 from mbs.utils.enums import SegClass, SUBGROUPS
 
-
 class MBClsModel(ClsModel):
     conf: MBClsConf
 
