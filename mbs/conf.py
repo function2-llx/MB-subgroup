@@ -1,3 +1,4 @@
+from functools import cache
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,7 +56,7 @@ class MBSegPredConf(MBSegConf):
     def get_save_path(self, case: str, seg_class: SegClass, post: bool, suffix: str = '.pt'):
         return MBSegPredConf.get_case_save_dir(self, case) / MBSegPredConf.get_sub(self, post) / f'{seg_class}{suffix}'
 
-def cls_map(cls_scheme: str) -> dict[str, int]:
+def get_cls_map(cls_scheme: str) -> dict[str, int]:
     match cls_scheme:
         case '4way':
             return {
@@ -93,7 +94,7 @@ def cls_map(cls_scheme: str) -> dict[str, int]:
         case _:
             raise ValueError
 
-def cls_names(cls_scheme: str) -> list[str]:
+def get_cls_names(cls_scheme: str) -> list[str]:
     match cls_scheme:
         case '4way':
             return SUBGROUPS
@@ -119,9 +120,9 @@ class MBClsConf(MBConfBase, ClsExpConf):
     seg_pred_dir: Path
     th: float = 0.5
     use_post: bool = True
-    eval_batch_size: int = 4 * torch.cuda.device_count()
+    eval_batch_size: int = 16 * torch.cuda.device_count()
     # choices: 4way, 3way, WS-G34, WS, G34
-    # cls_scheme: str = '4way'
+    cls_scheme: str = '4way'
     pool_types: list[str]
     pooling_level_stride: list[int]
     pooling_th: int

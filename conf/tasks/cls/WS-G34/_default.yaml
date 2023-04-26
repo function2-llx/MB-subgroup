@@ -1,0 +1,5 @@
+_base:
+  - ../_default.yaml
+
+cls_scheme: WS-G34
+num_cls_classes: 2

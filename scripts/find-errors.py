@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 import pandas as pd
 
-from mbs.conf import cls_map, cls_names
+from mbs.conf import get_cls_map, get_cls_names
 from mbs.datamodule import DATA_DIR
 
 def main():
@@ -15,8 +15,8 @@ def main():
     if args.output_path is None:
         args.output_path = args.check_dir / 'errors.xlsx'
     cls_scheme = args.check_dir.name
-    cmap = cls_map(cls_scheme)
-    cnames = cls_names(cls_scheme)
+    cmap = get_cls_map(cls_scheme)
+    cnames = get_cls_names(cls_scheme)
     cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', index_col='name')
     cnt = {
         name: Counter()

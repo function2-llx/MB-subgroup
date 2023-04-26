@@ -1,6 +1,6 @@
 _base:
   - _default.yaml
-  - ../../model/seg/swin3l+unet-fr.yaml
+  - ../../model/seg/swin-b-3l+unet-fr.yaml
 sample_shape: [256, 192, 16]
 backbone:
   kwargs:

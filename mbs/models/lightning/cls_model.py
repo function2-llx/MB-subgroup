@@ -5,9 +5,9 @@ from torch import nn
 from luolib.models import ClsModel
 from luolib.utils import DataKey
 
-from mbs.conf import MBClsConf
+from mbs.conf import MBClsConf, get_cls_names
 from mbs.datamodule import MBClsDataModule
-from mbs.utils.enums import SegClass, SUBGROUPS
+from mbs.utils.enums import SegClass
 
 class MBClsModel(ClsModel):
     conf: MBClsConf
@@ -17,7 +17,7 @@ class MBClsModel(ClsModel):
         pooling_feature_size = self.backbone_dummy()[1].feature_maps[-1].shape[1]
         self.cls_head = nn.Sequential(
             nn.Linear(pooling_feature_size * len(conf.pool_types), pooling_feature_size),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(pooling_feature_size, conf.num_cls_classes),
         )
 
@@ -27,7 +27,7 @@ class MBClsModel(ClsModel):
 
     @property
     def cls_names(self):
-        return SUBGROUPS
+        return get_cls_names(self.conf.cls_scheme)
 
     def cal_logit_impl(self, batch: dict):
         conf = self.conf

@@ -13,7 +13,7 @@ from mbs.utils.enums import MBDataKey, SUBGROUPS
 def _filter_seg(data: Sequence[dict]):
     return list(filter(lambda x: DataKey.SEG in x, data))
 
-class MBSegDataModule(SegDataModule, MBDataModuleBase):
+class MBSegDataModule(MBDataModuleBase, SegDataModule):
     conf: MBSegConf
 
     def load_data_transform(self, stage: RunningStage) -> list:

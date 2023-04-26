@@ -1,5 +1,5 @@
 _base:
-  - backbone: ../backbone/swin-b-3l.yaml
+  - backbone: ../backbone/swin-b.yaml
 
 decoder:
   name: full-res-adapter
@@ -8,9 +8,10 @@ decoder:
       name: unet
       kwargs:
         spatial_dims: 3
-        layer_channels: [128, 256, 512]
+        layer_channels: [128, 256, 512, 1024]
         upsample_strides:
           - [2, 2, 1]
+          - [2, 2, 2]
           - [2, 2, 2]
         kernel_sizes:
           - 3

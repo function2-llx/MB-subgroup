@@ -31,7 +31,6 @@ class MBDataModuleBase(CrossValDataModule):
             case_data_dir = self.conf.data_dir / number
             split_cohort.setdefault(split[number], []).append({
                 DataKey.CASE: number,
-                DataKey.CLS: SUBGROUPS.index(info['subgroup']),
                 **{
                     key: path
                     for key in [DataKey.IMG, DataKey.SEG] if (path := case_data_dir / f'{key}.npy').exists()

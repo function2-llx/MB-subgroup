@@ -8,20 +8,21 @@ train_batch_size: 16
 gradient_clip_val: 1
 gradient_clip_algorithm: norm
 max_epochs: null
-max_steps: 10000
 val_check_interval: 25
 save_top_k: 3
-scheduler:
-  name: plateau
-  interval: step
-  frequency: ${val_check_interval}
-  kwargs:
-    decay_rate: 0.2
-    patience_t: 5
-    mode: min
+#scheduler:
+#  name: plateau
+#  interval: step
+#  frequency: ${val_check_interval}
+#  reduce_on_plateau: true
+#  kwargs:
+#    decay_rate: 0.2
+#    patience_t: 10
+#    mode: min
 dummy_dim: 2
 pool_types:
   - ST
   - AT
   - CT
 seg_pred_dir: output/seg/base/predict-42/sw0.5+tta
+precision: 32

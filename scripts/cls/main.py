@@ -63,6 +63,7 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
         num_sanity_val_steps=conf.num_sanity_val_steps,
         val_check_interval=conf.val_check_interval,
         check_val_every_n_epoch=None,
+        log_every_n_steps=10,
     )
     model = MBClsModel(conf)
     if conf.pretrain_cv_dir is not None and conf.backbone.ckpt_path is None:

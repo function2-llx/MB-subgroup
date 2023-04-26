@@ -13,21 +13,29 @@ from monai.data import CacheDataset
 from monai.utils import PytorchPadMode, GridSampleMode
 
 from .base import MBDataModuleBase
-from ..conf import MBClsConf
-from ..utils.enums import SegClass
+from ..conf import MBClsConf, get_cls_map, get_cls_names
+from ..utils.enums import MBDataKey, SegClass
 
-class MBClsDataModule(ClsDataModule, MBDataModuleBase):
+class MBClsDataModule(MBDataModuleBase, ClsDataModule):
     conf: MBClsConf
     pred_keys = list(map(lambda seg_class: f'{seg_class}-pred', SegClass))
+
+    def __init__(self, conf: MBClsConf):
+        super().__init__(conf)
+        if conf.cls_weights is None:
+            conf.cls_weights = self.default_cls_weights()
 
     @cached_property
     def split_cohort(self):
         conf = self.conf
         split_cohort = super().split_cohort
         center = MBClsConf.load_center(conf)
+        cls_map = get_cls_map(conf.cls_scheme)
         for split, cohort in split_cohort.items():
+            cohort = list(filter(lambda x: cls_map[x[MBDataKey.SUBGROUP]] != -1, cohort))
             for data in cohort:
                 case = data[DataKey.CASE]
+                data[DataKey.CLS] = cls_map[data[MBDataKey.SUBGROUP]]
                 data.update(
                     {
                         f'{seg_class}-pred': MBClsConf.get_pred_path(conf, case, seg_class)
@@ -35,8 +43,8 @@ class MBClsDataModule(ClsDataModule, MBDataModuleBase):
                     },
                     center=center[case],
                 )
+            split_cohort[split] = cohort
         return split_cohort
-
 
     def load_data_transform(self, _stage):
         return [
@@ -79,7 +87,8 @@ class MBClsDataModule(ClsDataModule, MBDataModuleBase):
                 conf.scale_range,
                 conf.scale_p,
                 conf.spatial_dims,
-                center_generator=lambda data: data[f'center'],
+                conf.dummy_dim,
+                center_generator=lambda data: data['center'],
             ),
             monai_t.RandGaussianNoiseD(
                 DataKey.IMG,
@@ -107,7 +116,7 @@ class MBClsDataModule(ClsDataModule, MBDataModuleBase):
 
     def post_transform(self, _stage):
         return [
-            monai_t.SelectItemsD([DataKey.IMG, *self.pred_keys, DataKey.CLS]),
+            monai_t.SelectItemsD([DataKey.IMG, *self.pred_keys, DataKey.CLS, DataKey.CASE]),
             monai_t.LambdaD([DataKey.IMG, *self.pred_keys], lambda x: x.as_tensor(), track_meta=False)
         ]
 
