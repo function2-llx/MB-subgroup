@@ -5,10 +5,10 @@ _base:
 #   lr: 5e-5
 backbone_optim:
   lr: 0
-max_steps: 1000
+max_steps: 5000
 scheduler:
   name: multistep
   kwargs:
-    warmup_t: 100
-    decay_t: [500]
+    warmup_t: 500
+    decay_t: []
     decay_rate: 0.1
