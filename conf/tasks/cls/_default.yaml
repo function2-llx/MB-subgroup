@@ -26,3 +26,6 @@ pool_types:
   - CT
 seg_pred_dir: output/seg/base/predict-42/sw0.5+tta
 precision: 32
+
+backbone:
+  key_prefix: backbone.

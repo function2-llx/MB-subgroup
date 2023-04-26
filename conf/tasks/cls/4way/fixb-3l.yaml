@@ -1,7 +1,7 @@
 _base:
-  - base.yaml
+  - base-3l.yaml
 
 optimizer:
-  lr: 1e-4
+  lr: 5e-5
 backbone_optim:
   lr: 0

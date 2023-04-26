@@ -65,9 +65,11 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
         check_val_every_n_epoch=None,
         log_every_n_steps=10,
     )
-    model = MBClsModel(conf)
     if conf.pretrain_cv_dir is not None and conf.backbone.ckpt_path is None:
         conf.backbone.ckpt_path = conf.pretrain_cv_dir / f'fold-{val_id}/last.ckpt'
+    else:
+        print('train from sctrach!')
+    model = MBClsModel(conf)
     MBClsConf.save_conf_as_file(conf)
     trainer.fit(model, datamodule=datamodule, ckpt_path=MBClsConf.get_last_ckpt_path(conf))
     wandb.finish()
@@ -170,10 +172,10 @@ def main():
     torch.multiprocessing.set_sharing_strategy('file_system')
     torch.set_float32_matmul_precision('high')
     conf = parse_exp_conf(MBClsConf)
-    datamodule = MBClsDataModule(conf)
 
     conf.output_dir /= f'run-{conf.seed}'
     for val_id in conf.fold_ids:
+        datamodule = MBClsDataModule(conf)
         if conf.do_train:
             do_train(conf, datamodule, val_id)
         if conf.do_eval:
