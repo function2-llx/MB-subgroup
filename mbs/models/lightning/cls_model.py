@@ -15,11 +15,12 @@ class MBClsModel(ClsModel):
     def __init__(self, conf: MBClsConf):
         super().__init__(conf)
         pooling_feature_size = self.backbone_dummy()[1].feature_maps[-1].shape[1]
-        self.cls_head = nn.Sequential(
-            nn.Linear(pooling_feature_size * len(conf.pool_types), pooling_feature_size),
-            nn.ReLU(),
-            nn.Linear(pooling_feature_size, conf.num_cls_classes),
-        )
+        # self.cls_head = nn.Sequential(
+        #     nn.Linear(pooling_feature_size * len(conf.pool_types), pooling_feature_size),
+        #     nn.ReLU(),
+        #     nn.Linear(pooling_feature_size, conf.num_cls_classes),
+        # )
+        self.cls_head = nn.Linear(pooling_feature_size * len(conf.pool_types), conf.num_cls_classes)
 
     @property
     def flip_keys(self):
