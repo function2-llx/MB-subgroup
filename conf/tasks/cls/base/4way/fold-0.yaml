@@ -13,5 +13,5 @@ scheduler:
   name: multistep
   kwargs:
     warmup_t: 100
-    decay_t: [400, 700]
+    decay_t: [600]
     decay_rate: 0.1

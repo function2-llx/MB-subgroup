@@ -28,3 +28,13 @@ backbone:
 #    decay_rate: 0.2
 #    patience_t: 10
 #    mode: min
+
+rotate_p: 0.5
+scale_p: 0.5
+gaussian_noise_p: 0
+gaussian_smooth_p: 0
+scale_intensity_p: 0
+shift_intensity_p: 0
+adjust_contrast_p: 0
+simulate_low_res_p: 0
+# gamma_p: 0
