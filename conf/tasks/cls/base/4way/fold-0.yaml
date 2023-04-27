@@ -11,7 +11,8 @@ optimizer:
   lr: 5e-5
 scheduler:
   name: multistep
+  frequency: 100
   kwargs:
-    warmup_t: 100
+    warmup_t: 300
     decay_t: [600]
     decay_rate: 0.1
