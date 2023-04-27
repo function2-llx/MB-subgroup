@@ -1,0 +1,7 @@
+_base:
+  - ft-3l.yaml
+
+#optimizer:
+#  lr: 5e-5
+backbone_optim:
+  lr: 3e-6

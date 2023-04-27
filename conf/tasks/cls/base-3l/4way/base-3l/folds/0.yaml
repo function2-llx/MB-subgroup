@@ -1,0 +1,13 @@
+_base:
+  - ../default.yaml
+
+# optimizer:
+#   lr: 5e-5
+# backbone_optim:
+#   lr: 1e-5
+scheduler:
+  name: multistep
+  kwargs:
+    warmup_t: 100
+    decay_t: [400, 700]
+    decay_rate: 0.1

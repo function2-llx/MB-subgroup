@@ -10,6 +10,15 @@ gradient_clip_algorithm: norm
 max_epochs: null
 val_check_interval: 25
 save_top_k: 3
+dummy_dim: 2
+pool_types:
+  - ST
+  - AT
+  - CT
+precision: 32
+backbone:
+  key_prefix: backbone.
+
 #scheduler:
 #  name: plateau
 #  interval: step
@@ -19,13 +28,3 @@ save_top_k: 3
 #    decay_rate: 0.2
 #    patience_t: 10
 #    mode: min
-dummy_dim: 2
-pool_types:
-  - ST
-  - AT
-  - CT
-seg_pred_dir: output/seg/base/predict-42/sw0.5+tta
-precision: 32
-
-backbone:
-  key_prefix: backbone.

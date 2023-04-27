@@ -1,0 +1,11 @@
+_base:
+  - ../_default.yaml
+  - backbone: ../../../model/backbone/swin-b.yaml
+
+sample_shape: [256, 192, 16]
+pooling_level_stride: [32, 32, 4]
+# 1/16
+pooling_th: 256
+seg_pred_dir: output/seg/base/predict-42/sw0.5+tta
+pretrain_cv_dir: output/seg/base/run-42
+output_dir: output/cls/base/${cls_scheme}
