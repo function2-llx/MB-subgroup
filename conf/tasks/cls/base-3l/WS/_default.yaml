@@ -1,5 +1,0 @@
-_base:
-  - ../_default.yaml
-
-cls_scheme: WS
-num_cls_classes: 2

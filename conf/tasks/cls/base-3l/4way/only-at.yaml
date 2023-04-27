@@ -1,5 +1,0 @@
-_base:
-  - base.yaml
-
-pool_types:
-  - AT

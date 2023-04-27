@@ -1,4 +1,0 @@
-_base:
-  - base.yaml
-
-include_adults: false

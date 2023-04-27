@@ -1,0 +1,17 @@
+_base:
+  - _default.yaml
+  - scheduler: ${luolib.conf_root:}/scheduler/_step.yaml
+fold_ids: [0]
+
+max_steps: 1000
+backbone_optim:
+  lr: 1e-5
+  weight_decay: 0
+optimizer:
+  lr: 5e-5
+scheduler:
+  name: multistep
+  kwargs:
+    warmup_t: 100
+    decay_t: [400, 700]
+    decay_rate: 0.1

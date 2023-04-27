@@ -1,5 +1,0 @@
-_base:
-  - ../_default.yaml
-
-cls_scheme: 3way
-num_cls_classes: 3
