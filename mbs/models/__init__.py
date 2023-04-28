@@ -1,1 +1,1 @@
-from .lightning import MBSegModel
+from .lightning import *
