@@ -2,3 +2,4 @@ features*.csv
 extractive*.csv
 batch.csv
 seq_classification_results.csv
+pred-seg

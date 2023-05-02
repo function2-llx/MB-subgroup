@@ -18,7 +18,6 @@ def load_clinical():
     clinical = pd.read_excel(CLINICAL_DIR / 'clinical-com.xlsx', dtype='string').set_index('住院号')
     return clinical
 
-
 class MBDataModuleBase(CrossValDataModule):
     conf: MBConfBase
 

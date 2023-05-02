@@ -4,9 +4,9 @@ setting:
   binWidth: 10
   label: 1
   interpolator: 'sitkBSpline' # This is an enumerated value, here None is not allowed
-  resampledPixelSpacing: [0.46875, 0.46875, 0]
+  resampledPixelSpacing: [1, 1, 1]
   weightingNorm: # If no value is specified, it is interpreted as None
-  geometryTolerance: 1e-2
+  geometryTolerance: 0.0001
   correctMask: True
 imageType:
   Original: {} # for dictionaries/mappings, None values are not allowed, '{}' is interpreted as an empty dictionary
@@ -16,17 +16,17 @@ imageType:
 featureClass:
   # Only enable these shape descriptors (disables redundant Compactness 1 and Compactness 2)
   shape:
-    - 'VoxelVolume',
-    - 'MeshVolume',
-    - 'SurfaceArea',
-    - 'SurfaceVolumeRatio',
-    - 'Sphericity',
-    - 'SphericalDisproportion',
-    - 'Maximum3DDiameter',
-    - 'Maximum2DDiameterSlice',
-    - 'Maximum2DDiameterColumn',
-    - 'Maximum2DDiameterRow',
-    - 'Elongation',
+    - 'VoxelVolume'
+    - 'MeshVolume'
+    - 'SurfaceArea'
+    - 'SurfaceVolumeRatio'
+    - 'Sphericity'
+    - 'SphericalDisproportion'
+    - 'Maximum3DDiameter'
+    - 'Maximum2DDiameterSlice'
+    - 'Maximum2DDiameterColumn'
+    - 'Maximum2DDiameterRow'
+    - 'Elongation'
     - 'Flatness'
   firstorder: [] # specifying an empty list has the same effect as specifying nothing.
   glcm: # for lists none values are allowed, in this case, all features are enabled

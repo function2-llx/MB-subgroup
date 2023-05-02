@@ -71,7 +71,8 @@ def register(number: str, cuda_id: int):
     for img_type in [Modality.T2, *[seg_class for seg_class, modality in SEG_REF.items() if modality == Modality.T2]]:
         dst = cropped_output_dir / number / f'{img_type}.nii'
         dst.unlink(missing_ok=True)
-        dst.symlink_to(case_origin_dir / f'{img_type}.nii')
+        if (src := case_origin_dir / f'{img_type}.nii').exists():
+            dst.symlink_to(src)
 
 def main():
     global data_dir, output_dir, cropped_output_dir, padding
