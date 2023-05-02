@@ -32,7 +32,7 @@ class MBClsModel(ClsModel):
     def cls_names(self):
         return get_cls_names(self.conf.cls_scheme)
 
-    def cal_logit_impl(self, batch: dict):
+    def cal_feature(self, batch: dict):
         conf = self.conf
         feature_map = self.backbone.forward(batch[DataKey.IMG]).feature_maps[-1]
         features = []
@@ -54,5 +54,9 @@ class MBClsModel(ClsModel):
             features.append(feature)
 
         feature = torch.cat(features, dim=1)
+        return feature
+
+    def cal_logit_impl(self, batch: dict):
+        feature = self.cal_feature(batch)
         logit = self.cls_head(feature)
         return logit

@@ -75,6 +75,7 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     wandb.finish()
 
 def main():
+    torch.multiprocessing.set_start_method('forkserver')
     torch.multiprocessing.set_sharing_strategy('file_system')
     torch.set_float32_matmul_precision('high')
     conf = parse_exp_conf(MBClsConf)

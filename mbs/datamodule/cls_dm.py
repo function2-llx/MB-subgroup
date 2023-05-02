@@ -9,7 +9,7 @@ from luolib.transforms import SpatialCropWithSpecifiedCenterD, RandAffineCropD, 
 from monai import transforms as monai_t
 
 from luolib.utils import DataKey
-from monai.data import CacheDataset
+from monai.data import CacheDataset, MetaTensor
 from monai.utils import PytorchPadMode, GridSampleMode
 
 from .base import MBDataModuleBase
@@ -77,6 +77,7 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
     def aug_transform(self):
         conf = self.conf
         all_keys = [DataKey.IMG, *self.pred_keys]
+        import operator
         return [
             RandAffineCropD(
                 all_keys,
@@ -88,7 +89,8 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
                 conf.scale_p,
                 conf.spatial_dims,
                 conf.dummy_dim,
-                center_generator=lambda data: data['center'],
+                # center_generator=lambda data: data['center'],
+                center_generator=operator.itemgetter('center'),
             ),
             monai_t.RandGaussianNoiseD(
                 DataKey.IMG,
@@ -117,7 +119,7 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
     def post_transform(self, _stage):
         return [
             monai_t.SelectItemsD([DataKey.IMG, *self.pred_keys, DataKey.CLS, DataKey.CASE]),
-            monai_t.LambdaD([DataKey.IMG, *self.pred_keys], lambda x: x.as_tensor(), track_meta=False)
+            monai_t.LambdaD([DataKey.IMG, *self.pred_keys], MetaTensor.as_tensor, track_meta=False)
         ]
 
     def val_dataloader(self):
