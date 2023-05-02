@@ -9,12 +9,13 @@ gradient_clip_val: 1
 gradient_clip_algorithm: norm
 max_epochs: null
 val_check_interval: 25
-save_top_k: 3
+save_top_k: 1
 dummy_dim: 2
 pool_types:
   - ST
   - AT
-  - CT
+#  - CT
+pooling_layer: avg
 precision: 32
 backbone:
   key_prefix: backbone.

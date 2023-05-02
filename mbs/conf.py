@@ -124,6 +124,7 @@ class MBClsConf(MBConfBase, ClsExpConf):
     # choices: 4way, 3way, WS-G34, WS, G34
     cls_scheme: str = '4way'
     pool_types: list[str]
+    pooling_layer: str
     pooling_level_stride: list[int]
     pooling_th: int
 

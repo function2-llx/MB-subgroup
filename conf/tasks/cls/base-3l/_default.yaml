@@ -5,6 +5,6 @@ _base:
 sample_shape: [256, 192, 16]
 pooling_level_stride: [16, 16, 2]
 # 1/16
-pooling_th: 32
+pooling_th: 1
 seg_pred_dir: output/seg/base-3l/predict-42/sw0.5+tta
 pretrain_cv_dir: output/seg/base-3l/run-42

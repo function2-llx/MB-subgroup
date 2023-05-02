@@ -37,16 +37,21 @@ class MBClsModel(ClsModel):
         feature_map = self.backbone.forward(batch[DataKey.IMG]).feature_maps[-1]
         features = []
         for pool_type in self.conf.pool_types:
-            if pool_type in list(SegClass):
-                mask = batch[f'{pool_type}-pred']
-                pooling_mask = einops.reduce(mask, 'n 1 (h s0) (w s1) (d s2) -> n 1 h w d', 'sum', **{
-                    f's{i}': s
-                    for i, s in enumerate(conf.pooling_level_stride)
-                }) >= conf.pooling_th
-                feature = torch.masked.mean(feature_map, dim=(2, 3, 4), mask=pooling_mask)
-                features.append(feature)
-            else:
+            if pool_type not in list(SegClass):
                 raise ValueError
+            mask = batch[f'{pool_type}-pred']
+            pooling_mask = einops.reduce(mask, 'n 1 (h s0) (w s1) (d s2) -> n 1 h w d', 'sum', **{
+                f's{i}': s
+                for i, s in enumerate(conf.pooling_level_stride)
+            }) >= conf.pooling_th
+            match conf.pooling_layer:
+                case 'avg':
+                    feature = torch.masked.mean(feature_map, dim=(2, 3, 4), mask=pooling_mask)
+                case 'max':
+                    feature = torch.masked.amax(feature_map, dim=(2, 3, 4), mask=pooling_mask)
+                case _:
+                    raise ValueError
+            features.append(feature)
 
         feature = torch.cat(features, dim=1)
         logit = self.cls_head(feature)

@@ -1,0 +1,6 @@
+_base:
+  - ../_default.yaml
+
+cls_scheme: 4way
+num_cls_classes: 4
+output_dir: output/cls/base-3l/4way

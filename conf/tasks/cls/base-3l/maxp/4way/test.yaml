@@ -1,0 +1,11 @@
+_base:
+  - _default.yaml
+
+p_seeds:
+  - 42
+  - 233
+  - 666
+  - 888
+  - 914
+
+eval_batch_size: 4
