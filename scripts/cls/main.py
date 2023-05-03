@@ -14,12 +14,11 @@ from mbs.datamodule import MBClsDataModule
 from mbs.models.lightning.cls_model import MBClsModel
 
 task_name = 'mbs'
-
 def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     conf = deepcopy(conf)
     pl.seed_everything(conf.seed)
     if val_id == -1:
-        conf.output_dir /= f'all'
+        conf.output_dir /= 'all'
     else:
         conf.output_dir /= f'fold-{val_id}'
     if OmegaConf.is_missing(conf, 'log_dir'):
@@ -73,7 +72,7 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     if conf.pretrain_cv_dir is not None and conf.backbone.ckpt_path is None:
         conf.backbone.ckpt_path = conf.pretrain_cv_dir / f'fold-{val_id}/last.ckpt'
     else:
-        print('train from sctrach!')
+        print('train from scratch!')
     model = MBClsModel(conf)
     MBClsConf.save_conf_as_file(conf)
     trainer.fit(model, datamodule=datamodule, ckpt_path=MBClsConf.get_last_ckpt_path(conf))
