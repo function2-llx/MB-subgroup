@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, ModelSummary
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.strategies import DDPStrategy
 import torch
 import wandb
 
@@ -19,7 +18,10 @@ task_name = 'mbs'
 def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     conf = deepcopy(conf)
     pl.seed_everything(conf.seed)
-    conf.output_dir /= f'fold-{val_id}'
+    if val_id == -1:
+        conf.output_dir /= f'all'
+    else:
+        conf.output_dir /= f'fold-{val_id}'
     if OmegaConf.is_missing(conf, 'log_dir'):
         conf.log_dir = conf.output_dir
 
@@ -27,7 +29,10 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     conf.log_dir.mkdir(exist_ok=True, parents=True)
     print('real output dir:', conf.output_dir)
     print('log dir:', conf.log_dir)
-    datamodule.val_id = val_id
+    if val_id == -1:
+        datamodule.val_id = None
+    else:
+        datamodule.val_id = val_id
 
     trainer = pl.Trainer(
         logger=WandbLogger(
