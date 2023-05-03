@@ -131,7 +131,7 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
                 CacheDataset(
                     data,
                     transform=self.val_transform(),
-                    cache_num=conf.val_cache_num,
+                    cache_num=cache_num,
                     num_workers=conf.dataloader_num_workers,
                 )
             )

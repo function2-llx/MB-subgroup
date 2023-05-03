@@ -6,7 +6,7 @@ from tqdm import tqdm
 from luolib.conf import parse_exp_conf
 from luolib.utils import DataKey, DataSplit
 from mbs.models import MBClsModel
-from monai.data import CacheDataset, DataLoader, Dataset
+from monai.data import DataLoader, Dataset
 
 from mbs.conf import MBClsConf
 from mbs.datamodule import MBClsDataModule
@@ -23,10 +23,9 @@ def main():
     train_cohort = list(toolz.concat([data for split, data in split_cohort.items() if split != DataSplit.TEST]))
     train_cohort = sorted(train_cohort, key=lambda x: x[DataKey.CASE])
     test_cohort = sorted(test_cohort, key=lambda x: x[DataKey.CASE])
-    dataset = CacheDataset(
-        train_cohort + train_cohort,
-        transform=datamodule.train_transform(),
-        num_workers=8,
+    dataset = Dataset(
+        train_cohort + test_cohort,
+        transform=datamodule.test_transform(),
     )
     data_loader = DataLoader(dataset, num_workers=8, batch_size=16, pin_memory=True, persistent_workers=True)
     feature_dict = {}
