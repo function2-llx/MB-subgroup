@@ -21,3 +21,4 @@ backbone:
   key_prefix: backbone.
   kwargs:
     use_checkpoint: true
+use_post: false

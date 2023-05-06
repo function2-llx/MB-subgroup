@@ -1,4 +1,0 @@
-_base:
-  - ../_default.yaml
-
-pooling_layer: max

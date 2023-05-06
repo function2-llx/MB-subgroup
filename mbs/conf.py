@@ -120,7 +120,7 @@ class MBClsConf(MBConfBase, ClsExpConf):
     pretrain_cv_dir: Path | None = None
     seg_pred_dir: Path
     th: float = 0.5
-    use_post: bool = True
+    use_post: bool
     eval_batch_size: int = 16 * torch.cuda.device_count()
     # choices: 4way, 3way, WS-G34, WS, G34
     cls_scheme: str = '4way'
