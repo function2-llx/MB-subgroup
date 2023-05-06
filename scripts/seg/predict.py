@@ -52,7 +52,7 @@ class MBSegPredictor(pl.LightningModule):
             cnt = 0
             for model_name, model in self.models.items():
                 seed, fold_id = map(int, model_name.split())
-                if split == fold_id:
+                if not conf.all_folds and split == fold_id:
                     continue
                 cnt += 1
                 prob = model.infer(img, progress=False).sigmoid()
@@ -85,6 +85,7 @@ class MBSegPredictionDataModule(MBSegDataModule):
 
 def main():
     torch.set_float32_matmul_precision('high')
+    torch.multiprocessing.set_start_method('forkserver')
     conf = parse_exp_conf(MBSegPredConf)
     MBSegPredConf.default_pred_output_dir(conf)
     conf.log_dir = conf.p_output_dir

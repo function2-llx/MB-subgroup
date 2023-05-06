@@ -34,6 +34,7 @@ class MBSegPredConf(MBSegConf):
     p_output_dir: Path | None = None
     th: float = 0.5
     overwrite: bool = False
+    all_folds: bool = False
     l: int | None = None
     r: int | None = None
 

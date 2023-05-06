@@ -45,8 +45,9 @@ class MBDataModuleBase(CrossValDataModule):
             for fold_id in range(self.conf.num_folds)
         ]
         # trick: select training data for fold-i is by deleting the i-th item
-        if self.conf.include_adults:
-            ret.append(self.split_cohort[DataSplit.TRAIN])
+        assert self.conf.include_adults
+        # if self.conf.include_adults:
+        #     ret.append(self.split_cohort[DataSplit.TRAIN])
         return ret
 
     def test_data(self) -> Sequence:
@@ -67,6 +68,7 @@ def parse_age(age: str) -> float:
 def load_merged_plan():
     plan = pd.read_excel(PROCESSED_DIR / 'plan.xlsx', sheet_name='merge', dtype={MBDataKey.NUMBER: 'string'})
     plan.set_index(MBDataKey.NUMBER, inplace=True)
+    plan.sort_index(inplace=True)
     assert plan.index.unique().size == plan.index.size
     return plan
 

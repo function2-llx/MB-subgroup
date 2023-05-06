@@ -157,6 +157,7 @@ def do_eval(conf: MBSegConf, val_id: int):
     #     pd.DataFrame.from_records(test_outputs).to_csv(log_dir / 'results.csv', index=False)
 
 def main():
+    torch.multiprocessing.set_start_method('forkserver')
     torch.multiprocessing.set_sharing_strategy('file_system')
     torch.set_float32_matmul_precision('high')
     conf = parse_exp_conf(MBSegConf)
