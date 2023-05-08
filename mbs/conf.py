@@ -1,4 +1,3 @@
-from functools import cache
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,6 +93,10 @@ def get_cls_map(cls_scheme: str) -> dict[str, int]:
             }
         case _:
             raise ValueError
+
+def get_cls_map_vec(scheme: str, device='cuda') -> torch.Tensor:
+    cls_map = get_cls_map(scheme)
+    return torch.tensor([cls_map[subgroup] for subgroup in SUBGROUPS], device=device)
 
 def get_cls_names(cls_scheme: str) -> list[str]:
     match cls_scheme:

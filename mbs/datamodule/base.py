@@ -45,7 +45,7 @@ class MBDataModuleBase(CrossValDataModule):
             for fold_id in range(self.conf.num_folds)
         ]
         # trick: select training data for fold-i is by deleting the i-th item
-        assert self.conf.include_adults
+        # assert self.conf.include_adults
         # if self.conf.include_adults:
         #     ret.append(self.split_cohort[DataSplit.TRAIN])
         return ret

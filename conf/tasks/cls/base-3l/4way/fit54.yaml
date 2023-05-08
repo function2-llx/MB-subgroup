@@ -1,0 +1,8 @@
+_base:
+  - fit.yaml
+
+output_dir: output/cls/base-3l/4way-fit54
+optimizer:
+  lr: 1e-4
+backbone_optim:
+  lr: 2e-5

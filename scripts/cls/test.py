@@ -16,12 +16,11 @@ from torch import nn
 
 from luolib.conf import parse_exp_conf
 from luolib.models import ClsModel
-from luolib.utils import DataKey, DataSplit
+from luolib.utils import DataKey
 
-from mbs.conf import MBClsConf
-from mbs.models import MBClsModel
+from mbs.conf import MBClsConf, get_cls_map_vec, get_cls_names
 from mbs.datamodule import MBClsDataModule, load_split
-from mbs.models.lightning.cls_model import get_cls_names
+from mbs.models import MBClsModel
 
 @dataclass(kw_only=True)
 class MBClsTestConf(MBClsConf):
@@ -30,10 +29,53 @@ class MBClsTestConf(MBClsConf):
     eval_batch_size: int = 1
     print_shape: bool = False
     val_cache_num: int = 0
+    vote: bool = False
+
+class Scheme(nn.Module):
+    def __init__(self, scheme: str):
+        super().__init__()
+        self.scheme = scheme
+        self.names = get_cls_names(scheme)
+        self.map_vec = get_cls_map_vec(scheme)
+        self.metrics = MBTester.create_metrics(self.num_classes)
+        self.micro_metrics = MBTester.create_metrics(self.num_classes)
+        self.report = {}
+        self.case_output = []
+
+    @property
+    def num_classes(self):
+        return len(self.names)
+
+    def accumulate(self, prob: torch.Tensor, label: torch.Tensor, pred: torch.Tensor, split: str, cases: list[str]):
+        batch_size = prob.shape[0]
+        cls_map_vec = get_cls_map_vec(self.scheme, prob.device)
+        scheme_label = cls_map_vec[label]
+        scheme_pred = cls_map_vec[pred]
+        scheme_prob = torch.zeros(batch_size, self.num_classes, device=prob.device)
+        scheme_prob.scatter_add_(1, cls_map_vec.expand(batch_size, -1), prob)
+        MBTester.accumulate_metrics(scheme_prob, scheme_label, self.metrics, scheme_pred)
+        if split != 'test':
+            MBTester.accumulate_metrics(scheme_prob, scheme_label, self.micro_metrics, scheme_pred)
+
+        for i, case in enumerate(cases):
+            self.case_output.append(
+                {
+                    'case': case,
+                    'split': split,
+                    'true': self.names[scheme_label[i].item()],
+                    'pred': self.names[scheme_pred[i].item()],
+                    **{
+                        label: scheme_prob[i, j].item()
+                        for j, label in enumerate(self.names)
+                    },
+                    'prob': scheme_prob[i].cpu().numpy(),
+                }
+            )
 
 class MBTester(ClsModel):
     conf: MBClsTestConf
-    models: Sequence[Sequence[MBClsModel]]
+    models: Sequence[Sequence[MBClsModel]] | nn.ModuleList
+    schemes: Sequence[Scheme] | nn.ModuleList
 
     @property
     def cls_names(self):
@@ -41,8 +83,7 @@ class MBTester(ClsModel):
 
     def __init__(self, conf: MBClsTestConf):
         super().__init__(conf)
-        wuhu = self.create_metrics(conf.num_cls_classes)
-        self.micro_metrics = wuhu
+        self.schemes = nn.ModuleList([Scheme(scheme) for scheme in ['4way', '3way', 'WS-G34']])
         self.models = nn.ModuleList([
             nn.ModuleList()
             for _ in range(conf.num_folds)
@@ -52,12 +93,20 @@ class MBTester(ClsModel):
             self.models[fold_id].append(MBClsModel.load_from_checkpoint(ckpt_path, strict=True, conf=conf))
             print(f'load model from {ckpt_path}')
 
-        self.case_outputs = []
         self.split = load_split()
 
+    def on_test_epoch_start(self):
+        super().on_test_epoch_start()
+        for scheme in self.schemes:
+            for metric in scheme.metrics.values():
+                metric.reset()
+
     def test_step(self, batch: dict, *args, **kwargs):
+        conf = self.conf
         prob = None
-        sample_case = batch[DataKey.CASE][0]
+        cases = batch[DataKey.CASE]
+        batch_size = len(cases)
+        sample_case = cases[0]
         split = self.split[sample_case]
         for case in batch[DataKey.CASE][1:]:
             assert split == self.split[case]
@@ -66,45 +115,40 @@ class MBTester(ClsModel):
             models = list(itertools.chain(*self.models))
         else:
             models = self.models[split]
-        for model in models:
-            logit = model.cal_logit(batch, flip=self.conf.do_tta)
+        pred = torch.empty(batch_size, len(models), dtype=torch.int32, device=self.device)
+        for i, model in enumerate(models):
+            logit = model.cal_logit(batch, flip=conf.do_tta)
+            cur_prob = logit.softmax(dim=-1)
+            pred[:, i] = cur_prob.argmax(dim=-1)
             if prob is None:
-                prob = logit.softmax(dim=-1)
+                prob = cur_prob
             else:
-                prob += logit.softmax(dim=-1)
+                prob += cur_prob
         prob /= len(models)
+        vote = torch.empty(batch_size, conf.num_cls_classes, dtype=torch.int32, device=self.device)
+        for i in range(batch_size):
+            vote[i] = pred[i].bincount(minlength=conf.num_cls_classes)
+        max_vote, vote_pred = vote.max(dim=-1, keepdim=True)
+        pred = prob.argmax(dim=-1)
+        if conf.vote:
+            pred = torch.where((vote == max_vote).sum(dim=-1) == 1, vote_pred[:, 0], pred)
         label = batch[DataKey.CLS]
-        self.accumulate_metrics(prob, label, self.cls_metrics[DataSplit.TEST])
-        if split != 'test':
-            self.accumulate_metrics(prob, label, self.micro_metrics)
-        for i, case in enumerate(batch[DataKey.CASE]):
-            self.case_outputs.append({
-                'case': case,
-                'split': split,
-                'true': self.cls_names[label[i].item()],
-                'pred': self.cls_names[prob[i].argmax().item()],
-                **{
-                    label: prob[i, j].item()
-                    for j, label in enumerate(self.cls_names)
-                },
-                'prob': prob[i].cpu().numpy(),
-            })
+        for scheme in self.schemes:
+            scheme.accumulate(prob, label, pred, split, batch[DataKey.CASE])
 
     def plot_roc(self, save_dir: Path):
-        conf = self.conf
-        cls_names = self.cls_names
-        y_true = np.array([
-            self.cls_names.index(case['true'])
-            for case in self.case_outputs if case['split'] == 'test'
-        ])
-        y_score = np.array([
-            case['prob']
-            for case in self.case_outputs if case['split'] == 'test'
-        ])
-        plot_roc(y_true, y_score, cls_names, save_dir)
+        for scheme in self.schemes:
+            y_true = np.array([
+                scheme.names.index(case['true'])
+                for case in scheme.case_output if case['split'] == 'test'
+            ])
+            y_score = np.array([
+                case['prob']
+                for case in scheme.case_output if case['split'] == 'test'
+            ])
+            plot_roc(y_true, y_score, scheme.names, save_dir / 'roc', scheme.scheme)
 
-
-def plot_roc(y_true: np.ndarray, y_score: np.ndarray, target_names: list[str], output_dir: Path):
+def plot_roc(y_true: np.ndarray, y_score: np.ndarray, target_names: list[str], output_dir: Path, save_name: str):
     target_names = deepcopy(target_names)
     y_true = np.eye(len(target_names))[y_true]
     # y_score = np.array(self.y_score)
@@ -122,8 +166,9 @@ def plot_roc(y_true: np.ndarray, y_score: np.ndarray, target_names: list[str], o
         ax.set_ylabel('True Positive Rate')
         ax.set_title('ROC curves')
         ax.legend(loc="lower right")
-    fig.savefig(output_dir / 'test-roc.pdf')
-    fig.savefig(output_dir / 'test-roc.png')
+    output_dir.mkdir(exist_ok=True, parents=True)
+    fig.savefig(output_dir / f'{save_name}.pdf')
+    fig.savefig(output_dir / f'{save_name}.png')
 
 def plot_roc_curve(y_test, y_score, model_name, output_dir):
     import seaborn as sns
@@ -147,7 +192,6 @@ def plot_roc_curve(y_test, y_score, model_name, output_dir):
     plt.text(.93, .1, "AUC: " + str(short_auc),
              horizontalalignment="center", verticalalignment="center",
              fontsize=14, fontweight="semibold")
-    print(233)
     fig.savefig(output_dir / 'test-roc-a.pdf')
     fig.savefig(output_dir / 'test-roc-a.png')
 
@@ -192,22 +236,26 @@ def main():
         accelerator='gpu',
         devices=torch.cuda.device_count(),
     )
-    reports = {}
     for i in range(conf.num_folds):
         datamodule.val_id = i
         trainer.test(model, datamodule.val_dataloader())
         print(f'evaluating {i}')
-        reports[f'fold-{i}'] = model.metrics_report(model.cls_metrics_test, model.cls_names)
-    reports['macro'] = pd.DataFrame(reports).T.mean().to_dict()
-    reports['micro'] = model.metrics_report(model.micro_metrics, model.cls_names)
+        for scheme in model.schemes:
+            scheme.report[f'fold-{i}'] = model.metrics_report(scheme.metrics, scheme.names)
+    for scheme in model.schemes:
+        scheme.report['macro'] = pd.DataFrame(scheme.report).T.mean().to_dict()
+        scheme.report['micro'] = model.metrics_report(scheme.micro_metrics, scheme.names)
     trainer.test(model, datamodule.test_dataloader())
-    reports['test'] = model.metrics_report(model.cls_metrics_test, model.cls_names)
-    
+    for scheme in model.schemes:
+        scheme.report['test'] = model.metrics_report(scheme.metrics, scheme.names)
+
     save_dir = conf.output_dir / 'eval'
     save_dir.mkdir(exist_ok=True)
-    pd.DataFrame(model.case_outputs).to_excel(save_dir / 'case-outputs.xlsx', freeze_panes=(1, 0))
     model.plot_roc(save_dir)
-    pd.DataFrame(reports).to_excel(save_dir / 'report.xlsx', freeze_panes=(1, 0))
+    with pd.ExcelWriter(save_dir / f'case-output.xlsx') as case_output_writer, pd.ExcelWriter(save_dir / 'report.xlsx') as report_writer:
+        for scheme in model.schemes:
+            pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 0))
+            pd.DataFrame(scheme.report).to_excel(report_writer, scheme.scheme, freeze_panes=(1, 0))
 
 if __name__ == '__main__':
     main()

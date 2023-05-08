@@ -1,0 +1,10 @@
+_base:
+  - fit54.yaml
+
+p_seeds:
+  - 42
+  - 233
+#  - 666
+
+eval_batch_size: 16
+#vote: true
