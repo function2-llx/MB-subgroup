@@ -254,8 +254,8 @@ def main():
     model.plot_roc(save_dir)
     with pd.ExcelWriter(save_dir / f'case-output.xlsx') as case_output_writer, pd.ExcelWriter(save_dir / 'report.xlsx') as report_writer:
         for scheme in model.schemes:
-            pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 0))
-            pd.DataFrame(scheme.report).to_excel(report_writer, scheme.scheme, freeze_panes=(1, 0))
+            pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 1))
+            pd.DataFrame(scheme.report).to_excel(report_writer, scheme.scheme, freeze_panes=(1, 1))
 
 if __name__ == '__main__':
     main()

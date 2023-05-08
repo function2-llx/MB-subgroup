@@ -11,7 +11,7 @@ from luolib.datamodule.base import DataSeq
 from luolib.utils import DataSplit, DataKey
 
 from mbs.conf import MBConfBase
-from mbs.utils.enums import CLINICAL_DIR, MBDataKey, PROCESSED_DIR, SUBGROUPS
+from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 
 def load_clinical():
@@ -25,6 +25,8 @@ class MBDataModuleBase(CrossValDataModule):
     def split_cohort(self) -> dict[Hashable, DataSeq]:
         plan = load_merged_plan()
         split = load_split()
+        if not self.conf.include_adults:
+            plan = plan[plan[MBDataKey.GROUP] == MBGroup.CHILD]
         split_cohort = {}
         for number, info in plan.iterrows():
             case_data_dir = self.conf.data_dir / number
