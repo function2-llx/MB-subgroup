@@ -164,3 +164,4 @@ origin
 test.py
 test-ants.py
 test-intra.py
+run*.zsh

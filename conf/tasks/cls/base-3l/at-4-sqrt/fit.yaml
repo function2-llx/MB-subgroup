@@ -1,0 +1,17 @@
+_base:
+  - _default.yaml
+
+do_train: true
+max_steps: 500
+backbone_optim:
+  lr: 7e-6
+  weight_decay: 0
+optimizer:
+  lr: 5e-5
+scheduler:
+  name: multistep
+  frequency: 100
+  kwargs:
+    warmup_t: 0
+    decay_t: [400]
+    decay_rate: 0.2

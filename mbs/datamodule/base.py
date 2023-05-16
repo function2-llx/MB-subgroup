@@ -1,6 +1,5 @@
 from collections.abc import Hashable
 from functools import cached_property
-import itertools
 import math
 from typing import Sequence
 
@@ -12,7 +11,6 @@ from luolib.utils import DataSplit, DataKey
 
 from mbs.conf import MBConfBase
 from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
-
 
 def load_clinical():
     clinical = pd.read_excel(CLINICAL_DIR / 'clinical-com.xlsx', dtype='string').set_index('住院号')

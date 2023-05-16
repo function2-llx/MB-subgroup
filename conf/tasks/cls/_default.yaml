@@ -1,6 +1,7 @@
 _base:
   - ${luolib.conf_root:}/aug/2D.yaml
   - optimizer: ${luolib.conf_root:}/optimizer/adamw.yaml
+    scheduler: ${luolib.conf_root:}/scheduler/_step.yaml
 
 train_cache_num: 200
 dataloader_num_workers: 12
@@ -22,3 +23,6 @@ backbone:
   kwargs:
     use_checkpoint: true
 use_post: false
+
+cls_scheme: 4way
+num_cls_classes: 4

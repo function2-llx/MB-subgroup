@@ -1,0 +1,11 @@
+_base:
+  - ../_default.yaml
+
+pool_types:
+  - AT
+
+backbone:
+  ckpt_path: output/seg/base-3l/run-42/fold-4/last.ckpt
+
+output_dir: output/cls/base-3l/at-4-sqrt
+cls_weights: [0.25819889, 0.125     , 0.18257419, 0.10369517]

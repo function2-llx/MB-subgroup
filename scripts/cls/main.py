@@ -71,7 +71,7 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
     )
     if conf.pretrain_cv_dir is not None and conf.backbone.ckpt_path is None:
         conf.backbone.ckpt_path = conf.pretrain_cv_dir / f'fold-{val_id}/last.ckpt'
-    else:
+    elif conf.backbone.ckpt_path is None:
         print('train from scratch!')
     model = MBClsModel(conf)
     MBClsConf.save_conf_as_file(conf)
@@ -85,8 +85,8 @@ def main():
     conf = parse_exp_conf(MBClsConf)
 
     conf.output_dir /= f'run-{conf.seed}'
+    datamodule = MBClsDataModule(conf)
     for val_id in conf.fold_ids:
-        datamodule = MBClsDataModule(conf)
         if conf.do_train:
             do_train(conf, datamodule, val_id)
 
