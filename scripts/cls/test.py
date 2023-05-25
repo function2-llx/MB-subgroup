@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import itertools
 from pathlib import Path
 
+import torchmetrics
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,9 +14,11 @@ import pytorch_lightning as pl
 from sklearn.metrics import auc, roc_auc_score, roc_curve
 import torch
 from torch import nn
+from torchmetrics.utilities.enums import AverageMethod
 
 from luolib.conf import parse_exp_conf
 from luolib.models import ClsModel
+from luolib.models.lightning.cls_model import MetricsCollection
 from luolib.utils import DataKey
 
 from mbs.conf import MBClsConf, get_cls_map_vec, get_cls_names
@@ -76,6 +79,23 @@ class MBTester(ClsModel):
     conf: MBClsTestConf
     models: Sequence[Sequence[MBClsModel]] | nn.ModuleList
     schemes: Sequence[Scheme] | nn.ModuleList
+
+    @staticmethod
+    def create_metrics(num_classes: int) -> MetricsCollection:
+        return nn.ModuleDict({
+            k: (
+                metric := metric_cls(task='multiclass', num_classes=num_classes, average=average),
+                setattr(metric, '_luolib_force_prob', force_prob),
+                metric,
+            )[-1]
+            for k, metric_cls, average, force_prob in [
+                ('sen', torchmetrics.Recall, AverageMethod.NONE, False),
+                ('spe', torchmetrics.Specificity, AverageMethod.NONE, False),
+                ('auroc', torchmetrics.AUROC, AverageMethod.NONE, True),
+                ('f1', torchmetrics.F1Score, AverageMethod.NONE, False),
+                ('acc', torchmetrics.Accuracy, AverageMethod.MICRO, False),
+            ]
+        })
 
     @property
     def cls_names(self):
@@ -254,7 +274,7 @@ def main():
     model.plot_roc(save_dir)
     with pd.ExcelWriter(save_dir / f'case-output.xlsx') as case_output_writer, pd.ExcelWriter(save_dir / 'report.xlsx') as report_writer:
         for scheme in model.schemes:
-            pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 1))
+            pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 1), index=False)
             pd.DataFrame(scheme.report).to_excel(report_writer, scheme.scheme, freeze_panes=(1, 1))
 
 if __name__ == '__main__':

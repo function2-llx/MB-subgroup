@@ -1,0 +1,9 @@
+_base:
+  - ../_default.yaml
+
+pool_types:
+  - AT
+
+pretrain_cv_dir: null
+output_dir: output/cls/base-3l/at-scratch-sqrt
+cls_weights: [0.25819889, 0.125     , 0.18257419, 0.10369517]
