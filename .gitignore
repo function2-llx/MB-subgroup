@@ -132,7 +132,8 @@ dmypy.json
 .idea/
 runs*/
 *.zip
-plot/
+/plot
+/plot-*
 report/
 examples/
 cam.jpg
