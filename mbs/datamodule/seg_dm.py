@@ -16,7 +16,7 @@ def _filter_seg(data: Sequence[dict]):
 class MBSegDataModule(MBDataModuleBase, SegDataModule):
     conf: MBSegConf
 
-    def load_data_transform(self, stage: RunningStage) -> list:
+    def load_data_transform(self, stage: RunningStage):
         match stage:
             case stage.PREDICTING:
                 return [monai_t.LoadImageD(DataKey.IMG, ensure_channel_first=False, image_only=True)]

@@ -1,0 +1,15 @@
+_base:
+  - swin-b-4l.yaml
+
+name: swin3d
+kwargs:
+  patch_size: [1, 4, 4]
+  window_sizes:
+    - [2, 6, 8]
+    - [4, 6, 8]
+    - [4, 6, 8]
+    - [4, 6, 8]
+  strides:
+    - [1, 2, 2]
+    - [2, 2, 2]
+    - [2, 2, 2]

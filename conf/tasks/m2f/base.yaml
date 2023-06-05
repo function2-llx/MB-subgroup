@@ -1,0 +1,11 @@
+_base:
+  - _default.yaml
+  - ../../model/m2f/swin+msdeform.yaml
+
+sample_shape: [16, 192, 256]
+num_train_points: 98304
+optimizer:
+  lr: 1e-4
+backbone:
+  kwargs:
+    use_checkpoint: true

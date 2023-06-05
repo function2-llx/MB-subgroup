@@ -4,7 +4,7 @@ channels:
   - nvidia
   - defaults
 dependencies:
-  - python=3.10
+  - python=3.11
   - notebook
   - omegaconf
   - numpy
@@ -15,8 +15,11 @@ dependencies:
   - einops
   - pytorch-lightning
   - torchmetrics
+  - transformers
   - timm
   - wandb
+  - libprotobuf=3  # https://github.com/wandb/wandb/issues/5633
+  - llvm-openmp<16  # https://github.com/pytorch/pytorch/issues/99625
   - pandas
   - openpyxl
   - seaborn

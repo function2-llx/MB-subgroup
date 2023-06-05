@@ -4,6 +4,7 @@ kwargs:
   patch_size: [4, 4, 1]
   layer_channels: [128, 256, 512, 1024]
   layer_depths: [2, 2, 18, 2]
+  drop_path_rate: 0.2
   window_sizes:
     - [8, 6, 2]
     - [8, 6, 4]

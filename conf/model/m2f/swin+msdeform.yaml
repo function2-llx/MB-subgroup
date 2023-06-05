@@ -1,0 +1,24 @@
+_base:
+  - backbone: ../backbone/swin-b-zyx.yaml
+
+pixel_decoder:
+  name: msdeform
+  kwargs:
+    spatial_dims: 3
+    backbone_feature_channels: ${...backbone.kwargs.layer_channels}
+    feature_dim: 256
+    num_heads: 8
+    n_points: 6
+    num_layers: 6
+    mlp_dim: 1024
+transformer_decoder:
+  name: mask
+  kwargs:
+    spatial_dims: 3
+    feature_channels: 256
+    num_attention_heads: 8
+    dim_feedforward: 2048
+    num_decoder_layers: 9
+    num_feature_levels: 3
+    num_queries: ${...num_fg_classes}
+    pixel_embedding_dim: ${...pixel_decoder.kwargs.feature_dim}

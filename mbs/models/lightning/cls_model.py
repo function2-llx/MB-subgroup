@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from luolib.models import ClsModel
-from luolib.models.init import init_linear_conv
+from luolib.models.init import init_common
 from luolib.utils import DataKey
 
 from mbs.conf import MBClsConf, get_cls_names
@@ -22,7 +22,7 @@ class MBClsModel(ClsModel):
         #     nn.Linear(pooling_feature_size, conf.num_cls_classes),
         # )
         self.cls_head = nn.Linear(pooling_feature_size * len(conf.pool_types), conf.num_cls_classes)
-        init_linear_conv(self.cls_head)
+        init_common(self.cls_head)
 
     @property
     def flip_keys(self):

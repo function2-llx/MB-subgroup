@@ -3,8 +3,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch.cuda
+from omegaconf import II
 
-from luolib.conf import ClsExpConf, CrossValConf, SegExpConf
+from luolib.conf import ClsExpConf, CrossValConf, SegExpConf, Mask2FormerConf
+from luolib.conf.base import SegCommonConf
 from luolib.types import tuple3_t
 
 from mbs.utils.enums import SUBGROUPS, SegClass, PROCESSED_DIR
@@ -141,3 +143,16 @@ class MBClsConf(MBConfBase, ClsExpConf):
         for k, v in center.items():
             center[k] = tuple(v)
         return center
+
+@dataclass(kw_only=True)
+class MBM2FConf(MBConfBase, Mask2FormerConf, SegCommonConf):
+    conf_root: Path = Path('conf/tasks/m2f')
+    output_root: Path = Path('output/m2f')
+    max_epochs: int | None = None
+    train_cache_num: int = 200
+    val_cache_num: int = 100
+    num_fg_classes: int = 2
+    monitor: str = 'val/dice/avg'
+    monitor_mode: str = 'max'
+    multi_label: bool = True
+    num_seg_classes: int = II('.num_fg_classes')
