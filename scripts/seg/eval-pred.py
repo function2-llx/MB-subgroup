@@ -1,40 +1,38 @@
 import itertools as it
-from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 import torch.cuda
 from tqdm.contrib.concurrent import process_map
 
-import monai
-from luolib.conf import parse_exp_conf
+from luolib.conf import parse_cli
 from luolib.reader import PyTorchReader
 from luolib.utils import DataKey
-from monai import transforms as monai_t
+import monai
+from monai import transforms as mt
 from monai.metrics import compute_dice
 
 from mbs.conf import MBSegPredConf
 from mbs.datamodule import load_merged_plan, load_split
 from mbs.utils.enums import SegClass
 
-@dataclass(kw_only=True)
-class Conf(MBSegPredConf):
-    use_post: bool
+conf: MBSegPredConf
 
-conf: Conf
-
-def process(case: str, cuda_id: int):
-    pred_keys = list(map(lambda x: f'{x}-pred', SegClass))
+def process(case: str, cuda_id: int, post: bool):
+    pred_keys = list(map(lambda x: f'{x}-pred', conf.exp_conf.seg_classes))
     all_keys = [DataKey.SEG] + pred_keys
-    seg_path = conf.data_dir / case / f'{DataKey.SEG}.npy'
+    seg_path = conf.exp_conf.data_dir / case / f'{DataKey.SEG}.npy'
+    seg_class_ids = [list(SegClass).index(seg_class) for seg_class in conf.exp_conf.seg_classes]
+
     no_seg = not seg_path.exists()
     loader = monai.transforms.Compose([
-        monai_t.LoadImageD(DataKey.SEG, ensure_channel_first=False, image_only=True, allow_missing_keys=no_seg),
-        monai.transforms.LoadImageD(pred_keys, ensure_channel_first=True, image_only=True, reader=PyTorchReader),
-        monai_t.ToDeviceD(all_keys, f'cuda:{cuda_id}', allow_missing_keys=no_seg),
-        monai_t.ConcatItemsD(pred_keys, 'pred'),
-        monai_t.BoundingRectD(f'{SegClass.ST}-pred'),
-        monai_t.LambdaD(all_keys, lambda x: x.as_tensor(), track_meta=False, allow_missing_keys=no_seg),
+        mt.LoadImageD(DataKey.SEG, ensure_channel_first=False, image_only=True, allow_missing_keys=no_seg),
+        mt.LambdaD(DataKey.SEG, lambda x: x[seg_class_ids], allow_missing_keys=no_seg),
+        mt.LoadImageD(pred_keys, ensure_channel_first=True, image_only=True, reader=PyTorchReader),
+        mt.ToDeviceD(all_keys, f'cuda:{cuda_id}', allow_missing_keys=no_seg),
+        mt.ConcatItemsD(pred_keys, 'pred'),
+        mt.BoundingRectD(f'{SegClass.ST}-pred'),
+        mt.LambdaD(all_keys, lambda x: x.as_tensor(), track_meta=False, allow_missing_keys=no_seg),
     ])
 
     data = loader({
@@ -43,15 +41,15 @@ def process(case: str, cuda_id: int):
             else {}
         ),
         **{
-            f'{seg_class}-pred': MBSegPredConf.get_save_path(conf, case, seg_class, conf.use_post)
-            for seg_class in SegClass
+            f'{seg_class}-pred': MBSegPredConf.get_save_path(conf, case, seg_class, post)
+            for seg_class in conf.exp_conf.seg_classes
         },
     })
     ret = {DataKey.CASE: case}
     if DataKey.SEG in data:
         dice = compute_dice(data[DataKey.SEG][None], data['pred'][None])[0]
         st_pred = data['pred'][list(SegClass).index(SegClass.ST)]
-        for i, seg_class in enumerate(SegClass):
+        for i, seg_class in enumerate(conf.exp_conf.seg_classes):
             seg = data[DataKey.SEG][i]
             pred = data['pred'][i]
             ret[f'dice-{seg_class}'] = dice[i].item()
@@ -71,22 +69,28 @@ def process(case: str, cuda_id: int):
 
 def main():
     global conf
-    conf = parse_exp_conf(Conf)
+    conf, _ = parse_cli(MBSegPredConf)
+    MBSegPredConf.load_exp_conf(conf)
     MBSegPredConf.default_pred_output_dir(conf)
     plan = load_merged_plan()
-    results = process_map(process, plan.index, it.cycle(range(torch.cuda.device_count())), max_workers=4, dynamic_ncols=True)
-    results_df = pd.DataFrame(results).set_index(DataKey.CASE)
-    results_df['split'] = load_split()
-    center_save_path = conf.p_output_dir / 'center' / f'{MBSegPredConf.get_sub(conf, conf.use_post)}.json'
-    center_save_path.parent.mkdir(exist_ok=True)
-    results_df.pop('center').to_json(center_save_path, force_ascii=False, indent=4)
+    for post in [False, True]:
+        results = process_map(
+            process,
+            plan.index, it.cycle(range(torch.cuda.device_count())), it.repeat(post),
+            max_workers=4, dynamic_ncols=True,
+        )
+        results_df = pd.DataFrame(results).set_index(DataKey.CASE)
+        results_df['split'] = load_split()
+        center_save_path = conf.p_output_dir / 'center' / f'{MBSegPredConf.get_sub(conf, post)}.json'
+        center_save_path.parent.mkdir(exist_ok=True)
+        results_df.pop('center').to_json(center_save_path, force_ascii=False, indent=4)
 
-    with pd.ExcelWriter(
-        result_file := conf.p_output_dir / f'eval.xlsx',
-        mode=(mode := 'a' if result_file.exists() else 'w'),
-        if_sheet_exists='replace' if mode == 'a' else None,
-    ) as writer:
-        results_df.to_excel(writer, sheet_name=MBSegPredConf.get_sub(conf, conf.use_post), freeze_panes=(1, 0))
+        with pd.ExcelWriter(
+            result_file := conf.p_output_dir / f'eval.xlsx',
+            mode=(mode := 'a' if result_file.exists() else 'w'),
+            if_sheet_exists='replace' if mode == 'a' else None,
+        ) as writer:
+            results_df.to_excel(writer, sheet_name=MBSegPredConf.get_sub(conf, post), freeze_panes=(1, 0))
 
 if __name__ == '__main__':
     main()

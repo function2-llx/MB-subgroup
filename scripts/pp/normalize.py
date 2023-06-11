@@ -8,7 +8,7 @@ from tqdm.contrib.concurrent import process_map
 
 from luolib.utils import DataKey
 import monai
-from monai import transforms as monai_t
+from monai import transforms as mt
 from monai.utils import GridSampleMode
 
 from mbs.datamodule import load_merged_plan
@@ -26,22 +26,23 @@ def normalize(number: str, cuda_id: int):
     case_output_dir.mkdir(exist_ok=True)
     all_keys = [*Modality, *SegClass]
     no_seg = all(not (case_data_dir / f'{seg_class}.nii').exists() for seg_class in SegClass)
-    transform = monai_t.Compose([
-        monai_t.LoadImageD(all_keys, image_only=True, ensure_channel_first=True, allow_missing_keys=no_seg),
-        monai_t.ToDeviceD(all_keys, f'cuda:{cuda_id}', allow_missing_keys=no_seg),
-        monai_t.OrientationD(all_keys, 'RAS', allow_missing_keys=True),
-        monai_t.ConcatItemsD(list(Modality), DataKey.IMG),
-        *(() if no_seg else (monai_t.ConcatItemsD(list(SegClass), DataKey.SEG),)),
-        monai_t.ScaleIntensityRangePercentilesD(DataKey.IMG, 0.5, 99.5, b_min=0, b_max=1, clip=True, channel_wise=True),
-        monai_t.CropForegroundD([DataKey.IMG, DataKey.SEG], source_key=DataKey.IMG, allow_missing_keys=no_seg),
-        monai_t.SpacingD(
+    transform = mt.Compose([
+        mt.LoadImageD(all_keys, image_only=True, ensure_channel_first=True, allow_missing_keys=no_seg),
+        mt.ToDeviceD(all_keys, f'cuda:{cuda_id}', allow_missing_keys=no_seg),
+        mt.OrientationD(all_keys, 'RAS', allow_missing_keys=True),
+        mt.ConcatItemsD(list(Modality), DataKey.IMG),
+        *(() if no_seg else (mt.ConcatItemsD(list(SegClass), DataKey.SEG),)),
+        mt.ScaleIntensityRangePercentilesD(DataKey.IMG, 0.5, 99.5, b_min=0, b_max=1, clip=True, channel_wise=True),
+        mt.CropForegroundD([DataKey.IMG, DataKey.SEG], source_key=DataKey.IMG, allow_missing_keys=no_seg),
+        mt.SpacingD(
             [DataKey.IMG, DataKey.SEG],
             pixdim=(*spacing[:2], -1),
             mode=[GridSampleMode.BILINEAR, GridSampleMode.NEAREST],
             allow_missing_keys=no_seg,
         ),
-        monai_t.NormalizeIntensityD(DataKey.IMG, nonzero=True, set_zero_to_min=True),
-        monai_t.SelectItemsD([DataKey.IMG, DataKey.SEG], allow_missing_keys=no_seg),
+        mt.NormalizeIntensityD(DataKey.IMG, nonzero=True, set_zero_to_min=True),
+        mt.SelectItemsD([DataKey.IMG, DataKey.SEG], allow_missing_keys=no_seg),
+        mt.LambdaD([DataKey.IMG, DataKey.SEG], lambda x: x.permute(0, *range(3, 0, -1)).contiguous(), allow_missing_keys=no_seg)
     ])
     data: dict = transform({
         img_type: img_path

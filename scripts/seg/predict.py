@@ -1,37 +1,43 @@
-from __future__ import annotations
-
 import itertools
 from collections.abc import Sequence, Mapping
 
+from omegaconf import OmegaConf
 import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from luolib.conf import parse_exp_conf
+from luolib.conf import parse_cli
+from luolib.models import SegInferer
 from luolib.utils import DataKey
-from mbs.utils.enums import SegClass
 import monai
 from monai.data import MetaTensor
 
 from mbs.conf import MBSegPredConf
-from mbs.datamodule import MBSegDataModule, load_split
-from mbs.models import MBSegModel
+from mbs.datamodule import MBSegDataModule, load_split, MBM2FDataModule
+from mbs.models import MBSegModel, MBM2FModel
 
 SEG_PROB_FILENAME = 'seg-prob.pt'
 
 class MBSegPredictor(pl.LightningModule):
+    @property
+    def exp_conf(self):
+        return self.conf.exp_conf
+
     def __init__(self, conf: MBSegPredConf):
         super().__init__()
         self.conf = conf
+        assert conf.inferer_cls in [MBSegModel.__name__, MBM2FModel.__name__]
+        import mbs.models
+        inferer_cls: type[SegInferer] = getattr(mbs.models, conf.inferer_cls)
         self.split = load_split()
-        self.models: Mapping[str, MBSegModel] = nn.ModuleDict({
+        self.models: Mapping[str, SegInferer] = nn.ModuleDict({
             # pytorch forces model name to be string
-            f'{seed} {fold_id}': MBSegModel.load_from_checkpoint(
-                self.conf.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
+            f'{seed} {fold_id}': inferer_cls.load_from_checkpoint(
+                self.exp_conf.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt',
                 strict=True,
-                conf=conf,
+                conf=self.exp_conf,
             )
-            for seed in conf.p_seeds for fold_id in range(conf.num_folds)
+            for seed in conf.p_seeds for fold_id in range(conf.exp_conf.num_folds)
         })
         self.post_transform = monai.transforms.Compose([
             monai.transforms.KeepLargestConnectedComponent(is_onehot=True),
@@ -42,7 +48,7 @@ class MBSegPredictor(pl.LightningModule):
         case: str = batch[DataKey.CASE][0]
         split = self.split[case]
         if split not in ['train', 'test']:
-            assert split in range(conf.num_folds)
+            assert split in range(self.exp_conf.num_folds)
         img: MetaTensor = batch[DataKey.IMG]
 
         pred_prob = None
@@ -55,7 +61,9 @@ class MBSegPredictor(pl.LightningModule):
                 if not conf.all_folds and split == fold_id:
                     continue
                 cnt += 1
-                prob = model.infer(img, progress=False).sigmoid()
+                prob = model.infer(img, progress=False)
+                if model.conf.output_logit:
+                    prob = prob.sigmoid()
                 if pred_prob is None:
                     pred_prob = prob
                 else:
@@ -65,7 +73,7 @@ class MBSegPredictor(pl.LightningModule):
             torch.save(pred_prob, prob_save_path)
 
         pred = pred_prob[0] > conf.th
-        for i, seg_class in enumerate(SegClass):
+        for i, seg_class in enumerate(conf.exp_conf.seg_classes):
             class_pred = pred[i]
             save_path = MBSegPredConf.get_save_path(conf, case, seg_class, False)
             save_path.parent.mkdir(exist_ok=True, parents=True)
@@ -75,32 +83,41 @@ class MBSegPredictor(pl.LightningModule):
             post_save_path.parent.mkdir(exist_ok=True, parents=True)
             torch.save(class_pred_post, post_save_path)
 
-class MBSegPredictionDataModule(MBSegDataModule):
-    conf: MBSegPredConf
+class MBSegPredDataModule(pl.LightningDataModule):
+    def __init__(self, conf: MBSegPredConf):
+        super().__init__()
+        self.conf = conf
+        assert conf.datamodule_cls in [MBSegDataModule.__name__, MBM2FDataModule.__name__]
+        import mbs.datamodule
+        datamodule_cls = getattr(mbs.datamodule, conf.datamodule_cls)
+        self.inner: MBSegDataModule = datamodule_cls(conf.exp_conf)
+        self.inner.predict_data = self.predict_data
 
     def predict_data(self) -> Sequence:
         conf = self.conf
-        all_data = list(itertools.chain(*self.split_cohort.values()))
+        all_data = list(itertools.chain(*self.inner.split_cohort.values()))
         return all_data[conf.l:conf.r]
+
+    def predict_dataloader(self):
+        return self.inner.predict_dataloader()
 
 def main():
     torch.set_float32_matmul_precision('high')
-    torch.multiprocessing.set_start_method('forkserver')
-    conf = parse_exp_conf(MBSegPredConf)
+    conf, _ = parse_cli(MBSegPredConf)
+    MBSegPredConf.load_exp_conf(conf)
     MBSegPredConf.default_pred_output_dir(conf)
-    conf.log_dir = conf.p_output_dir
     conf.p_output_dir.mkdir(exist_ok=True, parents=True)
-    MBSegPredConf.save_conf_as_file(conf)
+    OmegaConf.save(conf, conf.p_output_dir / 'pred-conf.yaml')
     predictor = MBSegPredictor(conf)
     trainer = pl.Trainer(
         logger=False,
         num_nodes=1,
         accelerator='gpu',
         devices=1,
-        precision=conf.precision,
+        precision=conf.exp_conf.precision,
         benchmark=True,
     )
-    datamodule = MBSegPredictionDataModule(conf)
+    datamodule = MBSegPredDataModule(conf)
     trainer.predict(predictor, datamodule=datamodule)
 
 if __name__ == '__main__':

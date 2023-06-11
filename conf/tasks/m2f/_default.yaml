@@ -21,3 +21,7 @@ log_every_n_steps: 25
 cost_class: 0.1
 cost_dice: 1
 cost_bce: 1
+seg_classes:
+  - ST
+  - AT
+output_logit: false

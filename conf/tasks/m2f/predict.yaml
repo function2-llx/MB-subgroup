@@ -1,0 +1,11 @@
+exp_conf_cls: MBM2FConf
+datamodule_cls: MBM2FDataModule
+exp_conf_path: conf/tasks/m2f/base.yaml
+exp_conf:
+  print_shape: false
+  do_tta: true
+inferer_cls: MBM2FModel
+sw_overlap: 0.5
+p_seeds:
+  - 42
+  - 233

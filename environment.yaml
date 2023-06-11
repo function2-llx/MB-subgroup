@@ -18,7 +18,6 @@ dependencies:
   - transformers
   - timm
   - wandb
-  - libprotobuf=3  # https://github.com/wandb/wandb/issues/5633
   - llvm-openmp<16  # https://github.com/pytorch/pytorch/issues/99625
   - pandas
   - openpyxl

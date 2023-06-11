@@ -35,15 +35,6 @@ class MBConvertUniversalSegmentationD(mt.Transform):
 class MBM2FDataModule(MBSegDataModule):
     conf: MBM2FConf
 
-    def load_data_transform(self, stage: RunningStage):
-        ret = super().load_data_transform(stage)
-        CT_idx = list(SegClass).index(SegClass.CT)
-        assert CT_idx == len(SegClass) - 1
-        return ret + [
-            mt.LambdaD(DataKey.SEG, lambda seg: seg[:-1]),  # remove CT
-            mt.LambdaD([DataKey.IMG, DataKey.SEG], lambda x: x.permute(0, *range(3, 0, -1)).contiguous())
-        ]
-
     def train_collate_fn(self, batch: Sequence[dict]):
         elem = batch[0]
         ret = {}

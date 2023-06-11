@@ -3,10 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch.cuda
-from omegaconf import II
+from omegaconf import II, OmegaConf
 
-from luolib.conf import ClsExpConf, CrossValConf, SegExpConf, Mask2FormerConf
-from luolib.conf.base import SegCommonConf
+from luolib.conf import ClsExpConf, CrossValConf, SegExpConf, Mask2FormerConf, SegCommonConf, parse_exp_conf
 from luolib.types import tuple3_t
 
 from mbs.utils.enums import SUBGROUPS, SegClass, PROCESSED_DIR
@@ -18,7 +17,11 @@ class MBConfBase(CrossValConf):
     data_dir: Path = PROCESSED_DIR / 'cr-p10/normalized'
 
 @dataclass(kw_only=True)
-class MBSegConf(MBConfBase, SegExpConf):
+class MBSegConfBase(MBConfBase):
+    seg_classes: list[SegClass]
+
+@dataclass(kw_only=True)
+class MBSegConf(MBSegConfBase, SegExpConf):
     conf_root: Path = Path('conf/tasks/seg')
     output_root: Path = Path('output/seg')
     num_seg_classes: int = 3
@@ -30,7 +33,13 @@ class MBSegConf(MBConfBase, SegExpConf):
     val_cache_num: int = 100
 
 @dataclass(kw_only=True)
-class MBSegPredConf(MBSegConf):
+class MBSegPredConf(SegCommonConf):
+    exp_conf_cls: str
+    exp_conf_path: Path
+    exp_conf: MBSegConfBase
+    datamodule_cls: str
+    inferer_cls: str
+
     p_seeds: list[int]
     p_output_dir: Path | None = None
     th: float = 0.5
@@ -42,9 +51,9 @@ class MBSegPredConf(MBSegConf):
     def default_pred_output_dir(self):
         if self.p_output_dir is None:
             suffix = f'sw{self.sw_overlap}'
-            if self.do_tta:
+            if self.exp_conf.do_tta:
                 suffix += '+tta'
-            self.p_output_dir = self.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix
+            self.p_output_dir = self.exp_conf.output_dir / f'predict-{"+".join(map(str, self.p_seeds))}' / suffix
 
     def get_sub(self, post: bool):
         suffix = f'th{self.th}'
@@ -57,6 +66,15 @@ class MBSegPredConf(MBSegConf):
 
     def get_save_path(self, case: str, seg_class: SegClass, post: bool, suffix: str = '.pt'):
         return MBSegPredConf.get_case_save_dir(self, case) / MBSegPredConf.get_sub(self, post) / f'{seg_class}{suffix}'
+
+    def load_exp_conf(self):
+        assert self.exp_conf_cls in [MBM2FConf.__name__, MBSegConf.__name__]
+        exp_conf_cls = globals()[self.exp_conf_cls]
+        self.exp_conf = OmegaConf.merge(    # type: ignore
+            parse_exp_conf(exp_conf_cls, self.exp_conf_path),
+            # make omegaconf happy, or it will complain that the class of `conf.exp_conf` is not subclass of `exp_conf_cls`
+            OmegaConf.to_container(self.exp_conf),
+        )
 
 def get_cls_map(cls_scheme: str) -> dict[str, int]:
     match cls_scheme:
@@ -145,7 +163,7 @@ class MBClsConf(MBConfBase, ClsExpConf):
         return center
 
 @dataclass(kw_only=True)
-class MBM2FConf(MBConfBase, Mask2FormerConf, SegCommonConf):
+class MBM2FConf(MBSegConfBase, Mask2FormerConf):
     conf_root: Path = Path('conf/tasks/m2f')
     output_root: Path = Path('output/m2f')
     max_epochs: int | None = None
