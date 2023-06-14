@@ -27,6 +27,10 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
     def pred_keys(self):
         return self.conf.pred_keys
 
+    @property
+    def pred_sample_mode(self):
+        return GridSampleMode.NEAREST
+
     @cached_property
     def split_cohort(self):
         conf = self.conf
@@ -87,7 +91,7 @@ class MBClsDataModule(MBDataModuleBase, ClsDataModule):
             RandAffineCropD(
                 all_keys,
                 conf.sample_shape,
-                [GridSampleMode.BILINEAR, *it.repeat(GridSampleMode.NEAREST, len(self.pred_keys))],
+                [GridSampleMode.BILINEAR, *it.repeat(self.pred_sample_mode, len(self.pred_keys))],
                 conf.rotate_range,
                 conf.rotate_p,
                 conf.scale_range,
@@ -161,3 +165,7 @@ class MBM2FClsDataModule(MBClsDataModule):
             mt.LoadImageD(DataKey.IMG, ensure_channel_first=False, image_only=True),
             mt.LoadImageD(self.pred_keys, ensure_channel_first=False, image_only=True, reader=PyTorchReader),
         ]
+
+    @property
+    def pred_sample_mode(self):
+        return GridSampleMode.BILINEAR
