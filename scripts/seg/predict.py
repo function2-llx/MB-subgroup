@@ -61,7 +61,7 @@ class MBSegPredictor(pl.LightningModule):
                 if not conf.all_folds and split == fold_id:
                     continue
                 cnt += 1
-                prob = model.infer(img, progress=False)
+                prob = model.infer(img, progress=False)[0]
                 if model.conf.output_logit:
                     prob = prob.sigmoid()
                 if pred_prob is None:
@@ -72,16 +72,15 @@ class MBSegPredictor(pl.LightningModule):
             prob_save_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(pred_prob, prob_save_path)
 
-        pred = pred_prob[0] > conf.th
+        pred = pred_prob > conf.th
         for i, seg_class in enumerate(conf.exp_conf.seg_classes):
             class_pred = pred[i]
-            save_path = MBSegPredConf.get_save_path(conf, case, seg_class, False)
-            save_path.parent.mkdir(exist_ok=True, parents=True)
-            torch.save(class_pred, save_path)
-            class_pred_post = self.post_transform(class_pred[None])[0]
-            post_save_path = MBSegPredConf.get_save_path(conf, case, seg_class, True)
-            post_save_path.parent.mkdir(exist_ok=True, parents=True)
-            torch.save(class_pred_post, post_save_path)
+            for do_post in [False, True]:
+                save_path = MBSegPredConf.get_save_path(conf, case, seg_class, do_post)
+                save_path.parent.mkdir(exist_ok=True, parents=True)
+                if do_post:
+                    class_pred = self.post_transform(class_pred[None])[0]
+                torch.save(class_pred, save_path)
 
 class MBSegPredDataModule(pl.LightningDataModule):
     def __init__(self, conf: MBSegPredConf):

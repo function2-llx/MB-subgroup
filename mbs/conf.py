@@ -5,7 +5,7 @@ from pathlib import Path
 import torch.cuda
 from omegaconf import II, OmegaConf
 
-from luolib.conf import ClsExpConf, CrossValConf, SegExpConf, Mask2FormerConf, SegCommonConf, parse_exp_conf
+from luolib.conf import ClsExpConf, CrossValConf, SegExpConf, Mask2FormerConf, SegCommonConf, OptimizerConf, parse_exp_conf
 from luolib.types import tuple3_t
 
 from mbs.utils.enums import SUBGROUPS, SegClass, PROCESSED_DIR
@@ -141,12 +141,17 @@ class MBClsConf(MBConfBase, ClsExpConf):
     monitor_mode: str = 'min'
     # include seed
     pretrain_cv_dir: Path | None = None
+    pretrain_ckpt_path: Path | None = None
     seg_pred_dir: Path
     th: float = 0.5
     use_post: bool
     eval_batch_size: int = 16 * torch.cuda.device_count()
+    val_test: bool = True
     # choices: 4way, 3way, WS-G34, WS, G34
     cls_scheme: str = '4way'
+    pred_keys: list[str]
+    use_clinical: bool = False
+
     pool_types: list[str]
     pooling_layer: str
     pooling_level_stride: list[int]
@@ -174,3 +179,7 @@ class MBM2FConf(MBSegConfBase, Mask2FormerConf):
     monitor_mode: str = 'max'
     multi_label: bool = True
     num_seg_classes: int = II('.num_fg_classes')
+
+@dataclass(kw_only=True)
+class MBM2FClsConf(MBClsConf, Mask2FormerConf):
+    cls_head_optim: OptimizerConf

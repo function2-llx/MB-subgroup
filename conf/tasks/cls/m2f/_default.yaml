@@ -1,0 +1,39 @@
+_base:
+  - ../_default.yaml
+  - ${mbs.conf_root:}/model/m2f/swin+msdeform.yaml
+  - cls_head_optim: ${luolib.conf_root:}/optimizer/adamw.yaml
+
+output_root: output/cls-m2f
+seg_pred_dir: output/m2f/base/predict-42+233/sw0.5+tta
+pretrain_cv_dir: output/m2f/base/run-42
+
+train_batch_size: 32
+backbone:
+  kwargs:
+    use_checkpoint: true
+pixel_decoder:
+  kwargs:
+    gradient_checkpointing: true
+transformer_decoder:
+  kwargs:
+    gradient_checkpointing: true
+
+pred_keys:
+  - mask
+sample_shape: [16, 192, 256]
+num_fg_classes: 2
+cls_weights: [0.25819889, 0.125, 0.1796053, 0.10425721]
+
+max_steps: 500
+optimizer:
+  lr: 2e-6
+  weight_decay: 0
+cls_head_optim:
+  lr: 2e-5
+scheduler:
+  name: multistep
+  frequency: 100
+  kwargs:
+    warmup_t: 0
+    decay_t: [400]
+    decay_rate: 0.2

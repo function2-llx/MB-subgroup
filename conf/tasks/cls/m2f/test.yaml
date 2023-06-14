@@ -1,0 +1,11 @@
+exp_conf_cls: MBM2FClsConf
+exp_conf_path: conf/tasks/cls/m2f/nc.yaml
+exp_conf:
+  do_tta: false
+  print_shape: false
+  val_test: false
+datamodule_cls: MBM2FClsDataModule
+inferer_cls: MBM2FClsModel
+p_seeds:
+  - 42
+  - 233

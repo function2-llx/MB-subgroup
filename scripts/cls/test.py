@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -9,6 +7,7 @@ from pathlib import Path
 import torchmetrics
 from matplotlib import pyplot as plt
 import numpy as np
+from omegaconf import OmegaConf
 import pandas as pd
 import pytorch_lightning as pl
 from sklearn.metrics import auc, roc_auc_score, roc_curve
@@ -16,8 +15,7 @@ import torch
 from torch import nn
 from torchmetrics.utilities.enums import AverageMethod
 
-from luolib.conf import parse_exp_conf
-from luolib.models import ClsModel
+from luolib.conf import parse_exp_conf, parse_cli
 from luolib.models.lightning.cls_model import MetricsCollection
 from luolib.utils import DataKey
 
@@ -26,13 +24,29 @@ from mbs.datamodule import MBClsDataModule, load_split
 from mbs.models import MBClsModel
 
 @dataclass(kw_only=True)
-class MBClsTestConf(MBClsConf):
+class MBClsTestConf:
+    exp_conf_cls: str
+    exp_conf_path: Path
+    exp_conf: MBClsConf
+    datamodule_cls: str
+    inferer_cls: str
+
     p_seeds: list[int]
-    include_adults: bool = False
-    eval_batch_size: int = 1
-    print_shape: bool = False
-    val_cache_num: int = 0
+    # include_adults: bool = False
+    # eval_batch_size: int = 1
+    # print_shape: bool = False
+    # val_cache_num: int = 0
     vote: bool = False
+
+    def load_exp_conf(self):
+        # assert self.exp_conf_cls in [MBM2FConf.__name__, MBSegConf.__name__]
+        import mbs.conf
+        exp_conf_cls = getattr(mbs.conf, self.exp_conf_cls)
+        self.exp_conf = OmegaConf.merge(    # type: ignore
+            parse_exp_conf(exp_conf_cls, self.exp_conf_path),
+            # make omegaconf happy, or it may complain that the class of `conf.exp_conf` is not subclass of `exp_conf_cls`
+            OmegaConf.to_container(self.exp_conf),
+        )
 
 class Scheme(nn.Module):
     def __init__(self, scheme: str):
@@ -56,9 +70,9 @@ class Scheme(nn.Module):
         scheme_pred = cls_map_vec[pred]
         scheme_prob = torch.zeros(batch_size, self.num_classes, device=prob.device)
         scheme_prob.scatter_add_(1, cls_map_vec.expand(batch_size, -1), prob)
-        MBTester.accumulate_metrics(scheme_prob, scheme_label, self.metrics, scheme_pred)
+        MBClsModel.accumulate_metrics(scheme_prob, scheme_label, self.metrics, scheme_pred)
         if split != 'test':
-            MBTester.accumulate_metrics(scheme_prob, scheme_label, self.micro_metrics, scheme_pred)
+            MBClsModel.accumulate_metrics(scheme_prob, scheme_label, self.micro_metrics, scheme_pred)
 
         for i, case in enumerate(cases):
             self.case_output.append(
@@ -75,10 +89,14 @@ class Scheme(nn.Module):
                 }
             )
 
-class MBTester(ClsModel):
+class MBTester(pl.LightningModule):
     conf: MBClsTestConf
     models: Sequence[Sequence[MBClsModel]] | nn.ModuleList
     schemes: Sequence[Scheme] | nn.ModuleList
+
+    @property
+    def exp_conf(self):
+        return self.conf.exp_conf
 
     @staticmethod
     def create_metrics(num_classes: int) -> MetricsCollection:
@@ -97,20 +115,20 @@ class MBTester(ClsModel):
             ]
         })
 
-    @property
-    def cls_names(self):
-        return get_cls_names(self.conf.cls_scheme)
-
     def __init__(self, conf: MBClsTestConf):
-        super().__init__(conf)
+        super().__init__()
+        self.conf = conf
+        exp_conf = self.exp_conf
+        import mbs.models
+        model_cls: type[MBClsModel] = getattr(mbs.models, conf.inferer_cls)
         self.schemes = nn.ModuleList([Scheme(scheme) for scheme in ['4way', '3way', 'WS-G34']])
         self.models = nn.ModuleList([
             nn.ModuleList()
-            for _ in range(conf.num_folds)
+            for _ in range(exp_conf.num_folds)
         ])
-        for seed, fold_id in itertools.product(conf.p_seeds, range(conf.num_folds)):
-            ckpt_path = self.conf.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt'
-            self.models[fold_id].append(MBClsModel.load_from_checkpoint(ckpt_path, strict=True, conf=conf))
+        for seed, fold_id in itertools.product(conf.p_seeds, range(exp_conf.num_folds)):
+            ckpt_path = exp_conf.output_dir / f'run-{seed}' / f'fold-{fold_id}' / 'last.ckpt'
+            self.models[fold_id].append(model_cls.load_from_checkpoint(ckpt_path, strict=True, conf=exp_conf))
             print(f'load model from {ckpt_path}')
 
         self.split = load_split()
@@ -123,6 +141,7 @@ class MBTester(ClsModel):
 
     def test_step(self, batch: dict, *args, **kwargs):
         conf = self.conf
+        exp_conf = conf.exp_conf
         prob = None
         cases = batch[DataKey.CASE]
         batch_size = len(cases)
@@ -137,7 +156,7 @@ class MBTester(ClsModel):
             models = self.models[split]
         pred = torch.empty(batch_size, len(models), dtype=torch.int32, device=self.device)
         for i, model in enumerate(models):
-            logit = model.cal_logit(batch, flip=conf.do_tta)
+            logit = model.infer_logit(batch)
             cur_prob = logit.softmax(dim=-1)
             pred[:, i] = cur_prob.argmax(dim=-1)
             if prob is None:
@@ -145,9 +164,9 @@ class MBTester(ClsModel):
             else:
                 prob += cur_prob
         prob /= len(models)
-        vote = torch.empty(batch_size, conf.num_cls_classes, dtype=torch.int32, device=self.device)
+        vote = torch.empty(batch_size, exp_conf.num_cls_classes, dtype=torch.int32, device=self.device)
         for i in range(batch_size):
-            vote[i] = pred[i].bincount(minlength=conf.num_cls_classes)
+            vote[i] = pred[i].bincount(minlength=exp_conf.num_cls_classes)
         max_vote, vote_pred = vote.max(dim=-1, keepdim=True)
         pred = prob.argmax(dim=-1)
         if conf.vote:
@@ -190,6 +209,7 @@ def plot_roc(y_true: np.ndarray, y_score: np.ndarray, target_names: list[str], o
     fig.savefig(output_dir / f'{save_name}.pdf')
     fig.savefig(output_dir / f'{save_name}.png')
 
+# copy from radiomics
 def plot_roc_curve(y_test, y_score, model_name, output_dir):
     import seaborn as sns
     sns.set()
@@ -243,37 +263,42 @@ def plot_roc_curve(y_test, y_score, model_name, output_dir):
 #     with open(output_dir / 'test-report.json', 'w') as f:
 #         json.dump(tester.test_report, f, indent=4, ensure_ascii=False)
 
-class MBClsTestDataModule(MBClsDataModule):
-    def val_dataloader(self):
-        return super(MBClsDataModule, self).val_dataloader()
+# class MBClsTestDataModule(MBClsDataModule):
+#     def val_dataloader(self):
+#         return super(MBClsDataModule, self).val_dataloader()
 
 def main():
-    conf = parse_exp_conf(MBClsTestConf)
-    datamodule = MBClsTestDataModule(conf)
-    model = MBTester(conf)
+    # conf = parse_exp_conf(MBClsTestConf)
+    conf, _ = parse_cli(MBClsTestConf)
+    MBClsTestConf.load_exp_conf(conf)
+    torch.set_float32_matmul_precision(conf.exp_conf.float32_matmul_precision)
+    import mbs.datamodule
+    datamodule_cls = getattr(mbs.datamodule, conf.datamodule_cls)
+    datamodule = datamodule_cls(conf.exp_conf)
+    tester = MBTester(conf)
     trainer = pl.Trainer(
         logger=False,
         accelerator='gpu',
         devices=torch.cuda.device_count(),
     )
-    for i in range(conf.num_folds):
+    for i in range(conf.exp_conf.num_folds):
         datamodule.val_id = i
-        trainer.test(model, datamodule.val_dataloader())
+        trainer.test(tester, datamodule.val_dataloader())
         print(f'evaluating {i}')
-        for scheme in model.schemes:
-            scheme.report[f'fold-{i}'] = model.metrics_report(scheme.metrics, scheme.names)
-    for scheme in model.schemes:
+        for scheme in tester.schemes:
+            scheme.report[f'fold-{i}'] = MBClsModel.metrics_report(scheme.metrics, scheme.names)
+    for scheme in tester.schemes:
         scheme.report['macro'] = pd.DataFrame(scheme.report).T.mean().to_dict()
-        scheme.report['micro'] = model.metrics_report(scheme.micro_metrics, scheme.names)
-    trainer.test(model, datamodule.test_dataloader())
-    for scheme in model.schemes:
-        scheme.report['test'] = model.metrics_report(scheme.metrics, scheme.names)
+        scheme.report['micro'] = MBClsModel.metrics_report(scheme.micro_metrics, scheme.names)
+    trainer.test(tester, datamodule.test_dataloader())
+    for scheme in tester.schemes:
+        scheme.report['test'] = MBClsModel.metrics_report(scheme.metrics, scheme.names)
 
-    save_dir = conf.output_dir / 'eval'
+    save_dir = conf.exp_conf.output_dir / f"eval-{'+'.join(map(str, sorted(conf.p_seeds)))}{'-tta' if conf.exp_conf.do_tta else ''}"
     save_dir.mkdir(exist_ok=True)
-    model.plot_roc(save_dir)
+    tester.plot_roc(save_dir)
     with pd.ExcelWriter(save_dir / f'case-output.xlsx') as case_output_writer, pd.ExcelWriter(save_dir / 'report.xlsx') as report_writer:
-        for scheme in model.schemes:
+        for scheme in tester.schemes:
             pd.DataFrame(scheme.case_output).to_excel(case_output_writer, scheme.scheme, freeze_panes=(1, 1), index=False)
             pd.DataFrame(scheme.report).to_excel(report_writer, scheme.scheme, freeze_panes=(1, 1))
 

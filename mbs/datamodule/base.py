@@ -4,6 +4,7 @@ import math
 from typing import Sequence
 
 import pandas as pd
+import torch
 
 from luolib.datamodule import CrossValDataModule
 from luolib.datamodule.base import DataSeq
@@ -13,7 +14,8 @@ from mbs.conf import MBConfBase
 from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 def load_clinical():
-    clinical = pd.read_excel(CLINICAL_DIR / 'clinical-com.xlsx', dtype='string').set_index('住院号')
+    clinical = pd.read_excel(CLINICAL_DIR / '影像预测分子分型.xlsx', dtype={'number': 'string'}).set_index('number')
+    clinical.rename(columns={'gender': 'sex'}, inplace=True)
     return clinical
 
 class MBDataModuleBase(CrossValDataModule):
@@ -23,17 +25,24 @@ class MBDataModuleBase(CrossValDataModule):
     def split_cohort(self) -> dict[Hashable, DataSeq]:
         plan = load_merged_plan()
         split = load_split()
+        clinical = load_clinical()
         if not self.conf.include_adults:
             plan = plan[plan[MBDataKey.GROUP] == MBGroup.CHILD]
         split_cohort = {}
         for number, info in plan.iterrows():
             case_data_dir = self.conf.data_dir / number
+            age: int = clinical.at[number, 'age']
+            sex: int = clinical.at[number, 'sex']
+            clinical_vec = torch.zeros(3)
+            clinical_vec[0] = age / 100
+            clinical_vec[sex] = 1
             split_cohort.setdefault(split[number], []).append({
                 DataKey.CASE: number,
                 **{
                     key: path
                     for key in [DataKey.IMG, DataKey.SEG] if (path := case_data_dir / f'{key}.npy').exists()
                 },
+                MBDataKey.CLINICAL: clinical_vec,
                 MBDataKey.SUBGROUP: info['subgroup'],
             })
         return split_cohort

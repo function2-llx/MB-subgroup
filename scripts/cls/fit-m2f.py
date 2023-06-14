@@ -8,12 +8,13 @@ import torch
 import wandb
 
 from luolib.conf import parse_exp_conf
-from mbs.conf import MBClsConf
-from mbs.datamodule import MBClsDataModule
-from mbs.models.lightning.cls_model import MBClsModel
+from mbs.conf import MBM2FClsConf
+from mbs.datamodule import MBM2FClsDataModule
+from mbs.models.lightning import MBM2FClsModel
 
-task_name = 'mbs'
-def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
+task_name = 'mbs-m2f'
+
+def do_train(conf: MBM2FClsConf, datamodule: MBM2FClsDataModule, val_id: int):
     conf = deepcopy(conf)
     pl.seed_everything(conf.seed)
     if val_id == -1:
@@ -68,24 +69,29 @@ def do_train(conf: MBClsConf, datamodule: MBClsDataModule, val_id: int):
         check_val_every_n_epoch=None,
         log_every_n_steps=10,
     )
-    if conf.pretrain_cv_dir is not None and conf.backbone.ckpt_path is None:
-        conf.backbone.ckpt_path = conf.pretrain_cv_dir / f'fold-{val_id}/last.ckpt'
-    elif conf.backbone.ckpt_path is None:
+    if conf.pretrain_cv_dir is not None and conf.pretrain_ckpt_path is None:
+        conf.pretrain_ckpt_path = conf.pretrain_cv_dir / f'fold-{val_id}/last.ckpt'
+    MBM2FClsConf.save_conf_as_file(conf)
+
+    model = MBM2FClsModel(conf)
+    if conf.pretrain_ckpt_path is None:
         print('train from scratch!')
-    model = MBClsModel(conf)
-    MBClsConf.save_conf_as_file(conf)
-    trainer.fit(model, datamodule=datamodule, ckpt_path=MBClsConf.get_last_ckpt_path(conf))
+    else:
+        missing_keys, unexpected_keys = model.load_state_dict(torch.load(conf.pretrain_ckpt_path)['state_dict'], strict=False)
+        assert len(unexpected_keys) == 0
+        print(missing_keys)
+
+    trainer.fit(model, datamodule=datamodule, ckpt_path=MBM2FClsConf.get_last_ckpt_path(conf))
     wandb.finish()
 
 def main():
-    conf = parse_exp_conf(MBClsConf)
+    conf = parse_exp_conf(MBM2FClsConf)
     torch.set_float32_matmul_precision(conf.float32_matmul_precision)
 
     conf.output_dir /= f'run-{conf.seed}'
-    datamodule = MBClsDataModule(conf)
+    datamodule = MBM2FClsDataModule(conf)
     for val_id in conf.fold_ids:
-        if conf.do_train:
-            do_train(conf, datamodule, val_id)
+        do_train(conf, datamodule, val_id)
 
 if __name__ == '__main__':
     main()
