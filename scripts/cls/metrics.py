@@ -65,7 +65,10 @@ def run(group: MBGroup | None = None):
 
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 12
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
+    from matplotlib.figure import Figure
+    fig: Figure
+    fig.suptitle(group_name, size=32)
     fig.set_facecolor('lightgray')
     for i, subgroup in enumerate(subgroups.names):
         subgroup_id = SUBGROUPS.index(subgroup)
