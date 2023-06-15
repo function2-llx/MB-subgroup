@@ -1,6 +1,6 @@
 exp_conf_cls: MBM2FClsConf
-exp_conf_path: conf/tasks/cls/m2f/nc.yaml
-exp_conf:
+exp_conf_path: conf/tasks/cls/m2f/ac-2.yaml
+exp_conf_kwargs:
   do_tta: false
   print_shape: false
   val_test: false

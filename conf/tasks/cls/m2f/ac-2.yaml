@@ -1,0 +1,5 @@
+_base:
+  - _default.yaml
+
+use_clinical: true
+pretrain_ckpt_path: output/m2f/base/run-42/fold-2/last.ckpt

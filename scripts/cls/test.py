@@ -32,7 +32,6 @@ class MBClsTestConf:
     inferer_cls: str
 
     p_seeds: list[int]
-    num_folds: int
     vote: bool = False
 
 class Scheme(nn.Module):
