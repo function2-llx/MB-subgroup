@@ -15,38 +15,25 @@ import torch
 from torch import nn
 from torchmetrics.utilities.enums import AverageMethod
 
-from luolib.conf import parse_exp_conf, parse_cli
+from luolib.conf import parse_cli, parse_exp_conf
 from luolib.models.lightning.cls_model import MetricsCollection
 from luolib.utils import DataKey
 
-from mbs.conf import MBClsConf, get_cls_map_vec, get_cls_names
-from mbs.datamodule import MBClsDataModule, load_split
+from mbs.conf import get_cls_map_vec, get_cls_names, MBClsConf
+from mbs.datamodule import load_split
 from mbs.models import MBClsModel
 
 @dataclass(kw_only=True)
 class MBClsTestConf:
     exp_conf_cls: str
     exp_conf_path: Path
-    exp_conf: MBClsConf
+    exp_conf_kwargs: dict
     datamodule_cls: str
     inferer_cls: str
 
     p_seeds: list[int]
-    # include_adults: bool = False
-    # eval_batch_size: int = 1
-    # print_shape: bool = False
-    # val_cache_num: int = 0
+    num_folds: int
     vote: bool = False
-
-    def load_exp_conf(self):
-        # assert self.exp_conf_cls in [MBM2FConf.__name__, MBSegConf.__name__]
-        import mbs.conf
-        exp_conf_cls = getattr(mbs.conf, self.exp_conf_cls)
-        self.exp_conf = OmegaConf.merge(    # type: ignore
-            parse_exp_conf(exp_conf_cls, self.exp_conf_path),
-            # make omegaconf happy, or it may complain that the class of `conf.exp_conf` is not subclass of `exp_conf_cls`
-            OmegaConf.to_container(self.exp_conf),
-        )
 
 class Scheme(nn.Module):
     def __init__(self, scheme: str):
@@ -94,10 +81,6 @@ class MBTester(pl.LightningModule):
     models: Sequence[Sequence[MBClsModel]] | nn.ModuleList
     schemes: Sequence[Scheme] | nn.ModuleList
 
-    @property
-    def exp_conf(self):
-        return self.conf.exp_conf
-
     @staticmethod
     def create_metrics(num_classes: int) -> MetricsCollection:
         return nn.ModuleDict({
@@ -115,10 +98,9 @@ class MBTester(pl.LightningModule):
             ]
         })
 
-    def __init__(self, conf: MBClsTestConf):
+    def __init__(self, conf: MBClsTestConf, exp_conf: MBClsConf):
         super().__init__()
         self.conf = conf
-        exp_conf = self.exp_conf
         import mbs.models
         model_cls: type[MBClsModel] = getattr(mbs.models, conf.inferer_cls)
         self.schemes = nn.ModuleList([Scheme(scheme) for scheme in ['4way', '3way', 'WS-G34']])
@@ -141,7 +123,6 @@ class MBTester(pl.LightningModule):
 
     def test_step(self, batch: dict, *args, **kwargs):
         conf = self.conf
-        exp_conf = conf.exp_conf
         prob = None
         cases = batch[DataKey.CASE]
         batch_size = len(cases)
@@ -164,9 +145,9 @@ class MBTester(pl.LightningModule):
             else:
                 prob += cur_prob
         prob /= len(models)
-        vote = torch.empty(batch_size, exp_conf.num_cls_classes, dtype=torch.int32, device=self.device)
+        vote = torch.empty_like(prob, dtype=torch.int32)
         for i in range(batch_size):
-            vote[i] = pred[i].bincount(minlength=exp_conf.num_cls_classes)
+            vote[i] = pred[i].bincount(minlength=vote.shape[1])
         max_vote, vote_pred = vote.max(dim=-1, keepdim=True)
         pred = prob.argmax(dim=-1)
         if conf.vote:
@@ -235,53 +216,25 @@ def plot_roc_curve(y_test, y_score, model_name, output_dir):
     fig.savefig(output_dir / 'test-roc-a.pdf')
     fig.savefig(output_dir / 'test-roc-a.png')
 
-    # plt.show()
-
-# def run_test():
-#     (output_dir := conf.output_dir / 'eval-test' / conf.cls_scheme).mkdir(parents=True, exist_ok=True)
-#     tester.reset()
-#     tester.val_fold = 'test'
-#     trainer.test(tester, dataloaders=datamodule.test_dataloader())
-#     results_df = pd.DataFrame.from_records(tester.case_outputs)
-#     cls_names = conf.cls_names
-#     y_true = np.array([
-#         conf.cls_names.index(case['true'])
-#         for case in tester.case_outputs
-#     ])
-#     y_score = np.array([
-#         case['prob']
-#         for case in tester.case_outputs
-#     ])
-#     if len(cls_names) == 2:
-#         cls_names = [conf.cls_scheme, conf.cls_scheme]
-#     plot_roc(y_true, y_score, cls_names, output_dir)
-#     if len(cls_names) == 2:
-#         plot_roc_curve(y_true, y_score[:, 1], 'swt', output_dir)
-
-#     results_df.to_csv(output_dir / 'test-results.csv', index=False)
-#     results_df.to_excel(output_dir / 'test-results.xlsx', index=False)
-#     with open(output_dir / 'test-report.json', 'w') as f:
-#         json.dump(tester.test_report, f, indent=4, ensure_ascii=False)
-
-# class MBClsTestDataModule(MBClsDataModule):
-#     def val_dataloader(self):
-#         return super(MBClsDataModule, self).val_dataloader()
-
 def main():
-    # conf = parse_exp_conf(MBClsTestConf)
     conf, _ = parse_cli(MBClsTestConf)
-    MBClsTestConf.load_exp_conf(conf)
-    torch.set_float32_matmul_precision(conf.exp_conf.float32_matmul_precision)
+    import mbs.conf
+    exp_conf_cls = getattr(mbs.conf, conf.exp_conf_cls)
+    exp_conf: MBClsConf = OmegaConf.merge(  # type: ignore
+        parse_exp_conf(exp_conf_cls, conf.exp_conf_path),
+        conf.exp_conf_kwargs,
+    )
+    torch.set_float32_matmul_precision('high')
     import mbs.datamodule
     datamodule_cls = getattr(mbs.datamodule, conf.datamodule_cls)
-    datamodule = datamodule_cls(conf.exp_conf)
-    tester = MBTester(conf)
+    datamodule = datamodule_cls(exp_conf)
+    tester = MBTester(conf, exp_conf)
     trainer = pl.Trainer(
         logger=False,
         accelerator='gpu',
         devices=torch.cuda.device_count(),
     )
-    for i in range(conf.exp_conf.num_folds):
+    for i in range(exp_conf.num_folds):
         datamodule.val_id = i
         trainer.test(tester, datamodule.val_dataloader())
         print(f'evaluating {i}')
@@ -294,7 +247,7 @@ def main():
     for scheme in tester.schemes:
         scheme.report['test'] = MBClsModel.metrics_report(scheme.metrics, scheme.names)
 
-    save_dir = conf.exp_conf.output_dir / f"eval-{'+'.join(map(str, sorted(conf.p_seeds)))}{'-tta' if conf.exp_conf.do_tta else ''}"
+    save_dir = exp_conf.output_dir / f"eval-{'+'.join(map(str, sorted(conf.p_seeds)))}{'-tta' if exp_conf.do_tta else ''}"
     save_dir.mkdir(exist_ok=True)
     tester.plot_roc(save_dir)
     with pd.ExcelWriter(save_dir / f'case-output.xlsx') as case_output_writer, pd.ExcelWriter(save_dir / 'report.xlsx') as report_writer:
