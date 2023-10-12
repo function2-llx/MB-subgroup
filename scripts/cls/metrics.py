@@ -77,9 +77,9 @@ def run(group: MBGroup | None = None):
         fpr, tpr, _ = roc_curve(label == i, prob[:, i])
         ax.plot(fpr, tpr, color='#1CA9C9', lw=2, label=f'ROC curve')
         ax.fill_between(fpr, tpr, color='lightblue', label='Area under the curve (AUC)')
-        ax.scatter(cx := 1 - report.at[subgroup, 'spe'], cy := report.at[subgroup, 'sen'], s=23,
-                   marker='o', color='red', label='Current classifier', zorder=2)
-        ax.annotate(f'({cx * 100:.1f}%, {cy * 100:.1f}%)', (cx, cy), textcoords="offset points", xytext=(33, -11), ha='center', fontsize=9)
+        # ax.scatter(cx := 1 - report.at[subgroup, 'spe'], cy := report.at[subgroup, 'sen'], s=23,
+        #            marker='o', color='red', label='Current classifier', zorder=2)
+        # ax.annotate(f'({cx * 100:.1f}%, {cy * 100:.1f}%)', (cx, cy), textcoords="offset points", xytext=(33, -11), ha='center', fontsize=9)
         auroc = auc(fpr, tpr)
         assert auroc - report.at[subgroup, 'auroc'] < 1e-5
         ax.text(0.7, 0.5, f'{subgroup}\nAUC={auroc:.3f}', ha='center', va='center', bbox=dict(facecolor='white', edgecolor='white'))

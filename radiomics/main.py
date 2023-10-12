@@ -194,12 +194,14 @@ def main():
     for s1, ws, g34, cp in it.product(*it.repeat(model_names, 3), [False, True]):
         report = cal_metrics(merge_prob(s1, ws, g34, cp))
         report['model'] = f'{s1}+{ws}+{g34}' + ('(cp)' if cp else '')
-        reports.append(report)
+        if s1 == ws == g34 and not cp:
+            report['model'] = s1
+            reports.append(report)
     for model_name in model_names:
         y_prob = pd.read_excel(save_path, sheet_name=f'e2e-{model_name}', index_col='case').to_numpy()
         report = cal_metrics(y_prob)
         report['model'] = f'e2e-{model_name}'
-        reports.append(report)
+        # reports.append(report)
     reports = pd.DataFrame(reports).set_index('model')
     metrics = {
         name: np.stack(metric.to_numpy())
