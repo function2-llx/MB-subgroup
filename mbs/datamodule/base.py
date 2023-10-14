@@ -1,4 +1,4 @@
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping
 from functools import cached_property
 import math
 from typing import Sequence
@@ -10,7 +10,7 @@ from luolib.datamodule import CrossValDataModule
 from luolib.datamodule.base import DataSeq
 from luolib.utils import DataSplit, DataKey
 
-from mbs.conf import MBConfBase
+# from mbs.conf import MBConfBase
 from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 def load_clinical():
@@ -19,7 +19,7 @@ def load_clinical():
     return clinical
 
 class MBDataModuleBase(CrossValDataModule):
-    conf: MBConfBase
+    # conf: MBConfBase
 
     @cached_property
     def split_cohort(self) -> dict[Hashable, DataSeq]:

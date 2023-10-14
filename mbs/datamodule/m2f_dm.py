@@ -11,7 +11,7 @@ from monai.data.utils import collate_meta_tensor
 
 from mbs.utils.enums import SegClass
 from .seg_dm import MBSegDataModule
-from ..conf import MBM2FConf
+# from ..conf import MBM2FConf
 
 class MBConvertUniversalSegmentationD(mt.Transform):
     def __init__(
@@ -33,7 +33,7 @@ class MBConvertUniversalSegmentationD(mt.Transform):
         return d
 
 class MBM2FDataModule(MBSegDataModule):
-    conf: MBM2FConf
+    # conf: MBM2FConf
 
     def train_collate_fn(self, batch: Sequence[dict]):
         elem = batch[0]

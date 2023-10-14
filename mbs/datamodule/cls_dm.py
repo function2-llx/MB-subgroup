@@ -5,23 +5,24 @@ from pytorch_lightning.trainer.states import RunningStage
 
 from luolib.datamodule.cls_dm import ClsDataModule
 from luolib.reader import PyTorchReader
-from luolib.transforms import SpatialCropWithSpecifiedCenterD, RandAffineCropD, RandAdjustContrastD, RandGammaCorrectionD, SimulateLowResolutionD
+from luolib import transforms as lt
+# from luolib.transforms import SpatialCropWithSpecifiedCenterD, RandAffineCropD, RandAdjustContrastD, RandGammaCorrectionD, SimulateLowResolutionD
 from luolib.utils import DataKey
 from monai import transforms as mt
 from monai.data import CacheDataset
 from monai.utils import PytorchPadMode, GridSampleMode
 
 from .base import MBDataModuleBase
-from ..conf import MBClsConf, get_cls_map
+# from ..conf import MBClsConf, get_cls_map
 from ..utils.enums import MBDataKey, SegClass
 
 class MBClsDataModule(MBDataModuleBase, ClsDataModule):
-    conf: MBClsConf
+    # conf: MBClsConf
 
-    def __init__(self, conf: MBClsConf):
-        super().__init__(conf)
-        if conf.cls_weights is None:
-            conf.cls_weights = self.default_cls_weights()
+    # def __init__(self, conf: MBClsConf):
+    #     super().__init__(conf)
+    #     if conf.cls_weights is None:
+    #         conf.cls_weights = self.default_cls_weights()
 
     @property
     def pred_keys(self):

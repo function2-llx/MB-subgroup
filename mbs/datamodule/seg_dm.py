@@ -6,7 +6,7 @@ from luolib.datamodule import SegDataModule
 from luolib.utils import DataKey
 from monai import transforms as mt
 
-from mbs.conf import MBSegConf
+# from mbs.conf import MBSegConf
 from mbs.datamodule import MBDataModuleBase
 from mbs.utils.enums import SegClass
 
@@ -14,7 +14,7 @@ def _filter_seg(data: Sequence[dict]):
     return list(filter(lambda x: DataKey.SEG in x, data))
 
 class MBSegDataModule(MBDataModuleBase, SegDataModule):
-    conf: MBSegConf
+    # conf: MBSegConf
 
     def load_data_transform(self, stage: RunningStage):
         match stage:

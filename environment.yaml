@@ -33,3 +33,4 @@ dependencies:
     - antspyx
     - jsonargparse[signatures]  # for lightning CLI
     - xformers
+    - -e third-party/nnU-Net

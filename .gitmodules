@@ -1,3 +1,6 @@
 [submodule "third-party/LuoLib"]
 	path = third-party/LuoLib
 	url = git@github.com:function2-llx/LuoLib.git
+[submodule "third-party/nnUNet"]
+	path = third-party/nnUNet
+	url = https://github.com/MIC-DKFZ/nnUNet.git
