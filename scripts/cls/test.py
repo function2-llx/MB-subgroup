@@ -234,7 +234,7 @@ def main():
         devices=torch.cuda.device_count(),
     )
     for i in range(exp_conf.num_folds):
-        datamodule.val_id = i
+        datamodule.fold_id = i
         trainer.test(tester, datamodule.val_dataloader())
         print(f'evaluating {i}')
         for scheme in tester.schemes:

@@ -19,8 +19,8 @@ output_dir: Path
 cropped_output_dir: Path
 padding: int
 
-# 懂的都懂
 class MyRegAladinInputSpec(RegAladinInputSpec):
+    # nipype 漏列了这个参数
     pad_val = traits.Float(desc="Padding value", argstr="-pad %f")
 
 class MyRegAladin(RegAladin):

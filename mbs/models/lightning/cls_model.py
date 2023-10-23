@@ -9,7 +9,7 @@ from tqdm import tqdm
 from luolib.models import ClsModel, Mask2Former
 from luolib.models.init import init_common
 from luolib.models.utils import get_no_weight_decay_keys
-from luolib.types import ParamGroup
+# from luolib.types import NamedParamGroup
 from luolib.utils import DataKey
 
 from mbs.conf import MBClsConf, get_cls_names, MBM2FClsConf
@@ -91,35 +91,35 @@ class MBM2FClsModel(MBClsModel, Mask2Former):
     def get_cls_feature_dim(self):
         return self.transformer_decoder.hidden_dim
 
-    def get_param_groups(self) -> list[ParamGroup]:
-        conf = self.conf
-        param_groups = super().get_param_groups()
-        cls_head_groups = []
-        # yes, please refactor this in the future if possible
-        no_weight_decay_keys = get_no_weight_decay_keys(self)
-        for param_group in param_groups:
-            cls_head_group: ParamGroup = {
-                'param_names': [],
-                'lr': conf.cls_head_optim.lr,
-                'weight_decay': conf.cls_head_optim.weight_decay if param_group['param_names'][0] in no_weight_decay_keys else 0
-            }
-            params = param_group.pop('params', None)
-            remained_idx = []
-            for i, name in enumerate(param_group['param_names']):
-                if name.startswith('cls_head.'):
-                    cls_head_group['param_names'].append(name)
-                    if params is not None:
-                        cls_head_group.setdefault('params', []).append(params[i])
-                else:
-                    remained_idx.append(i)
-            if len(cls_head_group['param_names']) > 0:
-                cls_head_groups.append(cls_head_group)
-            param_group['param_names'] = list(cytoolz.get(remained_idx, param_group['param_names']))
-            if params is not None:
-                param_group['params'] = list(cytoolz.get(remained_idx, params))
-
-        param_groups.extend(cls_head_groups)
-        return param_groups
+    # def get_param_groups(self) -> list[NamedParamGroup]:
+    #     conf = self.conf
+    #     param_groups = super().get_param_groups()
+    #     cls_head_groups = []
+    #     # yes, please refactor this in the future if possible
+    #     no_weight_decay_keys = get_no_weight_decay_keys(self)
+    #     for param_group in param_groups:
+    #         cls_head_group: NamedParamGroup = {
+    #             'param_names': [],
+    #             'lr': conf.cls_head_optim.lr,
+    #             'weight_decay': conf.cls_head_optim.weight_decay if param_group['param_names'][0] in no_weight_decay_keys else 0
+    #         }
+    #         params = param_group.pop('params', None)
+    #         remained_idx = []
+    #         for i, name in enumerate(param_group['param_names']):
+    #             if name.startswith('cls_head.'):
+    #                 cls_head_group['param_names'].append(name)
+    #                 if params is not None:
+    #                     cls_head_group.setdefault('params', []).append(params[i])
+    #             else:
+    #                 remained_idx.append(i)
+    #         if len(cls_head_group['param_names']) > 0:
+    #             cls_head_groups.append(cls_head_group)
+    #         param_group['param_names'] = list(cytoolz.get(remained_idx, param_group['param_names']))
+    #         if params is not None:
+    #             param_group['params'] = list(cytoolz.get(remained_idx, params))
+    #
+    #     param_groups.extend(cls_head_groups)
+    #     return param_groups
 
     def on_fit_start(self):
         super().on_fit_start()

@@ -24,15 +24,16 @@ def convert(case_dir: Path):
         with open(case_dir / f'{modality}.nii', 'rb') as src, \
              gzip.open(output_dir / f'images{case_split}' / f'{case}_{modality_id:04d}.nii.gz', 'wb') as dst:
             shutil.copyfileobj(src, dst)
-    if case_split == 'Tr':
+
+    if (case_dir / 'ST.nii').exists():
         st: nib.Nifti1Image = nib.load(case_dir / 'ST.nii')
         at: nib.Nifti1Image = nib.load(case_dir / 'AT.nii')
         seg = st.get_fdata()
         seg[at.get_fdata() == 1] = 2
-        nib.save(nib.Nifti1Image(seg, st.affine), output_dir / 'labelsTr' / f'{case}.nii.gz')
+        nib.save(nib.Nifti1Image(seg, st.affine), output_dir / f'labels{case_split}' / f'{case}.nii.gz')
 
 def main():
-    for dirname in ['imagesTr', 'labelsTr', 'imagesTs']:
+    for dirname in ['imagesTr', 'labelsTr', 'imagesTs', 'labelsTs']:
         (output_dir / dirname).mkdir(exist_ok=True, parents=True)
 
     process_map(

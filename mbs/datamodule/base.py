@@ -1,16 +1,14 @@
-from collections.abc import Hashable, Mapping
+from collections.abc import Hashable
 from functools import cached_property
-import math
+from pathlib import Path
 from typing import Sequence
 
+import math
 import pandas as pd
 import torch
 
 from luolib.datamodule import CrossValDataModule
-from luolib.datamodule.base import DataSeq
-from luolib.utils import DataSplit, DataKey
-
-# from mbs.conf import MBConfBase
+from luolib.nnunet import nnUNet_preprocessed
 from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 def load_clinical():
@@ -19,48 +17,70 @@ def load_clinical():
     return clinical
 
 class MBDataModuleBase(CrossValDataModule):
-    # conf: MBConfBase
+    def __init__(
+        self,
+        *args,
+        data_dir: Path = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans_3d_fullres',
+        include_adults: bool = True,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.data_dir = data_dir
+        self.include_adults = include_adults
 
     @cached_property
-    def split_cohort(self) -> dict[Hashable, DataSeq]:
+    def plan(self):
         plan = load_merged_plan()
-        split = load_split()
-        clinical = load_clinical()
-        if not self.conf.include_adults:
+        if self.include_adults:
             plan = plan[plan[MBDataKey.GROUP] == MBGroup.CHILD]
-        split_cohort = {}
-        for number, info in plan.iterrows():
-            case_data_dir = self.conf.data_dir / number
-            age: int = clinical.at[number, 'age']
-            sex: int = clinical.at[number, 'sex']
-            clinical_vec = torch.zeros(3)
-            clinical_vec[0] = age / 100
-            clinical_vec[sex] = 1
-            split_cohort.setdefault(split[number], []).append({
-                DataKey.CASE: number,
-                **{
-                    key: path
-                    for key in [DataKey.IMG, DataKey.SEG] if (path := case_data_dir / f'{key}.npy').exists()
-                },
-                MBDataKey.CLINICAL: clinical_vec,
-                MBDataKey.SUBGROUP: info['subgroup'],
-            })
-        return split_cohort
+        return plan
 
     @cached_property
-    def partitions(self):
-        ret = [
-            self.split_cohort[fold_id]
-            for fold_id in range(self.conf.num_folds)
-        ]
-        # trick: select training data for fold-i is by deleting the i-th item
-        # assert self.conf.include_adults
-        # if self.conf.include_adults:
-        #     ret.append(self.split_cohort[DataSplit.TRAIN])
+    def case_split(self):
+        return load_split()
+
+    @cached_property
+    def clinical(self):
+        return load_clinical()
+
+    def extract_case_data(self, number: str):
+        age: int = self.clinical.at[number, 'age']
+        sex: int = self.clinical.at[number, 'sex']
+        clinical_vec = torch.zeros(3)
+        clinical_vec[0] = age / 100
+        clinical_vec[sex] = 1
+        case_data = {
+            'case': number,
+            MBDataKey.CLINICAL: clinical_vec,
+            MBDataKey.SUBGROUP: self.plan.at[number, 'subgroup'],
+        }
+        return case_data
+
+    def fit_data(self) -> dict[str, dict]:
+        return {
+            number: self.extract_case_data(number)
+            for number, split in self.case_split.items() if split != 'test'
+        }
+
+    def splits(self) -> Sequence[tuple[Sequence[Hashable], Sequence[Hashable]]]:
+        fit_case_split = self.case_split[self.case_split != 'test']
+        ret = []
+        for val_name in fit_case_split.unique():
+            train = []
+            val = []
+            for case, split in fit_case_split.items():
+                if split == val_name:
+                    val.append(case)
+                else:
+                    train.append(case)
+            ret.append((train, val))
         return ret
 
-    def test_data(self) -> Sequence:
-        return self.split_cohort[DataSplit.TEST]
+    def test_data(self):
+        return {
+            number: self.extract_case_data(number)
+            for number, split in self.case_split.items() if split == 'test'
+        }
 
 def parse_age(age: str) -> float:
     if pd.isna(age):

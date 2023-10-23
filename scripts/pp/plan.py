@@ -41,7 +41,7 @@ def process_patient(patient_dir: Path):
         if (match_type := SEG_REF.get(seg_class, None)) is not None:
             if not np.allclose(affine[seg_class], affine[match_type], atol=1e-3, rtol=1e-3):
                 notes.append(f'{seg_class} affine not close to {match_type}')
-            if  shape[seg_class] != shape[match_type]:
+            if shape[seg_class] != shape[match_type]:
                 notes.append(f'{seg_class} shape not equal to {match_type}')
 
     if patient_num not in cur_table.index:

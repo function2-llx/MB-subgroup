@@ -1,45 +1,201 @@
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Callable
 
-from pytorch_lightning.trainer.states import RunningStage
+import numpy as np
+import torch
 
-from luolib.datamodule import SegDataModule
-from luolib.utils import DataKey
+from luolib import transforms as lt
+from luolib.types import tuple2_t, tuple3_t
+from mbs.datamodule import MBDataModuleBase
 from monai import transforms as mt
 
-# from mbs.conf import MBSegConf
-from mbs.datamodule import MBDataModuleBase
-from mbs.utils.enums import SegClass
+class ConvertData(mt.Transform):
+    def __call__(self, data: dict):
+        data = dict(data)
+        sem_seg = data.pop('seg')
+        seg = torch.empty(2, *sem_seg.shape[1:], dtype=torch.bool)
+        seg[0] = (sem_seg == 1) | (sem_seg == 2)
+        seg[1] = sem_seg == 2
 
-def _filter_seg(data: Sequence[dict]):
-    return list(filter(lambda x: DataKey.SEG in x, data))
+        class_locations: dict = data.pop('class_locations')
+        data['class_locations'] = [class_locations[k][1:] for k in [(1, 2), 2]]
+        return data
 
-class MBSegDataModule(MBDataModuleBase, SegDataModule):
-    # conf: MBSegConf
+@dataclass
+class SegTransConf:
+    patch_size: tuple3_t[int] = (16, 192, 256)
+    rand_fg_ratios: tuple2_t[float] = (2, 1)
+    ST_AT_ratios: tuple2_t[float] = (3, 1)
 
-    def load_data_transform(self, stage: RunningStage):
-        match stage:
-            case stage.PREDICTING:
-                return [mt.LoadImageD(DataKey.IMG, ensure_channel_first=False, image_only=True)]
-            case _:
-                return [
-                    mt.LoadImageD([DataKey.IMG, DataKey.SEG], ensure_channel_first=False, image_only=True),
-                    mt.LambdaD(DataKey.SEG, lambda seg: seg[[
-                        list(SegClass).index(seg_class)
-                        for seg_class in self.conf.seg_classes
-                    ]]),
-                ]
+    @dataclass
+    class Scale:
+        prob: float = 0.2
+        range: tuple2_t[float, float] = (0.7, 1.4)
+        ignore_dim: int | None = 0
+    scale: Scale
 
-    def intensity_normalize_transform(self, _stage):
-        return []
+    @dataclass
+    class Rotate:
+        prob: float = 0.2
+        range: tuple3_t[float] = (np.pi / 2, 0, 0)
+    rotate: Rotate
 
-    def spatial_normalize_transform(self, _stage):
-        return []
+    @dataclass
+    class GaussianNoise:
+        prob: float = 0.1
+        max_std: 0.1
+    gaussian_noise: GaussianNoise
 
-    def train_data(self):
-        return _filter_seg(super().train_data())
+    @dataclass
+    class GaussianSmooth:
+        prob: float = 0.2
+        prob_per_channel: float = 0.5
+        sigma_x: tuple[float, float] = (0.5, 1)
+        sigma_y: tuple[float, float] = (0.5, 1)
+        sigma_z: tuple[float, float] = (0.5, 1)
+    gaussian_smooth: GaussianSmooth
 
-    def val_data(self):
-        return _filter_seg(super().val_data())
+    @dataclass
+    class ScaleIntensity:
+        prob: float = 0.15
+        range: tuple2_t[float, float] = (0.75, 1.25)
+        
+        @property
+        def factors(self):
+            return self.range[0] - 1, self.range[1] - 1
+    scale_intensity: ScaleIntensity
 
-    def test_data(self):
-        return _filter_seg(super().test_data())
+    @dataclass
+    class AdjustContrast:
+        prob: float = 0.15
+        range: tuple2_t[float] = (0.75, 1.25)
+        preserve_intensity_range: bool = True
+    adjust_contrast: AdjustContrast
+
+    @dataclass
+    class SimulateLowResolution:
+        prob: float = 0.25
+        prob_per_channel: float = 0.5
+        zoom_range: tuple2_t[float] = (0.5, 1)
+        downsample_mode: str | int = 0
+        upsample_mode: str | int = 3
+    simulate_low_resolution: SimulateLowResolution
+
+    @dataclass
+    class GammaCorrection:
+        prob: float = 0.3
+        range: tuple2_t[float] = (0.7, 1.5)
+        prob_invert: float = 0.75
+        retain_stats: bool = True
+    gamma_correction: GammaCorrection
+
+class MBSegDataModule(MBDataModuleBase):
+    def __init__(
+        self,
+        *args,
+        seg_trans: SegTransConf,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.seg_trans_conf = seg_trans
+
+    def fit_data(self) -> dict[str, dict]:
+        return {
+            k: v for k, v in super().fit_data().items()
+            if (self.data_dir / f'{k}_seg.npy').exists()
+        }
+
+    def train_transform(self):
+        conf = self.seg_trans_conf
+        # largely follows nnU-Net
+        return mt.Compose(
+            [
+                lt.nnUNetLoaderD('case', self.data_dir),
+                ConvertData(),
+                lt.OneOf(
+                    [
+                        mt.RandSpatialCropD(['img', 'seg'], conf.patch_size, random_center=True, random_size=False),
+                        mt.RandCropByLabelClassesD(
+                            ['img', 'seg'],
+                            None,
+                            spatial_size=conf.patch_size,
+                            ratios=list(conf.ST_AT_ratios),
+                            indices_key='class_locations',
+                        ),
+                    ],
+                    weights=conf.rand_fg_ratios,
+                ),
+                lt.RandAffineWithIsotropicScaleD(
+                    ['img', 'seg'],
+                    conf.patch_size,
+                    conf.scale.prob,
+                    scale_range=conf.scale.range,
+                    spatial_dims=3,
+                    ignore_dim=conf.scale.ignore_dim,
+                ),
+                mt.RandAffineD(
+                    ['img', 'seg'],
+                    conf.patch_size,
+                    conf.rotate.prob,
+                    rotate_range=conf.rotate.range,
+                ),
+                *[
+                    mt.RandFlipD(['img', 'seg'], 0.5, i)
+                    for i in range(3)
+                ],
+                mt.RandGaussianNoiseD('img', conf.gaussian_noise.prob, std=conf.gaussian_noise.max_std),
+                lt.RandDictWrapper(
+                    'img',
+                    lt.RandGaussianSmooth(
+                        conf.gaussian_smooth.sigma_x,
+                        conf.gaussian_smooth.sigma_y,
+                        conf.gaussian_smooth.sigma_z,
+                        conf.gaussian_smooth.prob,
+                        prob_per_channel=conf.gaussian_smooth.prob_per_channel,
+                    ),
+                ),
+                mt.RandScaleIntensityD(
+                    'img',
+                    conf.scale_intensity.factors,
+                    conf.scale_intensity.prob,
+                    True,
+                ),
+                lt.RandDictWrapper(
+                    'img',
+                    lt.RandAdjustContrast(
+                        conf.adjust_contrast.prob,
+                        conf.adjust_contrast.range,
+                        conf.adjust_contrast.preserve_intensity_range,
+                    ),
+                ),
+                lt.RandDictWrapper(
+                    'img',
+                    lt.RandSimulateLowResolution(
+                        conf.simulate_low_resolution.prob,
+                        conf.simulate_low_resolution.prob_per_channel,
+                        conf.simulate_low_resolution.downsample_mode,
+                        conf.simulate_low_resolution.upsample_mode,
+                        conf.simulate_low_resolution.zoom_range,
+                    ),
+                ),
+                lt.RandDictWrapper(
+                    'img',
+                    lt.RandGammaCorrection(
+                        conf.gamma_correction.prob,
+                        conf.gamma_correction.range,
+                        conf.gamma_correction.prob_invert,
+                        conf.gamma_correction.retain_stats,
+                    ),
+                ),
+            ],
+            lazy=True,
+        )
+
+    def val_transform(self) -> Callable:
+        return mt.Compose(
+            [
+                lt.nnUNetLoaderD('case', self.data_dir),
+                ConvertData(),
+            ],
+            lazy=True,
+        )
