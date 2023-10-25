@@ -7,8 +7,9 @@ dependencies:
   - python=3.11
   - notebook
   - numpy
+  - cupy
   - scikit-learn
-  - pytorch::pytorch=2.0.1
+  - pytorch::pytorch=2.1
   - pytorch::pytorch-cuda=11.8
   - pytorch::torchvision
   - einops
@@ -33,4 +34,4 @@ dependencies:
     - antspyx
     - jsonargparse[signatures]  # for lightning CLI
     - xformers
-    - -e third-party/nnU-Net
+    - -e third-party/nnUNet
