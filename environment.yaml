@@ -32,6 +32,6 @@ dependencies:
     - xgboost
     - cytoolz
     - antspyx
-    - jsonargparse[signatures]  # for lightning CLI
+    - jsonargparse[signatures, omegaconf]  # for lightning CLI
     - xformers
     - -e third-party/nnUNet

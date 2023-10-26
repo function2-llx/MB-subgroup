@@ -1,14 +1,19 @@
 #!/usr/bin/env zsh
 
+local env_name=mb
+
 set -e
 
-mamba env create -n mb -f environment.yaml
+mamba env create -n $env_name -f environment.yaml
 . `conda info --base`/etc/profile.d/conda.sh
 . `conda info --base`/etc/profile.d/mamba.sh
-mamba activate mb
+mamba activate $env_name
 
 local env_path=$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 echo "export PYTHONPATH=$PWD" > $env_path
+# https://github.com/conda-forge/cupy-feedstock/issues/206
+echo "unset CUDA_PATH" > $env_path
+unset CUDA_PATH
 BUILD_MONAI=1 pip install --no-build-isolation -e third-party/LuoLib/third-party/MONAI
 
 echo >> $env_path
