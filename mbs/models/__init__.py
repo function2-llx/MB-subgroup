@@ -1,1 +1,3 @@
-from .lightning import *
+# bug fixing
+# from .lightning import *
+from .seg import *

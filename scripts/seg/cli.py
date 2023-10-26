@@ -1,11 +1,7 @@
-from luolib.lightning import LightningCLI
-
-class CLI(LightningCLI):
-    def __init__(self):
-        super().__init__()
+from luolib.lightning import LightningCLICrossVal
 
 def main():
-    CLI()
+    LightningCLICrossVal()
 
 if __name__ == '__main__':
     main()

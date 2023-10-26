@@ -26,7 +26,6 @@ SUBGROUPS = ['WNT', 'SHH', 'G3', 'G4']
 DATASET_ROOT = Path(__file__).parents[2] / 'MB-data'
 DATA_DIR = DATASET_ROOT / 'origin'
 PROCESSED_DIR = DATASET_ROOT / 'processed'
-CLINICAL_DIR = DATA_DIR / 'clinical'
 SEG_REF = {
     SegClass.AT: Modality.T2,
     SegClass.CT: Modality.T1C,

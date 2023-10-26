@@ -1,0 +1,38 @@
+model: model.yaml
+data: data.yaml
+trainer:
+  max_steps: 50000
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      name: base
+      save_dir: output/seg
+      project: MB-seg
+  val_check_interval: 250
+#  callbacks:
+#  - class_path: luolib.lightning.ModelCheckpoint
+#    init_args:
+#      save_top_k: 1
+#      filename: "{step}"
+#      monitor: val/dice/avg
+#      mode: max
+#      verbose: true
+#  - class_path: luolib.lightning.ModelCheckpoint
+#    init_args:
+#      every_n_train_steps: 5000
+#      save_top_k: 0
+#      save_last: true
+#      verbose: true
+  optimizer:
+    class_path: torch.optim.AdamW
+    init_args:
+      lr: 1e-4
+      weight_decay: 5e-2
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: ${trainer.max_steps}
+        warmup_t: 5000
+        warmup_prefix: true
+    frequency: ${trainer.val_check_interval}

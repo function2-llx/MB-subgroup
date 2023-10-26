@@ -6,8 +6,13 @@ import torch
 
 from luolib import transforms as lt
 from luolib.types import tuple2_t, tuple3_t
-from mbs.datamodule import MBDataModuleBase
 from monai import transforms as mt
+
+from .base import MBDataModuleBase
+
+__all__ = [
+    'MBSegDataModule',
+]
 
 class ConvertData(mt.Transform):
     def __call__(self, data: dict):
@@ -16,12 +21,16 @@ class ConvertData(mt.Transform):
         seg = torch.empty(2, *sem_seg.shape[1:], dtype=torch.bool)
         seg[0] = (sem_seg == 1) | (sem_seg == 2)
         seg[1] = sem_seg == 2
+        data['seg'] = seg
 
         class_locations: dict = data.pop('class_locations')
-        data['class_locations'] = [class_locations[k][1:] for k in [(1, 2), 2]]
+        data['class_locations'] = [
+            np.ravel_multi_index(class_locations[k][:, 1:].T, seg.shape[1:])
+            for k in [(1, 2), 2]
+        ]
         return data
 
-@dataclass
+@dataclass(kw_only=True)
 class SegTransConf:
     patch_size: tuple3_t[int] = (16, 192, 256)
     rand_fg_ratios: tuple2_t[float] = (2, 1)
@@ -30,7 +39,7 @@ class SegTransConf:
     @dataclass
     class Scale:
         prob: float = 0.2
-        range: tuple2_t[float, float] = (0.7, 1.4)
+        range: tuple2_t[float] = (0.7, 1.4)
         ignore_dim: int | None = 0
     scale: Scale
 
@@ -43,22 +52,22 @@ class SegTransConf:
     @dataclass
     class GaussianNoise:
         prob: float = 0.1
-        max_std: 0.1
+        max_std: float = 0.1
     gaussian_noise: GaussianNoise
 
     @dataclass
     class GaussianSmooth:
         prob: float = 0.2
         prob_per_channel: float = 0.5
-        sigma_x: tuple[float, float] = (0.5, 1)
-        sigma_y: tuple[float, float] = (0.5, 1)
-        sigma_z: tuple[float, float] = (0.5, 1)
+        sigma_x: tuple2_t[float] = (0.5, 1)
+        sigma_y: tuple2_t[float] = (0.5, 1)
+        sigma_z: tuple2_t[float] = (0.5, 1)
     gaussian_smooth: GaussianSmooth
 
     @dataclass
     class ScaleIntensity:
         prob: float = 0.15
-        range: tuple2_t[float, float] = (0.75, 1.25)
+        range: tuple2_t[float] = (0.75, 1.25)
         
         @property
         def factors(self):
@@ -112,15 +121,18 @@ class MBSegDataModule(MBDataModuleBase):
             [
                 lt.nnUNetLoaderD('case', self.data_dir),
                 ConvertData(),
+                mt.ClassesToIndicesD('seg'),
+                lt.FilterClassIndicesD('seg_cls_indices', conf.patch_size, 'seg'),
                 lt.OneOf(
                     [
                         mt.RandSpatialCropD(['img', 'seg'], conf.patch_size, random_center=True, random_size=False),
                         mt.RandCropByLabelClassesD(
                             ['img', 'seg'],
-                            None,
+                            'seg',
                             spatial_size=conf.patch_size,
                             ratios=list(conf.ST_AT_ratios),
-                            indices_key='class_locations',
+                            indices_key='seg_cls_indices',
+                            # indices_key='class_locations',
                         ),
                     ],
                     weights=conf.rand_fg_ratios,

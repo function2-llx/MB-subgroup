@@ -1,0 +1,5 @@
+class_path: mbs.datamodule.MBSegDataModule
+init_args:
+  dataloader:
+    train_batch_size: 8
+    val_batch_size: 1

@@ -9,10 +9,10 @@ import torch
 
 from luolib.datamodule import CrossValDataModule
 from luolib.nnunet import nnUNet_preprocessed
-from mbs.utils.enums import CLINICAL_DIR, MBDataKey, MBGroup, PROCESSED_DIR
+from mbs.utils.enums import DATA_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 def load_clinical():
-    clinical = pd.read_excel(CLINICAL_DIR / '影像预测分子分型.xlsx', dtype={'number': 'string'}).set_index('number')
+    clinical = pd.read_excel(DATA_DIR / '影像预测分子分型.xlsx', dtype={'number': 'string'}).set_index('number')
     clinical.rename(columns={'gender': 'sex'}, inplace=True)
     return clinical
 
@@ -31,7 +31,7 @@ class MBDataModuleBase(CrossValDataModule):
     @cached_property
     def plan(self):
         plan = load_merged_plan()
-        if self.include_adults:
+        if not self.include_adults:
             plan = plan[plan[MBDataKey.GROUP] == MBGroup.CHILD]
         return plan
 
@@ -57,6 +57,7 @@ class MBDataModuleBase(CrossValDataModule):
         return case_data
 
     def fit_data(self) -> dict[str, dict]:
+        number: str  # make PyCharm calm
         return {
             number: self.extract_case_data(number)
             for number, split in self.case_split.items() if split != 'test'
@@ -77,6 +78,7 @@ class MBDataModuleBase(CrossValDataModule):
         return ret
 
     def test_data(self):
+        number: str
         return {
             number: self.extract_case_data(number)
             for number, split in self.case_split.items() if split == 'test'
