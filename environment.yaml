@@ -33,5 +33,5 @@ dependencies:
     - cytoolz
     - antspyx
     - jsonargparse[signatures, omegaconf]  # for lightning CLI
-    - xformers
+    - xformers --index-url https://download.pytorch.org/whl/cu118
     - -e third-party/nnUNet
