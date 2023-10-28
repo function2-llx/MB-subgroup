@@ -15,12 +15,16 @@ init_args:
               # image patch size: [16, 192, 256]
               pos_embed_shape: [8, 12, 16]
               out_indexes: [3, 5, 7, 11]
+              grad_ckpt: true
+              pretrained_ckpt:
+                path: pre-trained/pumit-b.ckpt
           spatial_dims: 3
           backbone_feature_channels: [768, 768, 768, 768]
           feature_dim: 256
           num_gn_groups: 16
           num_heads: 8
           n_points: 8
+          grad_ckpt: true
       spatial_dims: 3
       num_input_channels: 3
       layer_channels: [32, 64]
@@ -42,4 +46,6 @@ init_args:
       mask_start_layer: 4
       num_feature_levels: 4
       num_queries: 2
+      grad_ckpt: true
   key_levels: [-4, -3, -2, -1]
+  val_sw: sw.yaml

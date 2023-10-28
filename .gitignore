@@ -168,3 +168,4 @@ test-intra.py
 run*.zsh
 archive
 MB-data
+pre-trained

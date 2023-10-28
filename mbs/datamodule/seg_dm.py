@@ -7,6 +7,7 @@ import torch
 from luolib import transforms as lt
 from luolib.types import tuple2_t, tuple3_t
 from monai import transforms as mt
+from monai.utils import convert_to_tensor
 
 from .base import MBDataModuleBase
 
@@ -30,6 +31,17 @@ class ConvertData(mt.Transform):
         ]
         return data
 
+class InputTransformD(mt.Transform):
+    def __init__(self, as_tensor: bool = True):
+        self.as_tensor = as_tensor
+
+    def __call__(self, data):
+        data = dict(data)
+        img, label = data['img'], data['seg']
+        if self.as_tensor:
+            img = convert_to_tensor(img)
+        return img, convert_to_tensor(label)
+
 @dataclass(kw_only=True)
 class SegTransConf:
     patch_size: tuple3_t[int] = (16, 192, 256)
@@ -41,18 +53,21 @@ class SegTransConf:
         prob: float = 0.2
         range: tuple2_t[float] = (0.7, 1.4)
         ignore_dim: int | None = 0
+
     scale: Scale
 
     @dataclass
     class Rotate:
         prob: float = 0.2
         range: tuple3_t[float] = (np.pi / 2, 0, 0)
+
     rotate: Rotate
 
     @dataclass
     class GaussianNoise:
         prob: float = 0.1
         max_std: float = 0.1
+
     gaussian_noise: GaussianNoise
 
     @dataclass
@@ -62,16 +77,18 @@ class SegTransConf:
         sigma_x: tuple2_t[float] = (0.5, 1)
         sigma_y: tuple2_t[float] = (0.5, 1)
         sigma_z: tuple2_t[float] = (0.5, 1)
+
     gaussian_smooth: GaussianSmooth
 
     @dataclass
     class ScaleIntensity:
         prob: float = 0.15
         range: tuple2_t[float] = (0.75, 1.25)
-        
+
         @property
         def factors(self):
             return self.range[0] - 1, self.range[1] - 1
+
     scale_intensity: ScaleIntensity
 
     @dataclass
@@ -79,6 +96,7 @@ class SegTransConf:
         prob: float = 0.15
         range: tuple2_t[float] = (0.75, 1.25)
         preserve_intensity_range: bool = True
+
     adjust_contrast: AdjustContrast
 
     @dataclass
@@ -88,6 +106,7 @@ class SegTransConf:
         zoom_range: tuple2_t[float] = (0.5, 1)
         downsample_mode: str | int = 0
         upsample_mode: str | int = 3
+
     simulate_low_resolution: SimulateLowResolution
 
     @dataclass
@@ -96,6 +115,7 @@ class SegTransConf:
         range: tuple2_t[float] = (0.7, 1.5)
         prob_invert: float = 0.75
         retain_stats: bool = True
+
     gamma_correction: GammaCorrection
 
 class MBSegDataModule(MBDataModuleBase):
@@ -121,8 +141,7 @@ class MBSegDataModule(MBDataModuleBase):
             [
                 lt.nnUNetLoaderD('case', self.data_dir),
                 ConvertData(),
-                mt.ClassesToIndicesD('seg'),
-                lt.FilterClassIndicesD('seg_cls_indices', conf.patch_size, 'seg'),
+                lt.ComputeCropIndicesD('seg', conf.patch_size, cache_path_base_key='path_base'),
                 lt.OneOf(
                     [
                         mt.RandSpatialCropD(['img', 'seg'], conf.patch_size, random_center=True, random_size=False),
@@ -131,7 +150,7 @@ class MBSegDataModule(MBDataModuleBase):
                             'seg',
                             spatial_size=conf.patch_size,
                             ratios=list(conf.ST_AT_ratios),
-                            indices_key='seg_cls_indices',
+                            indices_key='seg_indices',
                             # indices_key='class_locations',
                         ),
                     ],
@@ -199,6 +218,7 @@ class MBSegDataModule(MBDataModuleBase):
                         conf.gamma_correction.retain_stats,
                     ),
                 ),
+                InputTransformD(),
             ],
             lazy=True,
         )
@@ -208,6 +228,7 @@ class MBSegDataModule(MBDataModuleBase):
             [
                 lt.nnUNetLoaderD('case', self.data_dir),
                 ConvertData(),
+                InputTransformD(),
             ],
             lazy=True,
         )
