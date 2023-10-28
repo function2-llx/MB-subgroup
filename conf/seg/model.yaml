@@ -42,10 +42,10 @@ init_args:
       feature_channels: 256
       num_attention_heads: 8
       pixel_embedding_dim: 32
-      num_decoder_layers: 12
-      mask_start_layer: 4
-      num_feature_levels: 4
+      num_decoder_layers: 9
+      mask_start_layer: 3
+      num_feature_levels: 3
       num_queries: 2
       grad_ckpt: true
-  key_levels: [-4, -3, -2, -1]
+#  key_levels: [-1, -2, -3, -4]
   val_sw: sw.yaml

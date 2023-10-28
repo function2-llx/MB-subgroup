@@ -15,6 +15,7 @@ echo "export PYTHONPATH=$PWD" > $env_path
 echo "unset CUDA_PATH" > $env_path
 unset CUDA_PATH
 BUILD_MONAI=1 pip install --no-build-isolation -e third-party/LuoLib/third-party/MONAI
+echo "export BUILD_MONAI=1" > $env_path
 
 echo >> $env_path
 local nnUNet_data=$PWD/nnUNet_data
