@@ -221,6 +221,10 @@ class MBSegDataModule(MBDataModuleBase):
                 InputTransformD(),
             ],
             lazy=True,
+            overrides={
+                'img': {'mode': 3},
+                'seg': {'mode': 1},
+            }
         )
 
     def val_transform(self) -> Callable:
