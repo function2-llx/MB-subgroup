@@ -1,4 +1,4 @@
-class_path: mbs.models.MBSegModel
+class_path: mbs.models.MBSegMaskFormerModel
 init_args:
   backbone:
     class_path: luolib.models.FullResAdapter

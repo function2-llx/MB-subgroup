@@ -40,7 +40,7 @@ class InputTransformD(mt.Transform):
         img, label = data['img'], data['seg']
         if self.as_tensor:
             img = convert_to_tensor(img)
-        return img, convert_to_tensor(label) > 0.5
+        return img, convert_to_tensor(label)
 
 @dataclass(kw_only=True)
 class SegTransConf:

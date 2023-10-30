@@ -1,13 +1,6 @@
-model: model.yaml
 data: data.yaml
 trainer:
   max_steps: 50000
-  logger:
-    class_path: lightning.pytorch.loggers.WandbLogger
-    init_args:
-      name: base
-      save_dir: output/seg
-      project: MB-seg
   val_check_interval: 250
   callbacks:
   - class_path: luolib.lightning.ModelCheckpoint
@@ -37,3 +30,9 @@ trainer:
         warmup_t: 5000
         warmup_prefix: true
     frequency: ${trainer.val_check_interval}
+logger:
+  class_path: lightning.pytorch.loggers.WandbLogger
+  init_args:
+    name: base
+    save_dir: output/seg
+    project: MB-seg
