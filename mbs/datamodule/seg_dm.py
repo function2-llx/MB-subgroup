@@ -3,11 +3,12 @@ from typing import Callable
 
 import numpy as np
 import torch
+from torch.types import Device
 
 from luolib import transforms as lt
 from luolib.types import tuple2_t, tuple3_t
 from monai import transforms as mt
-from monai.utils import convert_to_tensor
+from monai.utils import GridSampleMode, convert_to_tensor
 
 from .base import MBDataModuleBase
 
@@ -47,6 +48,7 @@ class SegTransConf:
     patch_size: tuple3_t[int] = (16, 192, 256)
     rand_fg_ratios: tuple2_t[float] = (2, 1)
     ST_AT_ratios: tuple2_t[float] = (3, 1)
+    device: Device = 'cpu'
 
     @dataclass
     class Scale:
@@ -104,8 +106,8 @@ class SegTransConf:
         prob: float = 0.25
         prob_per_channel: float = 0.5
         zoom_range: tuple2_t[float] = (0.5, 1)
-        downsample_mode: str | int = 0
-        upsample_mode: str | int = 3
+        downsample_mode: str | int = GridSampleMode.NEAREST
+        upsample_mode: str | int = GridSampleMode.BICUBIC
 
     simulate_low_resolution: SimulateLowResolution
 
@@ -127,6 +129,8 @@ class MBSegDataModule(MBDataModuleBase):
     ):
         super().__init__(*args, **kwargs)
         self.seg_trans_conf = seg_trans
+        if seg_trans.device != 'cpu':
+            self.dataloader_conf.pin_memory = False
 
     def fit_data(self) -> dict[str, dict]:
         return {
@@ -142,6 +146,8 @@ class MBSegDataModule(MBDataModuleBase):
                 lt.nnUNetLoaderD('case', self.data_dir),
                 ConvertData(),
                 lt.ComputeCropIndicesD('seg', conf.patch_size, cache_path_base_key='path_base'),
+                mt.RandIdentity(),
+                mt.ToDeviceD(['img', 'seg'], conf.device),
                 lt.OneOf(
                     [
                         mt.RandSpatialCropD(['img', 'seg'], conf.patch_size, random_center=True, random_size=False),
@@ -222,8 +228,8 @@ class MBSegDataModule(MBDataModuleBase):
             ],
             lazy=True,
             overrides={
-                'img': {'mode': 3},
-                'seg': {'mode': 1},
+                'img': {'mode': GridSampleMode.BICUBIC},
+                'seg': {'mode': GridSampleMode.BILINEAR},
             }
         )
 
