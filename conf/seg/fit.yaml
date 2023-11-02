@@ -30,6 +30,8 @@ trainer:
         warmup_t: 5000
         warmup_prefix: true
     frequency: ${trainer.val_check_interval}
+  gradient_clip_val: 12  # following nnU-Net
+  gradient_clip_algorithm: norm
 logger:
   class_path: lightning.pytorch.loggers.WandbLogger
   init_args:

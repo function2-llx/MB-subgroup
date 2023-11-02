@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from einops.layers.torch import Reduce
 import torch
 from torch import nn
 
@@ -77,6 +78,28 @@ class MBSegModel(LightningModule):
         self.log(f'val/dice/avg', dice.mean())
 
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
+    def __init__(self, *, compute_ald: bool = True, **kwargs):
+        """
+        Args:
+            compute_ald: "ald" stands for adjacent layer dice
+        """
+        super().__init__(**kwargs)
+        self.compute_ald = compute_ald
+        self._spatial_sum = Reduce('n c ... -> n c', 'sum')
+
+    def _dice(self, x: torch.Tensor, y: torch.Tensor):
+        reduce = self._spatial_sum
+        dice = 2 * reduce(x * y) / (reduce(x) + reduce(y))
+        return dice.mean(dim=0)
+
+    @torch.no_grad()
+    def log_ald(self, layers_mask_logits: list[torch.Tensor]):
+        layers_mask_probs = [mask_logits.sigmoid() for mask_logits in layers_mask_logits]
+        for i in range(1, len(layers_mask_probs)):
+            dice_i = self._dice(layers_mask_probs[i - 1], layers_mask_probs[i])
+            for c in range(dice_i.shape[0]):
+                self.log(f'train/dice-{c}/layer-{i}', dice_i[c])
+
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         layers_mask_embeddings, layers_mask_logits = self(img)
@@ -85,6 +108,8 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
             label = sac.resample(label, pred_shape)
         loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
         self.log('train/loss', loss)
+        if self.compute_ald:
+            self.log_ald(layers_mask_logits)
         return loss
 
     def predictor(self, img: torch.Tensor):
