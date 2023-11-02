@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import einops
 from einops.layers.torch import Reduce
 import torch
 from torch import nn
+from torch.nn import functional as nnf
 
 from luolib.lightning import LightningModule
 from luolib.models.blocks import sac
@@ -77,19 +79,35 @@ class MBSegModel(LightningModule):
             self.log(f'val/dice/{i}', dice[i])
         self.log(f'val/dice/avg', dice.mean())
 
+def binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
+    """
+    calculate binary KL divergence p * ln p/q + (1-p) * ln (1-p)/(1-q)
+    """
+    log_p = nnf.logsigmoid(logit_p)
+    log_q = nnf.logsigmoid(logit_q)
+    p = logit_p.sigmoid()
+    # log_p - logit_p = log(1 - p)
+    return p * (log_p - log_q) + (1 - p) * (log_p - logit_p - log_q + logit_q)
+
+def symmetric_binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
+    return binary_kl_div(logit_p, logit_q) + binary_kl_div(logit_q, logit_p)
+
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
-    def __init__(self, *, compute_ald: bool = True, **kwargs):
+    def __init__(self, *, layer_reg_weight: float = 0., **kwargs):
         """
         Args:
             compute_ald: "ald" stands for adjacent layer dice
         """
         super().__init__(**kwargs)
-        self.compute_ald = compute_ald
+        self.layer_reg_weight = layer_reg_weight
         self._spatial_sum = Reduce('n c ... -> n c', 'sum')
 
     def _dice(self, x: torch.Tensor, y: torch.Tensor):
         reduce = self._spatial_sum
-        dice = 2 * reduce(x * y) / (reduce(x) + reduce(y))
+        x = x.float()
+        y = y.float()
+        eps = 1e-6
+        dice = (2 * reduce(x * y) + eps) / (reduce(x) + reduce(y) + eps)
         return dice.mean(dim=0)
 
     @torch.no_grad()
@@ -100,16 +118,32 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
             for c in range(dice_i.shape[0]):
                 self.log(f'train/dice-{c}/layer-{i}', dice_i[c])
 
+    @torch.no_grad()
+    def log_sbkld(self, layers_sbkld: list[torch.Tensor]):
+        for i, sbkld in enumerate(layers_sbkld):
+            sbkld = einops.reduce(sbkld, 'n c ... -> c', 'mean')
+            for c in range(sbkld.shape[0]):
+                self.log(f'train/sbkld-{c}/layer-{i}', sbkld)
+
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         layers_mask_embeddings, layers_mask_logits = self(img)
         pred_shape = layers_mask_logits[0].shape[2:]
         if pred_shape != label.shape[2:]:
             label = sac.resample(label, pred_shape)
-        loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
+        label = (label.float() > 0.5).type_as(layers_mask_logits[0])
+        mask_loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
+        self.log('train/mask_loss', mask_loss)
+        layers_sbkld = [
+            symmetric_binary_kl_div(layers_mask_logits[i - 1], layers_mask_logits[i])
+            for i in range(1, len(layers_mask_logits))
+        ]
+        reg_loss = torch.stack([sbkld.mean() for sbkld in layers_sbkld]).mean()
+        self.log('train/reg_loss', reg_loss)
+        self.log_sbkld(layers_sbkld)
+        self.log_ald(layers_mask_logits)
+        loss = mask_loss + self.layer_reg_weight * reg_loss
         self.log('train/loss', loss)
-        if self.compute_ald:
-            self.log_ald(layers_mask_logits)
         return loss
 
     def predictor(self, img: torch.Tensor):

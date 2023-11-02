@@ -22,6 +22,7 @@ init_args:
           - 2
           - 2
           - [1, 2, 2]
+          res_block: false
       spatial_dims: 3
       layer_channels: ${.inner.init_args.layer_channels}
       kernel_sizes: ${.inner.init_args.kernel_sizes}
