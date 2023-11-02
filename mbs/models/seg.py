@@ -123,7 +123,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         for i, sbkld in enumerate(layers_sbkld):
             sbkld = einops.reduce(sbkld, 'n c ... -> c', 'mean')
             for c in range(sbkld.shape[0]):
-                self.log(f'train/sbkld-{c}/layer-{i}', sbkld)
+                self.log(f'train/sbkld-{c}/layer-{i}', sbkld[c])
 
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
