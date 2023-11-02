@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-import einops
 from einops.layers.torch import Reduce
 import torch
 from torch import nn
@@ -13,6 +12,7 @@ from luolib.models import BackboneProtocol, MaskFormer
 from luolib.types import spatial_param_t
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceFocalLoss
+from monai.losses.focal_loss import sigmoid_focal_loss
 from monai.metrics import DiceMetric
 from monai.utils import BlendMode, MetricReduction
 
@@ -92,38 +92,50 @@ def binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
 def symmetric_binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
     return binary_kl_div(logit_p, logit_q) + binary_kl_div(logit_q, logit_p)
 
+class AdjacentLayerRegLoss(nn.Module):
+    def __init__(
+        self,
+        *,
+        hard: bool = True,
+        smooth_nr: float = 1e-6,
+        smooth_dr: float = 1e-6,
+        dice_weight: float = 0.1,
+        focal_weight: float = 0.1,
+        focal_gamma: float = 0.,
+    ):
+        super().__init__()
+        self.hard = hard
+        self.spatial_sum = Reduce('n c ... -> n c', 'sum')
+        self.smooth_nr = smooth_nr
+        self.smooth_dr = smooth_dr
+        self.dice_weight = dice_weight
+        self.focal_weight = focal_weight
+        self.focal_gamma = focal_gamma
+
+    def dice(self, prob: torch.Tensor, target: torch.Tensor):
+        intersection = self.spatial_sum(prob * target)
+        denominator = self.spatial_sum(prob) + self.spatial_sum(target)
+        dice = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
+        return dice.mean()
+
+    def forward(self, last_logits: torch.Tensor, logits: torch.Tensor):
+        with torch.no_grad():
+            target = last_logits.sigmoid()
+            if self.hard:
+                target = target > 0.5
+        prob = logits.sigmoid()
+        dice = self.dice(prob, target)
+        focal = sigmoid_focal_loss(logits, target, self.focal_gamma).mean()
+        return self.dice_weight * dice + self.focal_weight * focal, dice, focal
+
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
-    def __init__(self, *, layer_reg_weight: float = 0., **kwargs):
+    def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss, **kwargs):
         """
         Args:
-            compute_ald: "ald" stands for adjacent layer dice
+            alr: adjacent layer regularization
         """
         super().__init__(**kwargs)
-        self.layer_reg_weight = layer_reg_weight
-        self._spatial_sum = Reduce('n c ... -> n c', 'sum')
-
-    def _dice(self, x: torch.Tensor, y: torch.Tensor):
-        reduce = self._spatial_sum
-        x = x.float()
-        y = y.float()
-        eps = 1e-6
-        dice = (2 * reduce(x * y) + eps) / (reduce(x) + reduce(y) + eps)
-        return dice.mean(dim=0)
-
-    @torch.no_grad()
-    def log_ald(self, layers_mask_logits: list[torch.Tensor]):
-        layers_mask_probs = [mask_logits.sigmoid() for mask_logits in layers_mask_logits]
-        for i in range(1, len(layers_mask_probs)):
-            dice_i = self._dice(layers_mask_probs[i - 1], layers_mask_probs[i])
-            for c in range(dice_i.shape[0]):
-                self.log(f'train/dice-{c}/layer-{i}', dice_i[c])
-
-    @torch.no_grad()
-    def log_sbkld(self, layers_sbkld: list[torch.Tensor]):
-        for i, sbkld in enumerate(layers_sbkld):
-            sbkld = einops.reduce(sbkld, 'n c ... -> c', 'mean')
-            for c in range(sbkld.shape[0]):
-                self.log(f'train/sbkld-{c}/layer-{i}', sbkld[c])
+        self.adjacent_layer_reg = adjacent_layer_reg
 
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
@@ -134,15 +146,15 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         label = (label.float() > 0.5).type_as(layers_mask_logits[0])
         mask_loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
         self.log('train/mask_loss', mask_loss)
-        layers_sbkld = [
-            symmetric_binary_kl_div(layers_mask_logits[i - 1], layers_mask_logits[i])
-            for i in range(1, len(layers_mask_logits))
-        ]
-        reg_loss = torch.stack([sbkld.mean() for sbkld in layers_sbkld]).mean()
+        layers_reg_losses = []
+        for i in range(1, len(layers_mask_logits)):
+            layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
+            layers_reg_losses.append(layer_reg_loss)
+            self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
+            self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
+        reg_loss = torch.stack(layers_reg_losses).mean()
         self.log('train/reg_loss', reg_loss)
-        self.log_sbkld(layers_sbkld)
-        self.log_ald(layers_mask_logits)
-        loss = mask_loss + self.layer_reg_weight * reg_loss
+        loss = mask_loss + reg_loss
         self.log('train/loss', loss)
         return loss
 
