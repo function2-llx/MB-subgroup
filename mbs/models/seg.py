@@ -120,12 +120,12 @@ class AdjacentLayerRegLoss(nn.Module):
 
     def forward(self, last_logits: torch.Tensor, logits: torch.Tensor):
         with torch.no_grad():
-            target = last_logits.sigmoid()
+            target = logits.sigmoid()
             if self.hard:
                 target = target > 0.5
-        prob = logits.sigmoid()
-        dice = self.dice(prob, target)
-        focal = sigmoid_focal_loss(logits, target, self.focal_gamma).mean()
+        last_prob = last_logits.sigmoid()
+        dice = self.dice(last_prob, target)
+        focal = sigmoid_focal_loss(last_logits, target, self.focal_gamma).mean()
         return self.dice_weight * dice + self.focal_weight * focal, dice, focal
 
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
