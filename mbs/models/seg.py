@@ -129,7 +129,7 @@ class AdjacentLayerRegLoss(nn.Module):
         return self.dice_weight * dice + self.focal_weight * focal, dice, focal
 
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
-    def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss, **kwargs):
+    def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss | None = None, **kwargs):
         """
         Args:
             alr: adjacent layer regularization
@@ -146,15 +146,18 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         label = (label.float() > 0.5).type_as(layers_mask_logits[0])
         mask_loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
         self.log('train/mask_loss', mask_loss)
-        layers_reg_losses = []
-        for i in range(1, len(layers_mask_logits)):
-            layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
-            layers_reg_losses.append(layer_reg_loss)
-            self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
-            self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
-        reg_loss = torch.stack(layers_reg_losses).mean()
-        self.log('train/reg_loss', reg_loss)
-        loss = mask_loss + reg_loss
+        if self.adjacent_layer_reg is None:
+            loss = mask_loss
+        else:
+            layers_reg_losses = []
+            for i in range(1, len(layers_mask_logits)):
+                layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
+                layers_reg_losses.append(layer_reg_loss)
+                self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
+                self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
+            reg_loss = torch.stack(layers_reg_losses).mean()
+            self.log('train/reg_loss', reg_loss)
+            loss = mask_loss + reg_loss
         self.log('train/loss', loss)
         return loss
 
