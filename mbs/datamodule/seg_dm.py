@@ -45,7 +45,7 @@ class InputTransformD(mt.Transform):
 
 @dataclass(kw_only=True)
 class SegTransConf:
-    patch_size: tuple3_t[int] = (16, 192, 256)
+    patch_size: tuple3_t[int]
     rand_fg_ratios: tuple2_t[float] = (2, 1)
     ST_AT_ratios: tuple2_t[float] = (3, 1)
     device: Device = 'cpu'

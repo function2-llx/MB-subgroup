@@ -12,7 +12,7 @@ mamba activate $env_name
 local env_path=$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 echo "export PYTHONPATH=$PWD" > $env_path
 # https://github.com/conda-forge/cupy-feedstock/issues/206
-echo "unset CUDA_PATH" > $env_path
+echo "unset CUDA_PATH" >> $env_path
 unset CUDA_PATH
 BUILD_MONAI=1 pip install --no-build-isolation -e third-party/LuoLib/third-party/MONAI
 echo "export BUILD_MONAI=1" > $env_path
