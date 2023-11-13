@@ -19,9 +19,9 @@ init_args:
           - 1
           - [1, 2, 2]
           - [1, 2, 2]
-          - 2
-          - 2
           - [1, 2, 2]
+          - 2
+          - 2
       spatial_dims: 3
       layer_channels: ${.inner.init_args.layer_channels}
       kernel_sizes: ${.inner.init_args.kernel_sizes}

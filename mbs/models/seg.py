@@ -28,6 +28,7 @@ class SlidingWindowInferenceConf:
     batch_size: int = 4
     overlap: float = 0.5
     blend_mode: BlendMode = BlendMode.GAUSSIAN
+    check_window_size: bool = True
 
 class MBSegModel(LightningModule):
     def __init__(
@@ -38,7 +39,7 @@ class MBSegModel(LightningModule):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.mask_loss = DiceFocalLoss(sigmoid=True, gamma=gamma)
+        self.loss = DiceFocalLoss(sigmoid=True, gamma=gamma)
         self.val_sw_conf = val_sw
         self.dice_metric = DiceMetric()
 
@@ -62,13 +63,17 @@ class MBSegModel(LightningModule):
 
     def on_validation_epoch_start(self) -> None:
         self.dice_metric.reset()
+        if self.val_sw_conf.check_window_size:
+            from mbs.datamodule import MBSegDataModule
+            dm: MBSegDataModule = self.datamodule
+            assert self.val_sw_conf.window_size == dm.seg_trans_conf.patch_size
 
     def validation_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         pred_logit = self.sw_infer(img)
         if pred_logit.shape[2:] != label.shape[2:]:
             pred_logit = sac.resample(pred_logit, label.shape[2:])
-        loss = self.mask_loss(pred_logit, label)
+        loss = self.loss(pred_logit, label)
         self.log('val/loss', loss, sync_dist=True)
         pred = (pred_logit.sigmoid() > 0.5).long()
         self.dice_metric(pred, label)
@@ -99,8 +104,8 @@ class AdjacentLayerRegLoss(nn.Module):
         hard: bool = True,
         smooth_nr: float = 1e-6,
         smooth_dr: float = 1e-6,
-        dice_weight: float = 0.1,
-        focal_weight: float = 0.1,
+        dice_weight: float = 0.,
+        focal_weight: float = 0.,
         focal_gamma: float = 0.,
     ):
         super().__init__()
@@ -128,36 +133,55 @@ class AdjacentLayerRegLoss(nn.Module):
         focal = sigmoid_focal_loss(last_logits, target, self.focal_gamma).mean()
         return self.dice_weight * dice + self.focal_weight * focal, dice, focal
 
+class DeepSupervisionWrapper(nn.Module):
+    weight: torch.Tensor
+
+    def __init__(self, loss: nn.Module, num_ds: int):
+        super().__init__()
+        self.loss = loss
+        weight = torch.tensor([0.5 ** i for i in range(num_ds)])
+        weight /= weight.sum()
+        self.register_buffer('weight', weight)
+
+    def forward(self, deep_logits: list[torch.Tensor], label: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        ds_losses = [
+            self.loss(logits, nnf.interpolate(label, logits.shape[2:], mode='nearest-exact'))
+            for logits in deep_logits
+        ]
+        ds_loss = torch.dot(self.weight, torch.stack(ds_losses))
+        return ds_loss, ds_losses
+
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
-    def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss | None = None, **kwargs):
+    def __init__(
+        self,
+        *,
+        adjacent_layer_reg: AdjacentLayerRegLoss | None = None,
+        num_ds: int = 4,
+        **kwargs,
+    ):
         """
         Args:
             alr: adjacent layer regularization
         """
         super().__init__(**kwargs)
         self.adjacent_layer_reg = adjacent_layer_reg
+        self.ds_wrapper = DeepSupervisionWrapper(self.loss, num_ds)
 
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         layers_mask_embeddings, layers_mask_logits = self(img)
-        pred_shape = layers_mask_logits[0].shape[2:]
-        if pred_shape != label.shape[2:]:
-            label = sac.resample(label, pred_shape)
-        label = (label.float() > 0.5).type_as(layers_mask_logits[0])
-        mask_loss = torch.stack([self.mask_loss(mask_logit, label) for mask_logit in layers_mask_logits]).mean()
-        self.log('train/mask_loss', mask_loss)
-        if self.adjacent_layer_reg is None:
-            loss = mask_loss
-        else:
-            layers_reg_losses = []
-            for i in range(1, len(layers_mask_logits)):
-                layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
-                layers_reg_losses.append(layer_reg_loss)
-                self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
-                self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
-            reg_loss = torch.stack(layers_reg_losses).mean()
-            self.log('train/reg_loss', reg_loss)
-            loss = mask_loss + reg_loss
+        mask_loss = torch.stack([
+            self.ds_wrapper(mask_logits, label)[0] for mask_logits in layers_mask_logits
+        ]).mean()
+        layers_reg_losses = []
+        for i in range(1, len(layers_mask_logits)):
+            layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
+            layers_reg_losses.append(layer_reg_loss)
+            self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
+            self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
+        reg_loss = torch.stack(layers_reg_losses).mean()
+        self.log('train/reg_loss', reg_loss)
+        loss = mask_loss + reg_loss
         self.log('train/loss', loss)
         return loss
 
@@ -186,9 +210,7 @@ class MBSegUNetModel(MBSegModel):
             nn.Conv3d(c, num_classes, 1)
             for c in num_channels
         ])
-        ds_weights = torch.tensor([0.5 ** i for i in range(num_ds)])
-        ds_weights /= ds_weights.sum()
-        self.register_buffer('ds_weights', ds_weights, persistent=False)
+        self.ds_wrapper = DeepSupervisionWrapper(self.loss, num_ds)
 
     def forward(self, x: torch.Tensor, ds: bool = False):
         feature_maps = self.backbone(x)
@@ -203,11 +225,7 @@ class MBSegUNetModel(MBSegModel):
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         mask_logits = self(img, ds=True)
-        ds_losses = torch.stack([
-            self.mask_loss(mask_logit, (sac.resample(label, mask_logit.shape[2:]) >= 0.5).type_as(mask_logit))
-            for mask_logit in mask_logits
-        ])
-        ds_loss = torch.dot(self.ds_weights, ds_losses)
+        ds_loss, ds_losses = self.ds_wrapper(mask_logits, label)
         self.log('train/single_loss', ds_losses[0])
         self.log('train/ds_loss', ds_loss)
         return ds_loss
