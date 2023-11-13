@@ -1,6 +1,6 @@
 data: data.yaml
 trainer:
-  max_steps: 100000
+  max_steps: 250000
   val_check_interval: 250
   callbacks:
   - class_path: luolib.lightning.ModelCheckpoint
@@ -16,25 +16,7 @@ trainer:
       save_top_k: 0
       save_last: true
       verbose: true
-  optimizer:
-    class_path: torch.optim.AdamW
-    init_args:
-      lr: 1e-4
-      weight_decay: 5e-2
-  lr_scheduler:
-    scheduler:
-      class_path: timm.scheduler.CosineLRScheduler
-      init_args:
-        t_in_epochs: false
-        t_initial: ${trainer.max_steps}
-        warmup_t: 5000
-        warmup_prefix: true
-    frequency: ${trainer.val_check_interval}
   gradient_clip_val: 12  # following nnU-Net
   gradient_clip_algorithm: norm
-logger:
-  class_path: lightning.pytorch.loggers.WandbLogger
-  init_args:
-    name: base
-    save_dir: output/seg
-    project: MB-seg
+optimization: optim/conv+trans.yaml
+logger: logger.yaml

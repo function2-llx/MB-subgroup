@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Hashable
 
 from einops.layers.torch import Reduce
 import torch
@@ -156,7 +157,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         self,
         *,
         adjacent_layer_reg: AdjacentLayerRegLoss | None = None,
-        num_ds: int = 4,
+        num_ds: int,
         **kwargs,
     ):
         """

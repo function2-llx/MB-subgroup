@@ -1,0 +1,26 @@
+conv:
+- class_path: torch.optim.SGD
+  init_args:
+    lr: 1e-2
+    weight_decay: 3e-5
+    momentum: 0.99
+    nesterov: true
+- scheduler:
+    class_path: timm.scheduler.CosineLRScheduler
+    init_args:
+      t_initial: 0
+      t_in_epochs: false
+      warmup_t: 10000
+      warmup_prefix: true
+transformer:
+- class_path: torch.optim.AdamW
+  init_args:
+    lr: 2e-4
+    weight_decay: 5e-2
+- scheduler:
+    class_path: timm.scheduler.CosineLRScheduler
+    init_args:
+      t_initial: 0
+      t_in_epochs: false
+      warmup_t: 10000
+      warmup_prefix: true
