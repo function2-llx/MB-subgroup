@@ -1,0 +1,32 @@
+model: ../mf-unet.yaml
+optimization:
+- prefix: [backbone.1, backbone.2]
+  optimizer:
+    class_path: torch.optim.SGD
+    init_args:
+      lr: 1e-2
+      weight_decay: 3e-5
+      momentum: 0.99
+      nesterov: true
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: 250000  # TODO: fix this
+        t_in_epochs: false
+        warmup_t: 10000
+        warmup_prefix: true
+- prefix: [backbone.0, mask_decoder]
+  optimizer:
+    class_path: torch.optim.AdamW
+    init_args:
+      lr: 2e-4
+      weight_decay: 5e-2
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: 250000  # TODO: fix this
+        t_in_epochs: false
+        warmup_t: 10000
+        warmup_prefix: true
