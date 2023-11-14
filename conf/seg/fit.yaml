@@ -18,5 +18,4 @@ trainer:
       verbose: true
   gradient_clip_val: 12  # following nnU-Net
   gradient_clip_algorithm: norm
-optimization: optim/conv+trans.yaml
 logger: logger.yaml
