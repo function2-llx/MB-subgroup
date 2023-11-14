@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Hashable
 
+import einops
 from einops.layers.torch import Reduce
 import torch
 from torch import nn
@@ -140,7 +141,7 @@ class DeepSupervisionWrapper(nn.Module):
     def __init__(self, loss: nn.Module, num_ds: int):
         super().__init__()
         self.loss = loss
-        weight = torch.tensor([0.5 ** i for i in range(num_ds)])
+        weight = torch.tensor([1 / (1 << i) for i in range(num_ds)])
         weight /= weight.sum()
         self.register_buffer('weight', weight)
 
@@ -172,7 +173,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         ]).mean()
         layers_reg_losses = []
         for i in range(1, len(layers_mask_logits)):
-            layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1], layers_mask_logits[i])
+            layer_reg_loss, layer_reg_dice, layer_reg_focal = self.adjacent_layer_reg(layers_mask_logits[i - 1][0], layers_mask_logits[i][0])
             layers_reg_losses.append(layer_reg_loss)
             self.log(f'train/reg-dice/layer-{i}', layer_reg_dice)
             self.log(f'train/reg-focal/layer-{i}', layer_reg_focal)
@@ -184,7 +185,14 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
 
     def predictor(self, img: torch.Tensor):
         layers_mask_embeddings, layers_mask_logits = self(img)
-        return layers_mask_logits[-1]
+        logits = layers_mask_logits[-1][0]
+        d = logits.shape[2]
+        assert d == img.shape[2]
+        logits_2d = nnf.interpolate(
+            einops.rearrange(logits, 'n c d h w -> n (c d) h w'), img.shape[3:],
+            mode='bicubic',
+        )
+        return einops.rearrange(logits_2d, 'n (c d) h w -> n c d h w', d=d)
 
 class MBSegUNetModel(MBSegModel):
     ds_weights: torch.Tensor
