@@ -14,8 +14,6 @@ optimization:
       init_args:
         t_initial: 250000  # TODO: fix this
         t_in_epochs: false
-        warmup_t: 10000
-        warmup_prefix: true
 - prefix: [backbone.0, mask_decoder]
   optimizer:
     class_path: torch.optim.AdamW
