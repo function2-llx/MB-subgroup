@@ -56,5 +56,4 @@ init_args:
       num_queries: 2
       grad_ckpt: true
   pixel_embedding_levels: [1, 2, 3]
-  num_ds: 3
   val_sw: sw.yaml

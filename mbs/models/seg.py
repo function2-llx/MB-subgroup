@@ -153,13 +153,7 @@ class DeepSupervisionWrapper(nn.Module):
         return ds_loss, ds_losses
 
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
-    def __init__(
-        self,
-        *,
-        adjacent_layer_reg: AdjacentLayerRegLoss | None = None,
-        num_ds: int,
-        **kwargs,
-    ):
+    def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss | None = None, **kwargs):
         """
         Args:
             alr: adjacent layer regularization
@@ -168,7 +162,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         if adjacent_layer_reg is None:
             adjacent_layer_reg = AdjacentLayerRegLoss()
         self.adjacent_layer_reg = adjacent_layer_reg
-        self.ds_wrapper = DeepSupervisionWrapper(self.loss, num_ds)
+        self.ds_wrapper = DeepSupervisionWrapper(self.loss, len(self.pixel_embedding_levels))
 
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
