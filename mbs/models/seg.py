@@ -178,9 +178,9 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         layers_mask_embeddings, layers_mask_logits = self(img)
-        labels = self.ds_wrapper.prepare_labels()
         mask_loss = torch.stack([
-            self.ds_wrapper(mask_logits, label)[0] for mask_logits in layers_mask_logits
+            self.ds_wrapper(mask_logits, label)[0]
+            for mask_logits in layers_mask_logits
         ]).mean()
         layers_reg_losses = []
         for i in range(1, len(layers_mask_logits)):
