@@ -146,7 +146,7 @@ class DeepSupervisionWrapper(nn.Module):
 
     @staticmethod
     @lru_cache(1)
-    def prepare_labels(label: torch.Tensor, spatial_shapes: list[torch.Size]) -> list[torch.Tensor]:
+    def prepare_labels(label: torch.Tensor, spatial_shapes: tuple[torch.Size, ...]) -> list[torch.Tensor]:
         label_shape = label.shape[2:]
         return [
             nnf.interpolate(label, shape, mode='nearest-exact') if label_shape != shape else label
@@ -154,7 +154,7 @@ class DeepSupervisionWrapper(nn.Module):
         ]
 
     def forward(self, deep_logits: list[torch.Tensor], label: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        spatial_shapes = [logits.shape[2:] for logits in deep_logits]
+        spatial_shapes = tuple([logits.shape[2:] for logits in deep_logits])
         deep_labels = self.prepare_labels(label, spatial_shapes)
         ds_losses = [
             self.loss(logits, deep_label)
