@@ -27,9 +27,9 @@ init_args:
       - class_path: luolib.models.PlainConvUNetDecoder
         init_args:
           spatial_dims: 3
-          layer_channels: ${init_args.backbone.init_args.modules.0.init_args.layer_channels}
-          kernel_sizes: ${init_args.backbone.init_args.modules.0.init_args.kernel_sizes}
-          strides: ${init_args.backbone.init_args.modules.0.init_args.strides}
+          layer_channels: ${...0.init_args.layer_channels}
+          kernel_sizes: ${...0.init_args.kernel_sizes}
+          strides: ${...0.init_args.strides}
           res_block: true
   mask_decoder:
     class_path: luolib.models.MaskedAttentionDecoder

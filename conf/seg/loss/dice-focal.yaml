@@ -1,0 +1,7 @@
+model:
+  loss:
+    class_path: monai.losses.DiceFocalLoss
+    init_args:
+      sigmoid: true
+      gamma: 2
+      lambda_focal: 4

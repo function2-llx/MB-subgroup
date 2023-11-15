@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Hashable
+from functools import lru_cache
 
 import einops
 from einops.layers.torch import Reduce
@@ -13,7 +13,6 @@ from luolib.models.blocks import sac
 from luolib.models import BackboneProtocol, MaskFormer
 from luolib.types import spatial_param_t
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceFocalLoss
 from monai.losses.focal_loss import sigmoid_focal_loss
 from monai.metrics import DiceMetric
 from monai.utils import BlendMode, MetricReduction
@@ -36,12 +35,12 @@ class MBSegModel(LightningModule):
     def __init__(
         self,
         *args,
-        gamma: float = 0.,
+        loss: nn.Module,
         val_sw: SlidingWindowInferenceConf,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.loss = DiceFocalLoss(sigmoid=True, gamma=gamma)
+        self.loss = loss
         self.val_sw_conf = val_sw
         self.dice_metric = DiceMetric()
 
@@ -145,10 +144,21 @@ class DeepSupervisionWrapper(nn.Module):
         weight /= weight.sum()
         self.register_buffer('weight', weight)
 
+    @staticmethod
+    @lru_cache(1)
+    def prepare_labels(label: torch.Tensor, spatial_shapes: list[torch.Size]) -> list[torch.Tensor]:
+        label_shape = label.shape[2:]
+        return [
+            nnf.interpolate(label, shape, mode='nearest-exact') if label_shape != shape else label
+            for shape in spatial_shapes
+        ]
+
     def forward(self, deep_logits: list[torch.Tensor], label: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        spatial_shapes = [logits.shape[2:] for logits in deep_logits]
+        deep_labels = self.prepare_labels(label, spatial_shapes)
         ds_losses = [
-            self.loss(logits, nnf.interpolate(label, logits.shape[2:], mode='nearest-exact'))
-            for logits in deep_logits
+            self.loss(logits, deep_label)
+            for logits, deep_label in zip(deep_logits, deep_labels)
         ]
         ds_loss = torch.dot(self.weight, torch.stack(ds_losses))
         return ds_loss, ds_losses
@@ -168,6 +178,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
     def training_step(self, batch: dict, *args, **kwargs):
         img, label = batch
         layers_mask_embeddings, layers_mask_logits = self(img)
+        labels = self.ds_wrapper.prepare_labels()
         mask_loss = torch.stack([
             self.ds_wrapper(mask_logits, label)[0] for mask_logits in layers_mask_logits
         ]).mean()
