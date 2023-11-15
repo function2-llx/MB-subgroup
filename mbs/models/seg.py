@@ -186,13 +186,15 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
     def predictor(self, img: torch.Tensor):
         layers_mask_embeddings, layers_mask_logits = self(img)
         logits = layers_mask_logits[-1][0]
-        d = logits.shape[2]
-        assert d == img.shape[2]
-        logits_2d = nnf.interpolate(
-            einops.rearrange(logits, 'n c d h w -> n (c d) h w'), img.shape[3:],
-            mode='bicubic',
-        )
-        return einops.rearrange(logits_2d, 'n (c d) h w -> n c d h w', d=d)
+        if logits.shape[2:] != img.shape[2:]:
+            d = logits.shape[2]
+            assert d == img.shape[2]
+            logits_2d = nnf.interpolate(
+                einops.rearrange(logits, 'n c d h w -> n (c d) h w'), img.shape[3:],
+                mode='bicubic',
+            )
+            logits = einops.rearrange(logits_2d, 'n (c d) h w -> n c d h w', d=d)
+        return logits
 
 class MBSegUNetModel(MBSegModel):
     ds_weights: torch.Tensor

@@ -1,6 +1,6 @@
-model: ../model/mf-unet.yaml
+model: ../model/mf-unetb.yaml
 optimization:
-- prefix: [backbone.1, backbone.2]
+- prefix: [backbone]
   optimizer:
     class_path: torch.optim.SGD
     init_args:
@@ -14,7 +14,7 @@ optimization:
       init_args:
         t_initial: 250000  # TODO: fix this
         t_in_epochs: false
-- prefix: [backbone.0, mask_decoder]
+- prefix: [mask_decoder]
   optimizer:
     class_path: torch.optim.AdamW
     init_args:

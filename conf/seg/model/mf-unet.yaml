@@ -60,4 +60,4 @@ init_args:
       share_predictor: false
       grad_ckpt: false
   pixel_embedding_levels: [0, 1, 2]
-  val_sw: sw.yaml
+  val_sw: ../sw.yaml

@@ -1,0 +1,49 @@
+class_path: mbs.models.MBSegMaskFormerModel
+init_args:
+  backbone:
+    class_path: luolib.models.backbones.Sequential
+    init_args:
+      modules:
+      - class_path: luolib.models.UNetBackbone
+        init_args:
+          in_channels: 3
+          layer_channels: [32, 64, 128, 256, 512, 512]
+          kernel_sizes:
+            - [1, 3, 3]
+            - [1, 3, 3]
+            - [1, 3, 3]
+            - 3
+            - 3
+            - 3
+          strides:
+            - 1
+            - [1, 2, 2]
+            - [1, 2, 2]
+            - [1, 2, 2]
+            - 2
+            - 2
+          res_block: true
+#      - ../model/unet-decoder.yaml
+      - class_path: luolib.models.PlainConvUNetDecoder
+        init_args:
+          spatial_dims: 3
+          layer_channels: ${init_args.backbone.init_args.modules.0.init_args.layer_channels}
+          kernel_sizes: ${init_args.backbone.init_args.modules.0.init_args.kernel_sizes}
+          strides: ${init_args.backbone.init_args.modules.0.init_args.strides}
+          res_block: true
+  mask_decoder:
+    class_path: luolib.models.MaskedAttentionDecoder
+    init_args:
+      spatial_dims: 3
+      feature_channels: 256
+      num_attention_heads: 8
+      pixel_embedding_dims: [32, 64, 128, 256]
+      num_decoder_layers: 9
+      mask_start_layer: 0
+      key_projection_channels: [512, 512, 256]
+      num_feature_levels: 3
+      num_queries: 2
+      share_predictor: false
+      grad_ckpt: false
+  pixel_embedding_levels: [0, 1, 2, 3]
+  val_sw: ../sw.yaml
