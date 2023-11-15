@@ -1,4 +1,6 @@
 model: ../model/unet.yaml
+trainer:
+  max_steps: 125000
 optimization:
 - optimizer:
     class_path: torch.optim.SGD
@@ -11,5 +13,5 @@ optimization:
     scheduler:
       class_path: timm.scheduler.CosineLRScheduler
       init_args:
-        t_initial: 250000  # TODO: fix this
+        t_initial: ${trainer.max_steps}
         t_in_epochs: false

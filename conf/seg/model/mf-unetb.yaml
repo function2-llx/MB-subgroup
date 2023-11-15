@@ -7,7 +7,7 @@ init_args:
       - class_path: luolib.models.UNetBackbone
         init_args:
           in_channels: 3
-          layer_channels: [32, 64, 128, 256, 512, 512]
+          layer_channels: [32, 64, 128, 256, 320, 320]
           kernel_sizes:
             - [1, 3, 3]
             - [1, 3, 3]
@@ -37,13 +37,13 @@ init_args:
       spatial_dims: 3
       feature_channels: 256
       num_attention_heads: 8
-      pixel_embedding_dims: [32, 64, 128, 256]
+      pixel_embedding_dims: [32, 64, 128]
       num_decoder_layers: 9
       mask_start_layer: 0
-      key_projection_channels: [512, 512, 256]
+      key_projection_channels: [320, 320, 256]
       num_feature_levels: 3
       num_queries: 2
       share_predictor: false
       grad_ckpt: false
-  pixel_embedding_levels: [0, 1, 2, 3]
+  pixel_embedding_levels: [0, 1, 2]
   val_sw: ../sw.yaml

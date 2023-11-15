@@ -1,6 +1,8 @@
 model: ../model/mf-unetb.yaml
+trainer:
+  max_steps: 125000
 optimization:
-- prefix: [backbone]
+- prefix: backbone
   optimizer:
     class_path: torch.optim.SGD
     init_args:
@@ -12,9 +14,9 @@ optimization:
     scheduler:
       class_path: timm.scheduler.CosineLRScheduler
       init_args:
-        t_initial: 250000  # TODO: fix this
+        t_initial: ${trainer.max_steps}
         t_in_epochs: false
-- prefix: [mask_decoder]
+- prefix: mask_decoder
   optimizer:
     class_path: torch.optim.AdamW
     init_args:
@@ -24,7 +26,7 @@ optimization:
     scheduler:
       class_path: timm.scheduler.CosineLRScheduler
       init_args:
-        t_initial: 250000  # TODO: fix this
+        t_initial: ${trainer.max_steps}
         t_in_epochs: false
         warmup_t: 10000
         warmup_prefix: true

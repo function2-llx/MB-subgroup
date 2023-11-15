@@ -1,6 +1,5 @@
 data: data.yaml
 trainer:
-  max_steps: 250000
   val_check_interval: 250
   callbacks:
   - class_path: luolib.lightning.ModelCheckpoint

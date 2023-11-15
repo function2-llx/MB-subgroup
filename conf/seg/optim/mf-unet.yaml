@@ -1,4 +1,6 @@
 model: ../model/mf-unet.yaml
+trainer:
+  max_steps: 125000
 optimization:
 - prefix: [backbone.1, backbone.2]
   optimizer:
@@ -12,7 +14,7 @@ optimization:
     scheduler:
       class_path: timm.scheduler.CosineLRScheduler
       init_args:
-        t_initial: 250000  # TODO: fix this
+        t_initial: ${trainer.max_steps}
         t_in_epochs: false
 - prefix: [backbone.0, mask_decoder]
   optimizer:
@@ -24,7 +26,7 @@ optimization:
     scheduler:
       class_path: timm.scheduler.CosineLRScheduler
       init_args:
-        t_initial: 250000  # TODO: fix this
+        t_initial: ${trainer.max_steps}
         t_in_epochs: false
         warmup_t: 10000
         warmup_prefix: true
