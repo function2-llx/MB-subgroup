@@ -4,4 +4,5 @@ model:
     init_args:
       sigmoid: true
       gamma: 2
-      lambda_focal: 4
+      # 18 / 11 given by: https://www.wolframalpha.com/input?i=int+-%281+-+p%29+%28-1+%2B+p+%2B+2+p+log%28p%29%29dp+from+p%3D0+to+1
+      lambda_focal: 1.6363636363636365
