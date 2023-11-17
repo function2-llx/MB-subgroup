@@ -1,3 +1,4 @@
+# ResNet18 + UNetDecoder + MaskDecoder
 class_path: mbs.models.MBSegMaskFormerModel
 init_args:
   backbone:
@@ -23,6 +24,7 @@ init_args:
             - [1, 2, 2]
             - 2
             - 2
+          num_blocks: [1, 1, 2, 2, 2, 2]
           res_block: true
 #      - ../model/unet-decoder.yaml
       - class_path: luolib.models.PlainConvUNetDecoder
