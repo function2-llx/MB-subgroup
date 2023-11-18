@@ -1,6 +1,6 @@
 model: ../model/mf-unet.yaml
 trainer:
-  max_steps: 125000
+  max_steps: 150000
 optimization:
 - prefix: [backbone.1, backbone.2]
   optimizer:

@@ -1,6 +1,6 @@
 model: ../model/r34+und+md.yaml
 trainer:
-  max_steps: 125000
+  max_steps: 150000
 optimization:
 - prefix: backbone
   optimizer:

@@ -1,6 +1,6 @@
 model: ../model/unet.yaml
 trainer:
-  max_steps: 125000
+  max_steps: 150000
 optimization:
 - optimizer:
     class_path: torch.optim.SGD
