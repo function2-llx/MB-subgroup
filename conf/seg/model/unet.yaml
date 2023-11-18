@@ -6,6 +6,7 @@ init_args:
       modules:
       - class_path: luolib.models.UNetBackbone
         init_args:
+          spatial_dims: 3
           in_channels: 3
           layer_channels: [32, 64, 128, 256, 320, 320]
           kernel_sizes:
