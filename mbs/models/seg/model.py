@@ -38,7 +38,7 @@ class MBSegModel(LightningModule):
     def patch_infer(self, img: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
-    def sw_infer(self, img: torch.Tensor, progress: bool = None, softmax: bool = False):
+    def sw_infer(self, img: torch.Tensor, progress: bool = False, softmax: bool = False):
         conf = self.sw_conf
         ret = sliding_window_inference(
             img,
@@ -52,6 +52,25 @@ class MBSegModel(LightningModule):
         if softmax:
             ret = ret.softmax(dim=1)
         return ret
+
+    @staticmethod
+    def tta_flips(spatial_dims: int):
+        match spatial_dims:
+            case 2:
+                return [[2], [3], [2, 3]]
+            case 3:
+                return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
+            case _:
+                raise ValueError
+
+    def tta_sw_infer(self, img: torch.Tensor, progress: bool = False, softmax: bool = False):
+        pred = self.sw_infer(img, progress, softmax)
+        spatial_dims = sum(s > 1 for s in img.shape[2:])
+        tta_flips = self.tta_flips(spatial_dims)
+        for flip_idx in tta_flips:
+            pred += torch.flip(self.sw_infer(torch.flip(img, flip_idx), progress, softmax), flip_idx)
+        pred /= len(tta_flips) + 1
+        return pred
 
     def on_validation_epoch_start(self) -> None:
         self.dice_metric.reset()

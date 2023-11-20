@@ -9,6 +9,7 @@ import torch
 
 from luolib.datamodule import CrossValDataModule
 from luolib.nnunet import nnUNet_preprocessed
+
 from mbs.utils.enums import DATA_DIR, MBDataKey, MBGroup, PROCESSED_DIR
 
 def load_clinical():
@@ -60,7 +61,7 @@ class MBDataModuleBase(CrossValDataModule):
         number: str  # make PyCharm calm
         return {
             number: self.extract_case_data(number)
-            for number, split in self.case_split.items() if split != 'test'
+            for number in self.plan.index if self.case_split[number] != 'test'
         }
 
     def splits(self) -> Sequence[tuple[Sequence[Hashable], Sequence[Hashable]]]:
@@ -78,11 +79,10 @@ class MBDataModuleBase(CrossValDataModule):
         return ret
 
     def test_data(self):
-        number: str
-        return {
-            number: self.extract_case_data(number)
-            for number, split in self.case_split.items() if split == 'test'
-        }
+        return [
+            self.extract_case_data(number)
+            for number in self.plan.index if self.case_split[number] == 'test'
+        ]
 
 def parse_age(age: str) -> float:
     if pd.isna(age):
@@ -104,6 +104,10 @@ def load_merged_plan():
     return plan
 
 def load_split() -> pd.Series:
+    """
+    Returns:
+        map of case number → split (val fold id / test)
+    """
     split = pd.read_excel(PROCESSED_DIR / 'split.xlsx', dtype={MBDataKey.NUMBER: 'string'})
     split.set_index(MBDataKey.NUMBER, inplace=True)
     return split['split']

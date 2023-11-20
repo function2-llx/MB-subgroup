@@ -124,13 +124,15 @@ class MBSegDataModule(MBDataModuleBase):
     def __init__(
         self,
         *args,
-        seg_trans: SegTransConf,
+        seg_trans: SegTransConf | None = None,
+        predict_range: tuple2_t[int | None] | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.seg_trans_conf = seg_trans
-        if seg_trans.device != 'cpu':
+        if seg_trans is not None and seg_trans.device != 'cpu':
             self.dataloader_conf.pin_memory = False
+        self.predict_range = predict_range
 
     def fit_data(self) -> dict[str, dict]:
         return {
@@ -242,3 +244,15 @@ class MBSegDataModule(MBDataModuleBase):
             ],
             lazy=True,
         )
+
+    def predict_transform(self) -> Callable:
+        return lt.nnUNetLoaderD('case', self.data_dir)
+
+    def predict_data(self):
+        data = [
+            self.extract_case_data(number)
+            for number in self.plan.index
+        ]
+        if self.predict_range is not None:
+            data = data[slice(*self.predict_range)]
+        return data

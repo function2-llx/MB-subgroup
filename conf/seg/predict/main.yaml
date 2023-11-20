@@ -1,0 +1,9 @@
+model:
+  class_path: mbs.models.MBSegPredictor
+  init_args:
+    sw:
+      window_size: [16, 192, 256]
+      overlap: 0.75
+      check_window_size: false
+    output_root: MB-data/seg-pred
+data: ../data.yaml
