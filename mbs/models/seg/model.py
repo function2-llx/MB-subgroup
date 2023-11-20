@@ -1,6 +1,4 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
-from functools import lru_cache
 
 import einops
 from einops.layers.torch import Reduce
@@ -11,11 +9,12 @@ from torch.nn import functional as nnf
 from luolib.lightning import LightningModule
 from luolib.models.blocks import sac
 from luolib.models import BackboneProtocol, MaskFormer
-from luolib.types import spatial_param_t
 from monai.inferers import sliding_window_inference
 from monai.losses.focal_loss import sigmoid_focal_loss
 from monai.metrics import DiceMetric
-from monai.utils import BlendMode, MetricReduction
+from monai.utils import MetricReduction
+
+from .utils import DeepSupervisionWrapper, SlidingWindowInferenceConf
 
 __all__ = [
     'MBSegModel',
@@ -23,37 +22,29 @@ __all__ = [
     'MBSegUNetModel',
 ]
 
-@dataclass
-class SlidingWindowInferenceConf:
-    window_size: spatial_param_t[int]
-    batch_size: int = 4
-    overlap: float = 0.5
-    blend_mode: BlendMode = BlendMode.GAUSSIAN
-    check_window_size: bool = True
-
 class MBSegModel(LightningModule):
     def __init__(
         self,
         *args,
-        loss: nn.Module,
-        val_sw: SlidingWindowInferenceConf,
+        loss: nn.Module | None = None,
+        sw: SlidingWindowInferenceConf,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.loss = loss
-        self.val_sw_conf = val_sw
+        self.sw_conf = sw
         self.dice_metric = DiceMetric()
 
-    def predictor(self, img: torch.Tensor) -> torch.Tensor:
+    def patch_infer(self, img: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
     def sw_infer(self, img: torch.Tensor, progress: bool = None, softmax: bool = False):
-        conf = self.val_sw_conf
+        conf = self.sw_conf
         ret = sliding_window_inference(
             img,
             conf.window_size,
             sw_batch_size=conf.batch_size,
-            predictor=self.predictor,
+            predictor=self.patch_infer,
             overlap=conf.overlap,
             mode=conf.blend_mode,
             progress=progress,
@@ -64,10 +55,10 @@ class MBSegModel(LightningModule):
 
     def on_validation_epoch_start(self) -> None:
         self.dice_metric.reset()
-        if self.val_sw_conf.check_window_size:
+        if self.sw_conf.check_window_size:
             from mbs.datamodule import MBSegDataModule
             dm: MBSegDataModule = self.datamodule
-            assert self.val_sw_conf.window_size == dm.seg_trans_conf.patch_size
+            assert self.sw_conf.window_size == dm.seg_trans_conf.patch_size
 
     def validation_step(self, batch: dict, *args, **kwargs):
         img, label = batch
@@ -84,19 +75,6 @@ class MBSegModel(LightningModule):
         for i in range(dice.shape[0]):
             self.log(f'val/dice/{i}', dice[i])
         self.log(f'val/dice/avg', dice.mean())
-
-def binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
-    """
-    calculate binary KL divergence p * ln p/q + (1-p) * ln (1-p)/(1-q)
-    """
-    log_p = nnf.logsigmoid(logit_p)
-    log_q = nnf.logsigmoid(logit_q)
-    p = logit_p.sigmoid()
-    # log_p - logit_p = log(1 - p)
-    return p * (log_p - log_q) + (1 - p) * (log_p - logit_p - log_q + logit_q)
-
-def symmetric_binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
-    return binary_kl_div(logit_p, logit_q) + binary_kl_div(logit_q, logit_p)
 
 class AdjacentLayerRegLoss(nn.Module):
     def __init__(
@@ -134,35 +112,6 @@ class AdjacentLayerRegLoss(nn.Module):
         focal = sigmoid_focal_loss(last_logits, target, self.focal_gamma).mean()
         return self.dice_weight * dice + self.focal_weight * focal, dice, focal
 
-class DeepSupervisionWrapper(nn.Module):
-    weight: torch.Tensor
-
-    def __init__(self, loss: nn.Module, num_ds: int):
-        super().__init__()
-        self.loss = loss
-        weight = torch.tensor([1 / (1 << i) for i in range(num_ds)])
-        weight /= weight.sum()
-        self.register_buffer('weight', weight)
-
-    @staticmethod
-    @lru_cache(1)
-    def prepare_labels(label: torch.Tensor, spatial_shapes: tuple[torch.Size, ...]) -> list[torch.Tensor]:
-        label_shape = label.shape[2:]
-        return [
-            nnf.interpolate(label, shape, mode='nearest-exact') if label_shape != shape else label
-            for shape in spatial_shapes
-        ]
-
-    def forward(self, deep_logits: list[torch.Tensor], label: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        spatial_shapes = tuple([logits.shape[2:] for logits in deep_logits])
-        deep_labels = self.prepare_labels(label, spatial_shapes)
-        ds_losses = [
-            self.loss(logits, deep_label)
-            for logits, deep_label in zip(deep_logits, deep_labels)
-        ]
-        ds_loss = torch.dot(self.weight, torch.stack(ds_losses))
-        return ds_loss, ds_losses
-
 class MBSegMaskFormerModel(MaskFormer, MBSegModel):
     def __init__(self, *, adjacent_layer_reg: AdjacentLayerRegLoss | None = None, **kwargs):
         """
@@ -194,7 +143,7 @@ class MBSegMaskFormerModel(MaskFormer, MBSegModel):
         self.log('train/loss', loss)
         return loss
 
-    def predictor(self, img: torch.Tensor):
+    def patch_infer(self, img: torch.Tensor):
         layers_mask_embeddings, layers_mask_logits = self(img)
         logits = layers_mask_logits[-1][0]
         if logits.shape[2:] != img.shape[2:]:
@@ -248,5 +197,5 @@ class MBSegUNetModel(MBSegModel):
         self.log('train/ds_loss', ds_loss)
         return ds_loss
 
-    def predictor(self, img: torch.Tensor):
+    def patch_infer(self, img: torch.Tensor):
         return self(img)

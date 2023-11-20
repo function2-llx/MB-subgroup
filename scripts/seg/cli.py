@@ -1,4 +1,4 @@
-from luolib.lightning import LightningCLICrossVal
+from luolib.lightning.cli import LightningCLICrossVal
 
 def main():
     LightningCLICrossVal()
