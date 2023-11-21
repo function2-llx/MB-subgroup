@@ -10,7 +10,7 @@ from monai import transforms as mt
 from monai.data.utils import collate_meta_tensor
 
 from mbs.utils.enums import SegClass
-from .seg_dm import MBSegDataModule
+from .seg import MBSegDataModule
 # from ..conf import MBM2FConf
 
 class MBConvertUniversalSegmentationD(mt.Transform):
