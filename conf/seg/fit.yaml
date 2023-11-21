@@ -2,14 +2,14 @@ data: data.yaml
 trainer:
   val_check_interval: 250
   callbacks:
-  - class_path: luolib.lightning.ModelCheckpoint
+  - class_path: luolib.lightning.callbacks.ModelCheckpoint
     init_args:
       save_top_k: 1
       filename: "{step}"
       monitor: val/dice/avg
       mode: max
       verbose: true
-  - class_path: luolib.lightning.ModelCheckpoint
+  - class_path: luolib.lightning.callbacks.ModelCheckpoint
     init_args:
       every_n_train_steps: 5000
       save_top_k: 0

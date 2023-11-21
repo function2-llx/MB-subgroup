@@ -11,9 +11,9 @@ from monai.utils import BlendMode, InterpolateMode
 @dataclass
 class SlidingWindowInferenceConf:
     window_size: spatial_param_t[int]
-    batch_size: int = 4
-    overlap: float = 0.5
+    overlap: float
     blend_mode: BlendMode = BlendMode.GAUSSIAN
+    batch_size: int = 4
     check_window_size: bool = True
 
 def binary_kl_div(logit_p: torch.Tensor, logit_q: torch.Tensor):
