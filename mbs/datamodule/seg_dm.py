@@ -246,7 +246,7 @@ class MBSegDataModule(MBDataModuleBase):
         )
 
     def predict_transform(self) -> Callable:
-        return lt.nnUNetLoaderD('case', self.data_dir)
+        return lt.nnUNetLoaderD('case', self.data_dir, seg_key=None)
 
     def predict_data(self):
         data = [
