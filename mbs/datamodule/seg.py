@@ -124,7 +124,7 @@ class MBSegDataModule(MBDataModuleBase):
     def __init__(
         self,
         *args,
-        seg_trans: SegTransConf | None = None,
+        seg_trans: SegTransConf,  # not setting to None: https://github.com/omni-us/jsonargparse/issues/423
         predict_range: tuple2_t[int | None] | None = None,
         **kwargs,
     ):
