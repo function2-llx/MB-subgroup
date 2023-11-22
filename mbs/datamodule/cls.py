@@ -1,20 +1,29 @@
 from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
 
-from luolib.types import tuple2_t, tuple3_t
+from luolib.types import spatial_param_t, tuple2_t, tuple3_t
 from luolib import transforms as lt
 from monai import transforms as mt
+from monai.config import KeysCollection
 from monai.data import CacheDataset
 from monai.utils import GridSampleMode, convert_to_tensor
 
+from mbs.utils.enums import MBDataKey, SUBGROUPS
 from .base import MBDataModuleBase, TransConfBase
+
+__all__ = [
+    'MBClsDataModule',
+]
 
 @dataclass(kw_only=True)
 class ClsTransConf(TransConfBase):
+    patch_size: tuple3_t[int]
+
     @dataclass
     class Scale(TransConfBase.Scale):
         prob: float = 0.2
@@ -89,13 +98,38 @@ class MaskLoader(mt.Transform):
     def __init__(self, data_dir: Path, case_key: Hashable, mask_key: Hashable):
         self.data_dir = data_dir
         self.case_key = case_key
-        self.pred_key = mask_key
+        self.mask_key = mask_key
 
     def __call__(self, data: Mapping):
         data = dict(data)
         case = data[self.case_key]
         mask_path = self.data_dir / case / 'prob.pt'
-        return torch.load(mask_path, 'cpu')
+        data[self.mask_key] = torch.load(mask_path, 'cpu')
+        return data
+
+class STCenterCropD(mt.MapTransform):
+    def __init__(
+        self,
+        keys: KeysCollection,
+        roi_size: spatial_param_t[int],
+        mask_key: Hashable,
+        th: float = 0.4,
+        allow_missing_keys: bool = False,
+    ):
+        super().__init__(keys, allow_missing_keys)
+        self.roi_size = roi_size
+        self.mask_key = mask_key
+        self.th = th
+        self.klcc = mt.KeepLargestConnectedComponent(is_onehot=True)
+        self.bbox = mt.BoundingRect()
+
+    def __call__(self, data: dict):
+        ref = data[self.mask_key][0:1] > self.th
+        ref = self.klcc(ref)
+        bbox = self.bbox(ref).reshape(-1, 2)
+        center = bbox.sum(axis=-1) >> 1
+        cropper = mt.SpatialCropD(self.keys, center, self.roi_size, allow_missing_keys=self.allow_missing_keys)
+        return cropper(data)
 
 class InputTransformD(mt.Transform):
     def __init__(self, as_tensor: bool = True):
@@ -103,10 +137,10 @@ class InputTransformD(mt.Transform):
 
     def __call__(self, data):
         data = dict(data)
-        img, mask = data['img'], data['mask']
+        img, mask, label = data['img'], data['mask'], data[MBDataKey.SUBGROUP]
         if self.as_tensor:
             img = convert_to_tensor(img)
-        return img, convert_to_tensor(mask)
+        return img, convert_to_tensor(mask), SUBGROUPS.index(label)
 
 class MBClsDataModule(MBDataModuleBase):
     def __init__(
@@ -120,47 +154,21 @@ class MBClsDataModule(MBDataModuleBase):
         self.mask_dir = mask_dir
         self.trans_conf = trans
 
-    # @property
-    # def pred_keys(self):
-    #     return self.conf.pred_keys
-
-    # @cached_property
-    # def split_cohort(self):
-    #     conf = self.conf
-    #     split_cohort = super().split_cohort
-    #     center = MBClsConf.load_center(conf)
-    #     cls_map = get_cls_map(conf.cls_scheme)
-    #     for split, cohort in split_cohort.items():
-    #         cohort = list(filter(lambda x: cls_map[x[MBDataKey.SUBGROUP]] != -1, cohort))
-    #         for data in cohort:
-    #             case = data[DataKey.CASE]
-    #             data[DataKey.CLS] = cls_map[data[MBDataKey.SUBGROUP]]
-    #             data.update(
-    #                 **{
-    #                     f'{seg_class}-pred': MBClsConf.get_pred_path(conf, case, seg_class)
-    #                     for seg_class in SegClass
-    #                 },
-    #                 **{
-    #                     DataKey.MASK: conf.seg_pred_dir / 'pred' / case / 'seg-prob.pt'
-    #                 },
-    #                 center=center[case],
-    #             )
-    #         split_cohort[split] = cohort
-    #     return split_cohort
-
     def train_transform(self):
         conf = self.trans_conf
+        AT_th = 0.3
         return mt.Compose(
             [
                 lt.nnUNetLoaderD('case', self.data_dir, seg_key=None),
                 MaskLoader(self.mask_dir, 'case', 'mask'),
-                mt.LambdaD('mask', lambda mask: mask[1:2], overwrite='AT'),  # get mask of tumor
+                mt.LambdaD('mask', lambda mask: mask[1:2] > AT_th, overwrite='AT'),
                 # ConvertData(),
                 lt.ComputeCropIndicesD(
                     'AT',
                     conf.patch_size,
-                    0.9, 0.9,
+                    0.95, 0.95,
                     '_indices_for_cls',
+                    is_onehot=True,
                     cache_path_base_key='path_base',
                 ),
                 mt.RandIdentity(),
@@ -243,38 +251,30 @@ class MBClsDataModule(MBDataModuleBase):
             }
         )
 
-    def val_dataloader(self):
-        conf = self.conf
-        val_data = self.val_data()
-        if conf.val_test:
-            real_val_cache_num = min(conf.val_cache_num // 2, len(val_data))
-            return [
-                self.build_eval_dataloader(
-                    CacheDataset(
-                        data,
-                        transform=self.val_transform(),
-                        cache_num=cache_num,
-                        num_workers=conf.dataloader_num_workers,
-                    )
-                )
-                for data, cache_num in [
-                    (val_data, real_val_cache_num),
-                    (self.test_data(), conf.val_cache_num - real_val_cache_num),
-                ]
-            ]
-        else:
-            return self.build_eval_dataloader(
-                CacheDataset(
-                    val_data,
-                    transform=self.val_transform(),
-                    cache_num=conf.val_cache_num,
-                    num_workers=conf.dataloader_num_workers,
-                )
-            )
+    def val_transform(self) -> Callable:
+        conf = self.trans_conf
+        return mt.Compose([
+            lt.nnUNetLoaderD('case', self.data_dir, seg_key=None),
+            MaskLoader(self.mask_dir, 'case', 'mask'),
+            STCenterCropD(['img', 'mask'], conf.patch_size, 'mask'),
+            InputTransformD(),
+        ])
 
-# class MBM2FClsDataModule(MBClsDataModule):
-#     def load_data_transform(self, _stage):
-#         return [
-#             mt.LoadImageD(DataKey.IMG, ensure_channel_first=False, image_only=True),
-#             mt.LoadImageD(self.pred_keys, ensure_channel_first=False, image_only=True, reader=PyTorchReader),
-#         ]
+    def val_dataloader(self):
+        val_data = self.val_data()
+        real_val_cache_num = min(self.cache_dataset_conf.val_num // 2, len(val_data))
+        return [
+            self.build_eval_dataloader(
+                CacheDataset(
+                    data,
+                    transform=self.val_transform(),
+                    cache_num=cache_num,
+                    num_workers=self.dataloader_conf.num_workers,
+                ),
+                self.dataloader_conf.val_batch_size,
+            )
+            for data, cache_num in [
+                (val_data, real_val_cache_num),
+                (self.test_data(), self.cache_dataset_conf.val_num - real_val_cache_num),
+            ]
+        ]

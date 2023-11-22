@@ -1,0 +1,8 @@
+class_path: mbs.datamodule.MBClsDataModule
+init_args:
+  mask_dir: MB-data/seg-pred/(16, 192, 256)+0.75+gaussian+tta
+  trans:
+    patch_size: [16, 256, 256]
+  dataloader:
+    train_batch_size: 16
+    val_batch_size: 16

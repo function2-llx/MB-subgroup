@@ -1,133 +1,122 @@
-from collections.abc import Sequence
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Iterable, Tuple
 
-import einops
-from einops.layers.torch import Reduce
 import torch
 from torch import nn
-from torch.nn import functional as nnf
+import torchmetrics
+from torchmetrics.utilities.enums import AverageMethod
 
 from luolib.lightning import LightningModule
-from luolib.models.blocks import sac
-from luolib.models import BackboneProtocol, MaskFormer
-from monai.inferers import sliding_window_inference
-from monai.losses.focal_loss import sigmoid_focal_loss
-from monai.metrics import DiceMetric
-from monai.utils import MetricReduction
-
-from .utils import DeepSupervisionWrapper, SlidingWindowInferenceConf
+from luolib.models import MaskFormer, load_ckpt
+from luolib.utils import DataSplit
 
 __all__ = [
-    'MBSegModel',
-    'MBSegMaskFormerModel',
-    'MBSegUNetModel',
+    'MBClsModel',
 ]
 
-class MBSegModel(LightningModule):
-    def __init__(
-        self,
-        *args,
-        loss: nn.Module | None = None,
-        sw: SlidingWindowInferenceConf,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        self.loss = loss
-        self.sw_conf = sw
-        self.dice_metric = DiceMetric()
+from mbs.utils.enums import SUBGROUPS
 
-    def patch_infer(self, img: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+class ClsMetricsCollection(nn.ModuleDict):
+    def __init__(self, cls_names: list[str]):
+        self.cls_names = list(cls_names)
+        num_classes = len(cls_names)
+        metrics = {
+            metric_name: metric_cls(task='multiclass', num_classes=num_classes, average=average)
+            for metric_name, metric_cls, average in [
+                ('auroc', torchmetrics.AUROC, AverageMethod.NONE),
+                ('recall', torchmetrics.Recall, AverageMethod.NONE),
+                ('precision', torchmetrics.Precision, AverageMethod.NONE),
+                ('f1', torchmetrics.F1Score, AverageMethod.NONE),
+                ('acc', torchmetrics.Accuracy, AverageMethod.MICRO),
+            ]
+        }
+        super().__init__(metrics)
 
-    def sw_infer(self, img: torch.Tensor, progress: bool = False, softmax: bool = False):
-        conf = self.sw_conf
-        ret = sliding_window_inference(
-            img,
-            conf.window_size,
-            sw_batch_size=conf.batch_size,
-            predictor=self.patch_infer,
-            overlap=conf.overlap,
-            mode=conf.blend_mode,
-            progress=progress,
-        )
-        if softmax:
-            ret = ret.softmax(dim=1)
+    def items(self) -> Iterable[Tuple[str, torchmetrics.Metric]]:
+        yield from super().items()
+
+    def values(self) -> Iterable[torchmetrics.Metric]:
+        yield from super().values()
+
+    def reset(self):
+        for metric in self.values():
+            metric.reset()
+
+    def accumulate(self, prob: torch.Tensor, pred: torch.Tensor, label: torch.Tensor):
+        for name, metric in self.items():
+            if name == 'auroc':
+                metric(prob, label)
+            else:
+                metric(pred, label)
+
+    def get_log_dict(self, prefix: str):
+        ret = {}
+        for name, metric in self.items():
+            m = metric.compute()
+            if metric.average == AverageMethod.NONE:
+                for i, cls in enumerate(self.cls_names):
+                    ret[f'{prefix}/{name}/{cls}'] = m[i]
+                ret[f'{prefix}/{name}/avg'] = m.mean()
+            else:
+                ret[f'{prefix}/{name}'] = m
         return ret
-
-    @staticmethod
-    def tta_flips(spatial_dims: int):
-        match spatial_dims:
-            case 2:
-                return [[2], [3], [2, 3]]
-            case 3:
-                return [[2], [3], [4], [2, 3], [2, 4], [3, 4], [2, 3, 4]]
-            case _:
-                raise ValueError
-
-    def tta_sw_infer(self, img: torch.Tensor, progress: bool = False, softmax: bool = False):
-        pred = self.sw_infer(img, progress, softmax)
-        spatial_dims = sum(s > 1 for s in img.shape[2:])
-        tta_flips = self.tta_flips(spatial_dims)
-        for flip_idx in tta_flips:
-            pred += torch.flip(self.sw_infer(torch.flip(img, flip_idx), progress, softmax), flip_idx)
-        pred /= len(tta_flips) + 1
-        return pred
-
-    def on_validation_epoch_start(self) -> None:
-        self.dice_metric.reset()
-        if self.sw_conf.check_window_size:
-            from mbs.datamodule import MBSegDataModule
-            dm: MBSegDataModule = self.datamodule
-            assert self.sw_conf.window_size == dm.seg_trans_conf.patch_size
-
-    def validation_step(self, batch: dict, *args, **kwargs):
-        img, label = batch
-        pred_logit = self.sw_infer(img)
-        if pred_logit.shape[2:] != label.shape[2:]:
-            pred_logit = sac.resample(pred_logit, label.shape[2:])
-        loss = self.loss(pred_logit, label)
-        self.log('val/loss', loss, sync_dist=True)
-        pred = (pred_logit.sigmoid() > 0.5).long()
-        self.dice_metric(pred, label)
-
-    def on_validation_epoch_end(self) -> None:
-        dice = self.dice_metric.aggregate(MetricReduction.MEAN_BATCH) * 100
-        for i in range(dice.shape[0]):
-            self.log(f'val/dice/{i}', dice[i])
-        self.log(f'val/dice/avg', dice.mean())
 
 class MBClsModel(MaskFormer, LightningModule):
     def __init__(
         self,
         *args,
         embed_dim: int,
-        num_classes: int,
+        use_clinical: bool = False,
         num_cls_layers: int = 1,
         loss: nn.Module | None = None,
+        pretrained_ckpt_path: Path | None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.cls_head = nn.Sequential()
+        last_dim = embed_dim
+        if use_clinical:
+            last_dim += 3
         for _ in range(num_cls_layers):
-            self.cls_head.extend([nn.Linear(embed_dim, embed_dim), nn.ReLU()])
-        self.cls_head.append(nn.Linear(embed_dim, num_classes))
+            self.cls_head.extend([nn.Linear(last_dim, embed_dim), nn.ReLU()])
+            last_dim = embed_dim
+        self.cls_head.append(nn.Linear(last_dim, len(SUBGROUPS)))
+        self.use_clinical = use_clinical
         self.loss = loss
+        self.metrics: Mapping[str, ClsMetricsCollection] = nn.ModuleDict({
+            split: ClsMetricsCollection(SUBGROUPS)
+            for split in [DataSplit.VAL, DataSplit.TEST]
+        })
+        self.pretrained_ckpt_path = pretrained_ckpt_path
+
+    def on_fit_start(self) -> None:
+        load_ckpt(self, self.pretrained_ckpt_path)
+        super().on_fit_start()
+
+    def patch_forward(self, img: torch.Tensor, mask: torch.Tensor):
+        layers_mask_embeddings, _ = self(img, mask)
+        logits = self.cls_head(layers_mask_embeddings[-1][:, 1])
+        return logits
 
     def training_step(self, batch: dict, *args, **kwargs):
         img, mask, label = batch
-        layers_mask_embeddings, _ = self(img)
-        loss = layers_mask_embeddings[-1]
+        logits = self.patch_forward(img, mask)
+        loss = self.loss(logits, label)
         self.log('train/loss', loss)
         return loss
 
-    def patch_infer(self, img: torch.Tensor):
-        layers_mask_embeddings, layers_mask_logits = self(img)
-        logits = layers_mask_logits[-1][0]
-        if logits.shape[2:] != img.shape[2:]:
-            d = logits.shape[2]
-            assert d == img.shape[2]
-            logits_2d = nnf.interpolate(
-                einops.rearrange(logits, 'n c d h w -> n (c d) h w'), img.shape[3:],
-                mode='bicubic',
-            )
-            logits = einops.rearrange(logits_2d, 'n (c d) h w -> n c d h w', d=d)
-        return logits
+    def validation_step(self, batch: dict, _batch_idx, dataloader_idx: int):
+        split = (DataSplit.VAL, DataSplit.TEST)[dataloader_idx]
+        img, mask, label = batch
+        logits = self.patch_forward(img, mask)
+        loss = self.loss(logits, label)
+        self.log(f'{split}/loss', loss)
+        prob = logits.softmax(dim=-1)
+        pred = prob.argmax(dim=-1)
+        self.metrics[split].accumulate(prob, pred, label)
+
+    def on_validation_epoch_end(self):
+        super().on_validation_epoch_end()
+        for split in (DataSplit.VAL, DataSplit.TEST):
+            self.log_dict(self.metrics[split].get_log_dict(split), sync_dist=True)

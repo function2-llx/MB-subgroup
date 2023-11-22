@@ -1,0 +1,20 @@
+data: data.yaml
+trainer:
+  val_check_interval: 50
+  callbacks:
+  - class_path: luolib.lightning.callbacks.ModelCheckpoint
+    init_args:
+      save_top_k: 1
+      filename: "{step}"
+      monitor: val/auc/avg
+      mode: max
+      verbose: true
+  - class_path: luolib.lightning.callbacks.ModelCheckpoint
+    init_args:
+      every_n_train_steps: 50
+      save_top_k: 0
+      save_last: true
+      verbose: true
+  gradient_clip_val: 12  # following nnU-Net
+  gradient_clip_algorithm: norm
+logger: logger.yaml

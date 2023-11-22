@@ -1,0 +1,46 @@
+model: ../model/r18+und+md.yaml
+trainer:
+  max_steps: 5000
+optimization:
+- prefix: backbone
+  optimizer:
+    class_path: torch.optim.SGD
+    init_args:
+      lr: 3e-5
+      weight_decay: 1e-4
+      momentum: 0.99
+      nesterov: true
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: ${trainer.max_steps}
+        t_in_epochs: false
+- prefix: mask_decoder
+  optimizer:
+    class_path: torch.optim.AdamW
+    init_args:
+      lr: 1e-5
+      weight_decay: 5e-2
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: ${trainer.max_steps}
+        t_in_epochs: false
+        warmup_t: 100
+        warmup_prefix: true
+- prefix: cls_head
+  optimizer:
+    class_path: torch.optim.AdamW
+    init_args:
+      lr: 3e-4
+      weight_decay: 5e-2
+  lr_scheduler:
+    scheduler:
+      class_path: timm.scheduler.CosineLRScheduler
+      init_args:
+        t_initial: ${trainer.max_steps}
+        t_in_epochs: false
+        warmup_t: 100
+        warmup_prefix: true
