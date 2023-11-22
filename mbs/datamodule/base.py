@@ -34,7 +34,7 @@ class MBDataModuleBase(CrossValDataModule):
     def __init__(
         self,
         *args,
-        data_dir: Path = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans_3d_fullres',
+        data_dir: Path = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans-z_3d_fullres',
         include_adults: bool = True,
         **kwargs,
     ):

@@ -47,7 +47,7 @@ def run_case(
     pd.to_pickle(data_properties, output_filename_truncated + '.pkl')
 
 def main():
-    plans_file = Path(nnUNet_preprocessed) / dataset_name / 'nnUNetPlans.json'
+    plans_file = Path(nnUNet_preprocessed) / dataset_name / 'nnUNetPlans-z.json'
     plans_manager = PlansManager(plans_file)
     dataset_json = json.loads((nnUNet_preprocessed / dataset_name / 'dataset.json').read_bytes())
     configuration_manager = plans_manager.get_configuration('3d_fullres')

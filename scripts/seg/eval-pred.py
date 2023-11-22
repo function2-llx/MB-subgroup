@@ -13,7 +13,7 @@ from monai.metrics import compute_dice
 from mbs.datamodule import load_merged_plan, load_split
 from mbs.utils.enums import SegClass
 
-data_dir = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans_3d_fullres'
+data_dir = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans-z_3d_fullres'
 pred_dir = Path('MB-data/seg-pred/(16, 192, 256)+0.75+gaussian+tta')
 pred_th = 0.5
 
