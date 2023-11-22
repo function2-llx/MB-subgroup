@@ -10,7 +10,7 @@ from luolib.types import tuple2_t, tuple3_t
 from monai import transforms as mt
 from monai.utils import GridSampleMode, convert_to_tensor
 
-from .base import MBDataModuleBase
+from .base import MBDataModuleBase, TransConfBase
 
 __all__ = [
     'MBSegDataModule',
@@ -44,81 +44,9 @@ class InputTransformD(mt.Transform):
         return img, convert_to_tensor(label)
 
 @dataclass(kw_only=True)
-class SegTransConf:
-    patch_size: tuple3_t[int]
+class SegTransConf(TransConfBase):
     rand_fg_ratios: tuple2_t[float] = (2, 1)
     ST_AT_ratios: tuple2_t[float] = (1, 1)
-    device: Device = 'cpu'
-
-    @dataclass
-    class Scale:
-        prob: float = 0.2
-        range: tuple2_t[float] = (0.7, 1.4)
-        ignore_dim: int | None = 0
-
-    scale: Scale
-
-    @dataclass
-    class Rotate:
-        prob: float = 0.2
-        range: tuple3_t[float] = (np.pi / 2, 0, 0)
-
-    rotate: Rotate
-
-    @dataclass
-    class GaussianNoise:
-        prob: float = 0.1
-        max_std: float = 0.1
-
-    gaussian_noise: GaussianNoise
-
-    @dataclass
-    class GaussianSmooth:
-        prob: float = 0.2
-        prob_per_channel: float = 0.5
-        sigma_x: tuple2_t[float] = (0.5, 1)
-        sigma_y: tuple2_t[float] = (0.5, 1)
-        sigma_z: tuple2_t[float] = (0.5, 1)
-
-    gaussian_smooth: GaussianSmooth
-
-    @dataclass
-    class ScaleIntensity:
-        prob: float = 0.15
-        range: tuple2_t[float] = (0.75, 1.25)
-
-        @property
-        def factors(self):
-            return self.range[0] - 1, self.range[1] - 1
-
-    scale_intensity: ScaleIntensity
-
-    @dataclass
-    class AdjustContrast:
-        prob: float = 0.15
-        range: tuple2_t[float] = (0.75, 1.25)
-        preserve_intensity_range: bool = True
-
-    adjust_contrast: AdjustContrast
-
-    @dataclass
-    class SimulateLowResolution:
-        prob: float = 0.25
-        prob_per_channel: float = 0.5
-        zoom_range: tuple2_t[float] = (0.5, 1)
-        downsample_mode: str | int = GridSampleMode.NEAREST
-        upsample_mode: str | int = GridSampleMode.BICUBIC
-
-    simulate_low_resolution: SimulateLowResolution
-
-    @dataclass
-    class GammaCorrection:
-        prob: float = 0.3
-        range: tuple2_t[float] = (0.7, 1.5)
-        prob_invert: float = 0.75
-        retain_stats: bool = True
-
-    gamma_correction: GammaCorrection
 
 class MBSegDataModule(MBDataModuleBase):
     def __init__(
