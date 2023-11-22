@@ -46,6 +46,6 @@ init_args:
       num_feature_levels: 3
       num_queries: 2
       share_predictor: false
-      grad_ckpt: false
+      grad_ckpt: true
   pixel_embedding_levels: [0, 1, 2]
   sw: ../sw.yaml
