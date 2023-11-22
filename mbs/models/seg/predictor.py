@@ -1,11 +1,14 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 import cytoolz
 from jsonargparse import ArgumentParser
+import numpy as np
+from ruamel.yaml import YAML
+import SimpleITK as sitk
 import torch
 from torch import nn
-from ruamel.yaml import YAML
+from torch.nn import functional as nnf
 
 from luolib.lightning import LightningModule
 
@@ -123,8 +126,25 @@ class MBSegPredictor(LightningModule):
             prob_save_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(prob, prob_save_path)
 
+        prob = nnf.interpolate(
+            prob[None],
+            torch.as_tensor(batch['shape_after_cropping_and_before_resampling']).tolist(),
+            mode='trilinear',
+        )[0]
         pred = prob > self.prob_th
+        origin_shape = torch.as_tensor(batch['shape_before_cropping']).tolist()
+        bbox = torch.as_tensor(batch['bbox_used_for_cropping']).tolist()
+        padding = [
+            (bbox[i][0], origin_shape[i] - bbox[i][1])
+            for i in range(3)
+        ]
+        pred = nnf.pad(pred, [*cytoolz.concat(reversed(padding))])
         pred_save_dir = output_dir / f'th:{self.prob_th}'
         pred_save_dir.mkdir(exist_ok=True)
+        pred = pred.byte().cpu().numpy()
         for i, name in zip(range(pred.shape[0]), ['ST', 'AT']):
-            torch.save(pred[i], pred_save_dir / f'{name}.pt')
+            itk_image = sitk.GetImageFromArray(pred[i])
+            itk_image.SetSpacing(torch.as_tensor(batch['sitk_stuff']['spacing']).cpu().numpy())
+            itk_image.SetOrigin(torch.as_tensor(batch['sitk_stuff']['origin']).cpu().numpy())
+            itk_image.SetDirection(torch.as_tensor(batch['sitk_stuff']['direction']).cpu().numpy())
+            sitk.WriteImage(itk_image, pred_save_dir / f'{name}.nii')

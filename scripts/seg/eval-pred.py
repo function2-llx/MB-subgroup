@@ -76,7 +76,7 @@ def main():
         mode=(mode := 'a' if result_file.exists() else 'w'),
         if_sheet_exists='replace' if mode == 'a' else None,
     ) as writer:
-        results_df.to_excel(writer, freeze_panes=(1, 0))
+        results_df.to_excel(writer, f'th={pred_th}', freeze_panes=(1, 0))
 
 if __name__ == '__main__':
     main()
