@@ -45,8 +45,8 @@ class InputTransformD(mt.Transform):
 
 @dataclass(kw_only=True)
 class SegTransConf(TransConfBase):
-    rand_fg_ratios: tuple2_t[float] = (1, 3)
-    ST_AT_ratios: tuple2_t[float] = (1, 3)
+    rand_fg_ratios: tuple2_t[float] = (2, 1)
+    ST_AT_ratios: tuple2_t[float] = (1, 1)
 
 class MBSegDataModule(MBDataModuleBase):
     def __init__(
