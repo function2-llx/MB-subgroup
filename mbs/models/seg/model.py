@@ -75,6 +75,7 @@ class MBSegModel(LightningModule):
     def on_validation_epoch_start(self) -> None:
         self.dice_metric.reset()
         if self.sw_conf.check_window_size:
+            # TODO: prettier?
             from mbs.datamodule import MBSegDataModule
             dm: MBSegDataModule = self.datamodule
             assert self.sw_conf.window_size == dm.seg_trans_conf.patch_size
