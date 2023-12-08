@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from jsonargparse import ArgumentParser
 import pandas as pd
 
 from luolib.nnunet import nnUNet_preprocessed
@@ -14,8 +15,8 @@ from mbs.datamodule import load_merged_plan, load_split
 from mbs.utils.enums import SegClass
 
 data_dir = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans-z_3d_fullres'
-pred_dir = Path('MB-data/seg-pred/(16, 192, 256)+0.75+gaussian+tta')
-pred_th = 0.5
+pred_dir = Path('MB-data/seg-pred/(16, 256, 256)+0.8+gaussian+tta')
+pred_th: float
 
 def process(case: str):
     device = device_map()
@@ -58,6 +59,12 @@ def process(case: str):
     return ret
 
 def main():
+    global pred_th
+    parser = ArgumentParser()
+    parser.add_argument('--th', type=float, default=0.5)
+    args = parser.parse_args()
+    pred_th = args.th
+
     plan = load_merged_plan()
     # for post in [False, True]:
     results = process_map(
