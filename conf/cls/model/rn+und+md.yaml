@@ -26,6 +26,7 @@ init_args:
             - 2
           num_blocks: [1, 1, 2, 2, 2, 2]
           res_block: true
+          grad_ckpt: true
 #      - ../model/unet-decoder.yaml
       - class_path: luolib.models.PlainConvUNetDecoder
         init_args:

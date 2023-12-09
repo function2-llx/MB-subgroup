@@ -4,5 +4,5 @@ init_args:
   trans:
     patch_size: [16, 256, 256]
   dataloader:
-    train_batch_size: 32
+    train_batch_size: 40
     val_batch_size: 16

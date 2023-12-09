@@ -182,6 +182,15 @@ class MBSampler(Sampler):
     def __len__(self):
         return self.num_samples
 
+# cannot pickle local objects when using spawn method
+class CreateATMaskD(mt.Transform):
+    def __init__(self, th: float = 0.25):
+        self.th = th
+
+    def __call__(self, data):
+        data['AT'] = data['mask'][1:2] > self.th
+        return data
+
 class MBClsDataModule(MBDataModuleBase):
     def __init__(
         self,
@@ -198,14 +207,17 @@ class MBClsDataModule(MBDataModuleBase):
         self.cls_weights = cls_weights
         self.sampler_cls_ratio = sampler_cls_ratio
 
+        if trans.device != 'cpu':
+            self.dataloader_conf.pin_memory = False
+
     def train_transform(self):
         conf = self.trans_conf
-        AT_th = 0.3
+
         return mt.Compose(
             [
                 lt.nnUNetLoaderD('case', self.data_dir, seg_key=None),
                 MaskLoader(self.mask_dir, 'case', 'mask'),
-                mt.LambdaD('mask', lambda mask: mask[1:2] > AT_th, overwrite='AT'),
+                CreateATMaskD(),
                 # ConvertData(),
                 lt.ComputeCropIndicesD(
                     'AT',
