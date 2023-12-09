@@ -1,4 +1,4 @@
-model: ../model/r18+und+md.yaml
+model: ../model/rn+und+md.yaml
 trainer:
   max_steps: 5000
 optimization:

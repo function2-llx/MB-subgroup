@@ -1,16 +1,18 @@
-from collections.abc import Hashable, Mapping
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import torch
+from torch.utils.data import Sampler
 
+from luolib.datamodule.base import DataLoaderConf
 from luolib.types import spatial_param_t, tuple2_t, tuple3_t
 from luolib import transforms as lt
 from monai import transforms as mt
 from monai.config import KeysCollection
-from monai.data import CacheDataset
+from monai.data import CacheDataset, DataLoader
 from monai.utils import GridSampleMode, convert_to_tensor
 
 from mbs.utils.enums import MBDataKey, SUBGROUPS
@@ -22,11 +24,9 @@ __all__ = [
 
 @dataclass(kw_only=True)
 class ClsTransConf(TransConfBase):
-    patch_size: tuple3_t[int]
-
     @dataclass
     class Scale(TransConfBase.Scale):
-        prob: float = 0.2
+        prob: float = 0.3
         range: tuple2_t[float] = (0.7, 1.4)
         ignore_dim: int | None = 0
 
@@ -34,7 +34,7 @@ class ClsTransConf(TransConfBase):
 
     @dataclass
     class Rotate(TransConfBase.Rotate):
-        prob: float = 0.2
+        prob: float = 0.4
         range: tuple3_t[float] = (np.pi / 2, 0, 0)
 
     rotate: Rotate
@@ -116,6 +116,10 @@ class STCenterCropD(mt.MapTransform):
         th: float = 0.4,
         allow_missing_keys: bool = False,
     ):
+        """
+        Args:
+            th: threshold for obtaining ST mask from probability
+        """
         super().__init__(keys, allow_missing_keys)
         self.roi_size = roi_size
         self.mask_key = mask_key
@@ -142,17 +146,57 @@ class InputTransformD(mt.Transform):
             img = convert_to_tensor(img)
         return img, convert_to_tensor(mask), SUBGROUPS.index(label)
 
+class MBSampler(Sampler):
+    def __init__(self, num_samples: int, labels: Sequence[int], cls_ratio: float = 0.5, cls_weight: Sequence[float] | None = None):
+        """
+        Args:
+            labels: labels for all samples in dataset
+            cls_ratio: how often samples are generated from a class sampled from `cls_weight`
+        """
+        super().__init__()
+        self.num_samples = num_samples
+        self.cls_ratio = cls_ratio
+        if cls_weight is None:
+            cls_weight = [1] * len(SUBGROUPS)
+        p = np.array(cls_weight)
+        self.p = p / p.sum()
+        self.cls_indexes = [[] for _ in range(len(SUBGROUPS))]
+        for i, cls in enumerate(labels):
+            self.cls_indexes[cls].append(i)
+        self.n = len(labels)
+        self.cur_uniform = self.n
+
+    def __iter__(self):
+        for _ in range(self.num_samples):
+            if np.random.rand() < self.cls_ratio:
+                cls = int(np.random.choice(np.arange(len(SUBGROUPS)), p=self.p))
+                cls_index = self.cls_indexes[cls]
+                ret = cls_index[int(np.random.randint(len(cls_index)))]
+            else:
+                if self.cur_uniform == self.n:
+                    self.perm = np.random.permutation(self.n)
+                    self.cur_uniform = 0
+                ret = int(self.perm[self.cur_uniform])
+            yield ret
+
+    def __len__(self):
+        return self.num_samples
+
 class MBClsDataModule(MBDataModuleBase):
     def __init__(
         self,
         *args,
         mask_dir: Path,
         trans: ClsTransConf,
+        cls_weights: Sequence[float] | None = None,
+        sampler_cls_ratio: float = 0.5,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.mask_dir = mask_dir
         self.trans_conf = trans
+        self.cls_weights = cls_weights
+        self.sampler_cls_ratio = sampler_cls_ratio
 
     def train_transform(self):
         conf = self.trans_conf
@@ -249,6 +293,29 @@ class MBClsDataModule(MBDataModuleBase):
                 'img': {'mode': GridSampleMode.BICUBIC},
                 'seg': {'mode': GridSampleMode.BILINEAR},
             }
+        )
+
+    def train_dataloader(self):
+        dataset = self.train_dataset()
+        conf = self.dataloader_conf
+        labels = [
+            SUBGROUPS.index(x[MBDataKey.SUBGROUP])
+            for x in dataset.data
+        ]
+        return DataLoader(
+            dataset,
+            batch_size=conf.train_batch_size,
+            sampler=MBSampler(
+                conf.num_batches * conf.train_batch_size,
+                labels,
+                self.sampler_cls_ratio,
+                self.cls_weights,
+            ),
+            num_workers=conf.num_workers,
+            pin_memory=conf.pin_memory,
+            prefetch_factor=conf.prefetch_factor,
+            persistent_workers=conf.persistent_workers,
+            collate_fn=self.get_train_collate_fn(),
         )
 
     def val_transform(self) -> Callable:

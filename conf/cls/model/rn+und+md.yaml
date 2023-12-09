@@ -1,4 +1,4 @@
-# ResNet18 + UNetDecoder + MaskDecoder
+# ResNet + UNetDecoder + MaskDecoder
 class_path: mbs.models.MBClsModel
 init_args:
   backbone:
@@ -9,7 +9,7 @@ init_args:
         init_args:
           spatial_dims: 3
           in_channels: 3
-          layer_channels: [32, 64, 128, 256, 320, 320]
+          layer_channels: [32, 64, 128, 256, 384, 512]
           kernel_sizes:
             - [1, 3, 3]
             - [1, 3, 3]
@@ -42,11 +42,11 @@ init_args:
       num_attention_heads: 8
       pixel_embedding_dims: []
       num_decoder_layers: 9
-      key_projection_channels: [320, 320, 256]
+      key_projection_channels: [512, 384, 256]
       num_feature_levels: 3
       num_queries: 2
       share_predictor: true
-      grad_ckpt: false
+      grad_ckpt: true
   pixel_embedding_levels: []
   embed_dim: ${.mask_decoder.init_args.feature_channels}
   use_clinical: false

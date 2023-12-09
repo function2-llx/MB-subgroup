@@ -1,0 +1,8 @@
+model:
+  init_args:
+    loss:
+      class_path: monai.losses.FocalLoss
+      init_args:
+        to_onehot_y: true
+        gamma: 2
+        use_softmax: true
