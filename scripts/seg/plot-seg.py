@@ -1,66 +1,88 @@
-import pandas as pd
+from pathlib import Path
+
+import cytoolz
+from matplotlib.colors import ListedColormap
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
-from torchmetrics import Recall
+from torch.nn import functional as nnf
 
-from monai.data import DataLoader, Dataset
-from monai.metrics import DiceMetric
-from umei.utils import DataKey, DataSplit, UMeIParser
-from umei.utils.index_tracker import IndexTracker
+from luolib.transforms import nnUNetLoader
+from luolib.utils import process_map
+from monai import transforms as mt
+from monai.data import MetaTensor
 
-from mbs.utils.enums import MBDataKey, Modality, SegClass
-from mbs.args import MBSegConf
-from mbs.datamodule import MBSegDataModule, DATA_DIR, load_split_cohort
-from mbs.models.lightning.seg_model import MBSegModel
+from mbs.datamodule import load_merged_plan
 
-torch.multiprocessing.set_sharing_strategy('file_system')
-# plot_case = None
-plot_case = '424442cuitongkai'
-val_id = None
-dice_metric = DiceMetric()
-recall_metric = Recall(num_classes=1, multiclass=False).cuda()
+data_dir = Path('MB-data/processed/cr-p10/register-crop')
+seg_output_dir = Path('MB-data/seg-pred/(16, 256, 256)+0.8+gaussian+tta')
+plot_dir = Path('seg-plot')
+PRED_TH = 0.3
+meta_loader = nnUNetLoader(Path('nnUNet_data/preprocessed/Dataset500_TTMB/nnUNetPlans-z_3d_fullres'), None, None)
+plan = load_merged_plan()
+img_keys = ['T2', 'ST', 'AT']
+img_loader = mt.Compose([
+    mt.LoadImageD(img_keys, ensure_channel_first=True),
+    mt.OrientationD(img_keys, 'SPR'),
+    mt.ToNumpyD(['T2', 'ST', 'AT']),
+])
+dpi = 100
 
-def plot(img, pred, seg):
-    dice = dice_metric(pred, seg)
-    recall = recall_metric(pred.view(-1), seg.view(-1).long())
-    print(dice.item(), recall.item())
-    IndexTracker(img[0, 0].cpu(), pred[0, 0].cpu())
+def process(case: str):
+    meta = meta_loader(case)
+    if not (data_dir / case / f'AT.nii').exists():
+        return
+    data: dict[str, np.ndarray] = img_loader({
+        key: data_dir / case / f'{key}.nii'
+        for key in ['T2', 'ST', 'AT']
+    })
+    prob = torch.load(seg_output_dir / case / 'prob.pt', 'cpu')
+    if isinstance(prob, MetaTensor):
+        prob = prob.as_tensor()
+    prob = nnf.interpolate(
+        prob[None],
+        meta['shape_after_cropping_and_before_resampling'],
+        mode='trilinear',
+    )[0]
+    pred = prob > PRED_TH
+    origin_shape = meta['shape_before_cropping']
+    bbox = meta['bbox_used_for_cropping']
+    padding = [
+        (bbox[i][0], origin_shape[i] - bbox[i][1])
+        for i in range(3)
+    ]
+    pred = nnf.pad(pred, [*cytoolz.concat(reversed(padding))])
+    figsize = (pred.shape[3] / dpi, pred.shape[2] / dpi)
+    sitk_stuff = meta['sitk_stuff']
+    direction = np.array(sitk_stuff['direction']).reshape((3, 3))
+    affine = np.eye(4)
+    affine[:3, :3] = direction[[2, 1, 0]]
+    affine[1] = -affine[1]
+    affine[2] = -affine[2]
+    pred = MetaTensor(pred, affine)
+    pred = mt.Orientation('SPR')(pred).byte().cpu().numpy()
+    for i in data['AT'][0].sum(axis=(1, 2)).argsort()[-5:]:
+        case_plot_dir = plot_dir / plan.at[case, 'group'] / plan.at[case, 'subgroup'] / case / str(i)
+        case_plot_dir.mkdir(exist_ok=True, parents=True)
+        plt.cla()
+        plt.gcf().set_size_inches(*figsize)
+        plt.axis('off')
+        plt.imshow(data['T2'][0, i], cmap='gray')
+        plt.savefig(case_plot_dir / 'origin.png', bbox_inches='tight', pad_inches=0, dpi=dpi)
+        plt.imshow(data['ST'][0, i], ListedColormap(['none', 'green']), alpha=0.3)
+        plt.imshow(data['AT'][0, i], ListedColormap(['none', 'red']), alpha=0.3)
+        plt.savefig(case_plot_dir / 'label.png', bbox_inches='tight', pad_inches=0)
+        plt.cla()
+        plt.axis('off')
+        plt.gcf().set_size_inches(*figsize)
+        plt.imshow(data['T2'][0, i], cmap='gray')
+        for c, color in enumerate(['green', 'red']):
+            plt.imshow(pred[c, i], ListedColormap(['none', color]), alpha=0.3)
+        plt.savefig(case_plot_dir / 'pred.png', bbox_inches='tight', pad_inches=0, dpi=dpi)
 
 def main():
-    global val_id
-    cohort = pd.read_excel(DATA_DIR / 'plan-split.xlsx', sheet_name='Sheet1')
-    cohort.set_index('name', inplace=True)
-    if val_id is None:
-        val_id = int(cohort.loc[plot_case, 'split'])
-    parser = UMeIParser((MBSegConf,), use_conf=True)
-    args: MBSegConf = parser.parse_args_into_dataclasses()[0]
-    dm = MBSegDataModule(args)
-    dm.val_id = val_id
-    output_dir = args.output_dir / f'run-{args.seed}' / f'fold-{val_id}'
-    ckpt_path = output_dir / 'last.ckpt'
-    model: MBSegModel = MBSegModel.load_from_checkpoint(ckpt_path, args=args).cuda().eval()
-    print(f'load from {ckpt_path}')
-
-    for data in DataLoader(Dataset(
-        [{
-            MBDataKey.CASE: plot_case,
-            **{
-                img_type: DATA_DIR / 'image' / plot_case / f'{img_type}.nii'
-                for img_type in list(Modality) + list(SegClass)
-            }
-        }],
-        transform=dm.val_transform,
-    )):
-        seg = data[DataKey.SEG].cuda()
-        img = data[DataKey.IMG].cuda()
-        with torch.no_grad():
-            pred = model.infer_logit(img)
-            pred = (pred.sigmoid() > 0.5).long()
-            for i, s in enumerate(args.seg_classes):
-                if s == SegClass.CT:
-                    j = args.input_modalities.index(Modality.T1)
-                else:
-                    j = args.input_modalities.index(Modality.T2)
-                plot(img[:, j:j + 1], pred[:, i:i + 1], seg[:, i:i + 1])
+    plot_dir.mkdir(exist_ok=True, parents=True)
+    process_map(process, plan.index, max_workers=8)
 
 if __name__ == '__main__':
     main()
