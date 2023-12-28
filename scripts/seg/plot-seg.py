@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import cytoolz
+from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -64,25 +66,29 @@ def process(case: str):
     for i in data['AT'][0].sum(axis=(1, 2)).argsort()[-5:]:
         case_plot_dir = plot_dir / plan.at[case, 'group'] / plan.at[case, 'subgroup'] / case / str(i)
         case_plot_dir.mkdir(exist_ok=True, parents=True)
-        plt.cla()
-        plt.gcf().set_size_inches(*figsize)
-        plt.axis('off')
-        plt.imshow(data['T2'][0, i], cmap='gray')
-        plt.savefig(case_plot_dir / 'origin.png', bbox_inches='tight', pad_inches=0, dpi=dpi)
-        plt.imshow(data['ST'][0, i], ListedColormap(['none', 'green']), alpha=0.3)
-        plt.imshow(data['AT'][0, i], ListedColormap(['none', 'red']), alpha=0.3)
-        plt.savefig(case_plot_dir / 'label.png', bbox_inches='tight', pad_inches=0)
-        plt.cla()
-        plt.axis('off')
-        plt.gcf().set_size_inches(*figsize)
-        plt.imshow(data['T2'][0, i], cmap='gray')
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig: Figure
+        ax: Axes
+        ax.set_axis_off()
+        fig.tight_layout(pad=0)
+        ax.imshow(data['T2'][0, i], cmap='gray')
+        fig.savefig(case_plot_dir / 'origin.png')
+        ax.imshow(data['ST'][0, i], ListedColormap(['none', 'green']), alpha=0.3)
+        ax.imshow(data['AT'][0, i], ListedColormap(['none', 'red']), alpha=0.3)
+        fig.savefig(case_plot_dir / 'label.png')
+        plt.close(fig)
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        ax.set_axis_off()
+        fig.tight_layout(pad=0)
+        ax.imshow(data['T2'][0, i], cmap='gray')
         for c, color in enumerate(['green', 'red']):
-            plt.imshow(pred[c, i], ListedColormap(['none', color]), alpha=0.3)
-        plt.savefig(case_plot_dir / 'pred.png', bbox_inches='tight', pad_inches=0, dpi=dpi)
+            ax.imshow(pred[c, i], ListedColormap(['none', color]), alpha=0.3)
+        fig.savefig(case_plot_dir / 'pred.png')
+        plt.close(fig)
 
 def main():
     plot_dir.mkdir(exist_ok=True, parents=True)
-    process_map(process, plan.index, max_workers=8)
+    process_map(process, plan.index, max_workers=0)
 
 if __name__ == '__main__':
     main()
