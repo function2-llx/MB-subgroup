@@ -59,10 +59,11 @@ def compute(df: pd.DataFrame, subgroups: ClassLabel, seed: int | None = None):
             report.at['micro', name] = metric.compute().item()
     return report
 
-def run(args: Namespace, case_outputs: pd.DataFrame, group: MBGroup | None = None):
-    df = case_outputs[case_outputs['split'] == 'test']
+def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
+    df_index = df['split'] == 'test'
     if group is not None:
-        df = df[test_plan[MBDataKey.GROUP] == group]
+        df_index &= test_plan[MBDataKey.GROUP] == group
+    df = df[df_index]
     all_subgroups = df['true']
     subgroups = ClassLabel(names=sorted(np.unique(all_subgroups).tolist(), key=lambda x: SUBGROUPS.index(x)))
 
@@ -78,6 +79,7 @@ def run(args: Namespace, case_outputs: pd.DataFrame, group: MBGroup | None = Non
         max_workers=8,
     )
     bs_metrics = np.stack([bs_report.to_numpy() for bs_report in bs_reports])
+    np.save(output_dir / 'bs_metrics.npy', bs_metrics)
     ci = np.stack(
         [
             np.percentile(bs_metrics, q=2.5, axis=0),
@@ -85,18 +87,16 @@ def run(args: Namespace, case_outputs: pd.DataFrame, group: MBGroup | None = Non
         ],
         axis=-1,
     )
-    report_ci = pd.DataFrame()
-    for cls_idx in range(report.shape[0]):
-    # for cls_idx, metric_idx in np.ndindex(report.shape):
+    ci_report = pd.DataFrame()
+    for cls_idx, metric_idx in np.ndindex(report.shape):
         cls_name = report.index[cls_idx]
-        for metric_idx in range(report.shape[1]):
-            metric_name = report.columns[metric_idx]
+        metric_name = report.columns[metric_idx]
         if pd.isna(mean := report.at[cls_name, metric_name]):
             continue
-        report_ci.at[cls_name, metric_name] = mean
+        ci_report.at[cls_name, metric_name] = mean
         for ci_idx in range(2):
-            report_ci.at[cls_name, f'{metric_name}-{ci_idx}'] = ci[cls_idx, metric_idx, ci_idx]
-    report_ci.to_excel(output_dir / 'report-ci.xlsx')
+            ci_report.at[cls_name, f'{metric_name}-{ci_idx}'] = ci[cls_idx, metric_idx, ci_idx]
+    ci_report.to_excel(output_dir / 'report-ci.xlsx')
 
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 12
