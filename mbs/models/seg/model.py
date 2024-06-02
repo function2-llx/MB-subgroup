@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as nnf
 
 from luolib.lightning import LightningModule
-from luolib.models.blocks import sac
+from luolib.models import spadop
 from luolib.models import BackboneProtocol, MaskFormer
 from monai.inferers import sliding_window_inference
 from monai.losses.focal_loss import sigmoid_focal_loss
@@ -84,7 +84,7 @@ class MBSegModel(LightningModule):
         img, label = batch
         pred_logit = self.sw_infer(img)
         if pred_logit.shape[2:] != label.shape[2:]:
-            pred_logit = sac.resample(pred_logit, label.shape[2:])
+            pred_logit = spadop.resample(pred_logit, label.shape[2:])
         loss = self.loss(pred_logit, label)
         self.log('val/loss', loss, sync_dist=True)
         pred = (pred_logit.sigmoid() > 0.5).long()

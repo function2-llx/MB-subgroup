@@ -174,7 +174,10 @@ class MBSegDataModule(MBDataModuleBase):
         )
 
     def predict_transform(self) -> Callable:
-        return lt.nnUNetLoaderD('case', self.data_dir, seg_key=None)
+        return mt.Compose([
+            lt.nnUNetLoaderD('case', self.data_dir, seg_key=None),
+            mt.ToTensorD('img', track_meta=False),
+        ])
 
     def predict_data(self):
         data = [

@@ -14,7 +14,7 @@ from luolib.utils import process_map
 from monai import transforms as mt
 from monai.data import MetaTensor
 
-from mbs.datamodule import load_merged_plan
+from mbs.datamodule import load_merged_plan, load_split
 
 data_dir = Path('MB-data/processed/cr-p10/register-crop')
 seg_output_dir = Path('MB-data/seg-pred/(16, 256, 256)+0.8+gaussian+tta')
@@ -22,11 +22,12 @@ plot_dir = Path('seg-plot')
 PRED_TH = 0.3
 meta_loader = nnUNetLoader(Path('nnUNet_data/preprocessed/Dataset500_TTMB/nnUNetPlans-z_3d_fullres'), None, None)
 plan = load_merged_plan()
+split = load_split()
+plan = plan[split == 'test']
 img_keys = ['T2', 'ST', 'AT']
 img_loader = mt.Compose([
     mt.LoadImageD(img_keys, ensure_channel_first=True),
     mt.OrientationD(img_keys, 'SPR'),
-    mt.ToNumpyD(['T2', 'ST', 'AT']),
 ])
 dpi = 100
 
@@ -36,8 +37,16 @@ def process(case: str):
         return
     data: dict[str, np.ndarray] = img_loader({
         key: data_dir / case / f'{key}.nii'
-        for key in ['T2', 'ST', 'AT']
+        for key in img_keys
     })
+    shape = list(data['T2'].shape[1:])
+    shape[1] = shape[2] = min(shape[1:])
+
+    data = mt.Compose([
+        mt.CenterSpatialCropD(img_keys, shape),
+        mt.ToNumpyD(img_keys),
+    ])(data)
+
     prob = torch.load(seg_output_dir / case / 'prob.pt', 'cpu')
     if isinstance(prob, MetaTensor):
         prob = prob.as_tensor()
@@ -54,7 +63,6 @@ def process(case: str):
         for i in range(3)
     ]
     pred = nnf.pad(pred, [*cytoolz.concat(reversed(padding))])
-    figsize = (pred.shape[3] / dpi, pred.shape[2] / dpi)
     sitk_stuff = meta['sitk_stuff']
     direction = np.array(sitk_stuff['direction']).reshape((3, 3))
     affine = np.eye(4)
@@ -62,7 +70,11 @@ def process(case: str):
     affine[1] = -affine[1]
     affine[2] = -affine[2]
     pred = MetaTensor(pred, affine)
-    pred = mt.Orientation('SPR')(pred).byte().cpu().numpy()
+    pred = mt.Compose([
+        mt.Orientation('SPR'),
+        mt.CenterSpatialCrop(shape),
+    ])(pred).byte().cpu().numpy()
+    figsize = (pred.shape[3] / dpi, pred.shape[2] / dpi)
     for i in data['AT'][0].sum(axis=(1, 2)).argsort()[-5:]:
         case_plot_dir = plot_dir / plan.at[case, 'group'] / plan.at[case, 'subgroup'] / case / str(i)
         case_plot_dir.mkdir(exist_ok=True, parents=True)
@@ -88,7 +100,7 @@ def process(case: str):
 
 def main():
     plot_dir.mkdir(exist_ok=True, parents=True)
-    process_map(process, plan.index, max_workers=0)
+    process_map(process, plan.index, max_workers=8)
 
 if __name__ == '__main__':
     main()

@@ -89,7 +89,7 @@ class ClsTransConf(TransConfBase):
     class GammaCorrection(TransConfBase.GammaCorrection):
         prob: float = 0.3
         range: tuple2_t[float] = (0.7, 1.5)
-        prob_invert: float = 0.75
+        prob_invert: float = 0.25
         retain_stats: bool = True
 
     gamma_correction: GammaCorrection
