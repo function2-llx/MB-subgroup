@@ -11,7 +11,6 @@ import torch
 from torch.types import Device
 
 from luolib.datamodule import CrossValDataModule
-from luolib.nnunet import nnUNet_preprocessed
 from luolib.types import tuple2_t, tuple3_t
 from monai.utils import GridSampleMode
 
@@ -34,11 +33,14 @@ class MBDataModuleBase(CrossValDataModule):
     def __init__(
         self,
         *args,
-        data_dir: Path = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans-z_3d_fullres',
+        data_dir: Path | None = None,
         include_adults: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        if data_dir is None:
+            from luolib.nnunet import nnUNet_preprocessed
+            data_dir = nnUNet_preprocessed / 'Dataset500_TTMB' / 'nnUNetPlans-z_3d_fullres',
         self.data_dir = data_dir
         self.include_adults = include_adults
 

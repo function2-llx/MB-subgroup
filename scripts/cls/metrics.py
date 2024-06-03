@@ -39,7 +39,7 @@ def compute(df: pd.DataFrame, subgroups: ClassLabel, seed: int | None = None):
     metrics: MetricsCollection = nn.ModuleDict({
         k: metric_cls(task='multiclass', num_classes=subgroups.num_classes, average=AverageMethod.NONE)
         for k, metric_cls in [
-            # ('f1', torchmetrics.F1Score),
+            ('f1', torchmetrics.F1Score),
             ('sen', torchmetrics.Recall),
             ('spe', torchmetrics.Specificity),
             ('acc', torchmetrics.Accuracy),
@@ -129,11 +129,13 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('file', type=Path)
     parser.add_argument('--output_dir', type=Path, default='plot')
+    parser.add_argument('--all', action='store_true')
     args = parser.parse_args()
     case_outputs = pd.read_excel(args.file, sheet_name='4way', dtype={'case': 'string'}).set_index('case')
     run(args, case_outputs)
-    run(args, case_outputs, MBGroup.CHILD)
-    run(args, case_outputs, MBGroup.ADULT)
+    if not args.all:
+        run(args, case_outputs, MBGroup.CHILD)
+        run(args, case_outputs, MBGroup.ADULT)
 
 if __name__ == '__main__':
     main()
