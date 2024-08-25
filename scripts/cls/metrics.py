@@ -31,7 +31,19 @@ n_bootstraps = 10000
 
 def compute(df: pd.DataFrame, subgroups: ClassLabel, seed: int | None = None):
     if seed is not None:
-        df = df.sample(frac=1, random_state=seed, replace=True)
+        rng = np.random.default_rng(seed)
+        groups = [
+            group.sample(frac=1, random_state=rng, replace=True)
+            for _, group in df.groupby('true')
+        ]
+        df = pd.concat(groups)
+        # for subgroup in subgroups.names:
+        #     class_data = df.groupby('true').
+        # while True:
+        #     sampled_df = df.sample(frac=1, random_state=rng, replace=True)
+        #     if len(sampled_df['true'].unique()) == subgroups.num_classes:
+        #         df = sampled_df
+        #         break
     label = torch.tensor(df['true'].map(subgroups.str2int).to_numpy())
     pred = torch.tensor(df['pred'].map(subgroups.str2int).to_numpy())
     prob = torch.tensor(np.stack([df[subgroup].to_numpy() for subgroup in subgroups.names], axis=-1))
@@ -73,7 +85,7 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
 
     report = compute(df, subgroups)
     report.to_excel(output_dir / 'report.xlsx')
-    bs_reports =process_map(
+    bs_reports = process_map(
         partial(compute, df, subgroups),
         np.random.SeedSequence(42).generate_state(n_bootstraps).tolist(),
         max_workers=8,
@@ -100,7 +112,11 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
 
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 12
-    fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
+    if subgroups.num_classes == 4:
+        fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
+    else:
+        fig, axes = plt.subplots(1, 3, figsize=(18.3, 6))
+        subgroup_ids = [SUBGROUPS.index(subgroup) for subgroup in subgroups.names]
     from matplotlib.figure import Figure
     fig: Figure
     fig.suptitle(group_name, size=32)
@@ -109,7 +125,11 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
     fig.set_facecolor('lightgray')
     for i, subgroup in enumerate(subgroups.names):
         subgroup_id = SUBGROUPS.index(subgroup)
-        ax: Axes = axes[subgroup_id >> 1, subgroup_id & 1]
+        if subgroups.num_classes == 4:
+            ax: Axes = axes[subgroup_id >> 1, subgroup_id & 1]
+        else:
+            # sorry
+            ax: Axes = axes[subgroup_ids.index(subgroup_id)]
         ax.grid(visible=True, alpha=0.5, linestyle='--')
         fpr, tpr, _ = roc_curve(label == i, prob[:, i])
         ax.plot(fpr, tpr, color='#1CA9C9', lw=2, label=f'ROC curve')
