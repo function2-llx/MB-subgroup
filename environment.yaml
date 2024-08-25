@@ -34,6 +34,6 @@ dependencies:
     - cytoolz
     - antspyx
     - jsonargparse[signatures, omegaconf]  # for lightning CLI
-    - xformers --index-url https://download.pytorch.org/whl/cu118
+    - xformers --index-url https://download.pytorch.org/whl/cu121
     - -e third-party/nnUNet
     - git+https://github.com/FabianIsensee/hiddenlayer.git
