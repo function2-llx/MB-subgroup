@@ -112,24 +112,23 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
 
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 12
-    if subgroups.num_classes == 4:
-        fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
-    else:
-        fig, axes = plt.subplots(1, 3, figsize=(18.3, 6))
-        subgroup_ids = [SUBGROUPS.index(subgroup) for subgroup in subgroups.names]
-    from matplotlib.figure import Figure
-    fig: Figure
-    fig.suptitle(group_name, size=32)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+    # if subgroups.num_classes == 4:
+    #     fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
+    # else:
+    #     fig, axes = plt.subplots(1, 3, figsize=(18.3, 6))
+    #     subgroup_ids = [SUBGROUPS.index(subgroup) for subgroup in subgroups.names]
+    # fig.suptitle(group_name, size=32)
     prob = torch.tensor(np.stack([df[subgroup].to_numpy() for subgroup in subgroups.names], axis=-1))
     label = torch.tensor(df['true'].map(subgroups.str2int).to_numpy())
     fig.set_facecolor('lightgray')
     for i, subgroup in enumerate(subgroups.names):
         subgroup_id = SUBGROUPS.index(subgroup)
-        if subgroups.num_classes == 4:
-            ax: Axes = axes[subgroup_id >> 1, subgroup_id & 1]
-        else:
-            # sorry
-            ax: Axes = axes[subgroup_ids.index(subgroup_id)]
+        # if subgroups.num_classes == 4:
+        #     ax: Axes = axes[subgroup_id >> 1, subgroup_id & 1]
+        # else:
+        #     # sorry
+        #     ax: Axes = axes[subgroup_ids.index(subgroup_id)]
         ax.grid(visible=True, alpha=0.5, linestyle='--')
         fpr, tpr, _ = roc_curve(label == i, prob[:, i])
         ax.plot(fpr, tpr, color='#1CA9C9', lw=2, label=f'ROC curve')

@@ -23,28 +23,37 @@ class ModelConf:
     grid_params: dict[str, list]
 
 model_registry = [
-    ModelConf('SVM', SVC, {'random_state': 42}, {
-        'C': [0.1, 1, 10, 100, 1000],
-        'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
-        'kernel': ['rbf', 'sigmoid', 'linear'],
-    }),
-    ModelConf('LR', LogisticRegression, {'solver': 'saga', 'l1_ratio': 0.5, 'max_iter': 1000, 'random_state': 42}, {
-        'penalty': ['l1', 'l2', 'elasticnet', None],
-        'C': [10, 1, 0.1, 0.01, 0.001],
-    }),
-    ModelConf('KNN', KNeighborsClassifier, {}, {'n_neighbors': [3, 5, 7, 9]}),
-    ModelConf('RF', RandomForestClassifier, {'random_state': 42}, {
-        'n_estimators': [50, 100, 200, 300],
-        'max_depth': [1, 2, 3, 4],
-    }),
-    ModelConf('XGB', XGBClassifier, {'random_state': 42}, {
-        'learning_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
-        'max_depth': [3, 4, 5, 6],
-    }),
-    ModelConf('MLP', MLPClassifier, {'max_iter': 2000, 'random_state': 42}, {
-        'hidden_layer_sizes': [(100, 100, 50), (50, 100, 50), (100, 50, 100)],
-        'learning_rate': ['constant', 'invscaling', 'adaptive'],
-    }),
+    # ModelConf('SVM', SVC, {'random_state': 42}, {
+    #     'C': [0.1, 1, 10, 100, 1000],
+    #     'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
+    #     'kernel': ['rbf', 'sigmoid', 'linear'],
+    # }),
+    # ModelConf('LR', LogisticRegression, {'solver': 'saga', 'l1_ratio': 0.5, 'max_iter': 1000, 'random_state': 42}, {
+    #     'penalty': ['l1', 'l2', 'elasticnet', None],
+    #     'C': [10, 1, 0.1, 0.01, 0.001],
+    # }),
+    # ModelConf('KNN', KNeighborsClassifier, {}, {'n_neighbors': [3, 5, 7, 9]}),
+    # ModelConf('RF', RandomForestClassifier, {'random_state': 42}, {
+    #     'n_estimators': [50, 100, 200, 300],
+    #     'max_depth': [1, 2, 3, 4],
+    # }),
+    # ModelConf('XGB', XGBClassifier, {'random_state': 42}, {
+    #     'learning_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
+    #     'max_depth': [3, 4, 5, 6],
+    # }),
+    # ModelConf('MLP', MLPClassifier, {'max_iter': 2000, 'random_state': 42}, {
+    #     'hidden_layer_sizes': [(100, 100, 50), (50, 100, 50), (100, 50, 100)],
+    #     'learning_rate': ['constant', 'invscaling', 'adaptive'],
+    # }),
+    ModelConf(
+        'MLP',
+        MLPClassifier, {
+            'max_iter': 2000, 'random_state': 42,
+            'hidden_layer_sizes': (100, 100, 50),
+            'learning_rate': 'constant',
+        },
+        {},
+    ),
 ]
 
 model_names = [model_conf.name for model_conf in model_registry]
@@ -86,7 +95,7 @@ def run_model(X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, m
     if issubclass(model_conf.model_cls, SVC):
         init_kwargs = {'probability': True, **model_conf.init_kwargs}
     model = model_conf.model_cls(**init_kwargs, **grid.best_params_)
-    bagging = BaggingClassifier(model, 20, random_state=42)
+    bagging = BaggingClassifier(model, 5, random_state=42)
     bagging.fit(X_train, y_train)
     y_prob = bagging.predict_proba(X_test)
     if y_prob.shape[1] == 2:

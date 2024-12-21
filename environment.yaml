@@ -21,6 +21,9 @@ dependencies:
   - llvm-openmp<16  # https://github.com/pytorch/pytorch/issues/99625
   - pandas
   - openpyxl
+  - statsmodels
+  - r-base
+  - rpy2
   - seaborn
   - nibabel
   - pydicom
@@ -37,3 +40,4 @@ dependencies:
     - xformers --index-url https://download.pytorch.org/whl/cu121
     - -e third-party/nnUNet
     - git+https://github.com/FabianIsensee/hiddenlayer.git
+    - rpy2

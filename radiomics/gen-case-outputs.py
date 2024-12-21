@@ -15,7 +15,8 @@ def main():
     y_true = plan.loc[index, 'subgroup']
     output_dir = Path('radiomics/case-output')
     output_dir.mkdir(parents=True, exist_ok=True)
-    for model in ['SVM', 'LR', 'RF', 'XGB', 'MLP']:
+    # for model in ['SVM', 'LR', 'RF', 'XGB', 'MLP']:
+    for model in ['MLP']:
         g34 = dfs['s1'][model].to_numpy()
         shh = dfs['s2-ws'][model].to_numpy()
         g4 = dfs['s2-g34'][model].to_numpy()
