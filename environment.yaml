@@ -1,43 +1,38 @@
 channels:
   - conda-forge
-  - pytorch
-  - nvidia
-  - defaults
 dependencies:
-  - python=3.11
+  - python=3.11 # https://github.com/AIM-Harvard/pyradiomics/issues/886
   - notebook
   - numpy
   - cupy
-  - scikit-learn
-  - pytorch::pytorch=2.3
-  - pytorch::pytorch-cuda=12.1
-  - pytorch::torchvision
+  - pytorch=2.5
+  - torchvision
   - einops
   - lightning
   - torchmetrics
   - transformers
+  - xformers
   - timm
   - wandb
-  - llvm-openmp<16  # https://github.com/pytorch/pytorch/issues/99625
   - pandas
   - openpyxl
-  - statsmodels
+  - scikit-learn
+  - xgboost
   - r-base
-  - rpy2
+  - statsmodels
   - seaborn
   - nibabel
   - pydicom
   - nipype
   - zstandard
+  - cytoolz
 
   - pip
   - pip:
     - pyradiomics
-    - xgboost
-    - cytoolz
     - antspyx
     - jsonargparse[signatures, omegaconf]  # for lightning CLI
-    - xformers --index-url https://download.pytorch.org/whl/cu121
     - -e third-party/nnUNet
     - git+https://github.com/FabianIsensee/hiddenlayer.git
     - rpy2
+channel_priority: strict
