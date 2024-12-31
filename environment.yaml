@@ -21,18 +21,22 @@ dependencies:
   - r-base
   - statsmodels
   - seaborn
-  - nibabel
-  - pydicom
+  - monai
+  - simpleitk
+#  - nibabel
+#  - pydicom
   - nipype
   - zstandard
   - cytoolz
+  - jsonargparse  # for lightning CLI
 
   - pip
   - pip:
-    - pyradiomics
     - antspyx
-    - jsonargparse[signatures, omegaconf]  # for lightning CLI
-    - -e third-party/nnUNet
-    - git+https://github.com/FabianIsensee/hiddenlayer.git
+    - python-gdcm
+    - jsonargparse[signatures, omegaconf]  # only for extras
+    - pyradiomics
+#    - -e third-party/nnUNet
+#    - git+https://github.com/FabianIsensee/hiddenlayer.git
     - rpy2
 channel_priority: strict
