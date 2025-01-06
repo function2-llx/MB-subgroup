@@ -16,6 +16,7 @@ dependencies:
   - wandb
   - pandas
   - openpyxl
+  - xlsxwriter
   - scikit-learn
   - xgboost
   - r-base
@@ -29,6 +30,7 @@ dependencies:
   - zstandard
   - cytoolz
   - jsonargparse  # for lightning CLI
+  - dcm2niix
 
   - pip
   - pip:
