@@ -21,7 +21,7 @@ def main():
             series_dir: Path
             if not series_dir.is_dir():
                 continue
-            cmd = f'dcm2niix -o {save_dir} -f %f-%p {series_dir}'
+            cmd = f'dcm2niix -o {save_dir} -f %s {series_dir}'
             commands.append(cmd)
     process_map(os.system, commands, max_workers=16)
 
