@@ -1,14 +1,15 @@
 import json
+import re
 from pathlib import Path
 
 import SimpleITK as sitk
+import cytoolz
 from tqdm import tqdm
 
 data_dir = Path('MB-data/new-test')
 src_dir = data_dir / 'NIfTI'
-dst_dir = data_dir / 'NIfTI-axial'
+dst_dir = data_dir / 'NIfTI-filtered'
 dst_dir.mkdir(exist_ok=True)
-
 
 def is_axial(image_file: Path, tol: float = 1e-2) -> bool:
     reader = sitk.ImageFileReader()
@@ -17,21 +18,36 @@ def is_axial(image_file: Path, tol: float = 1e-2) -> bool:
     direction = reader.GetDirection()
     return 1 - abs(direction[0]) < tol and 1 - abs(direction[4]) < tol
 
+def check_modality(meta: dict) -> bool:
+    series_desc: str = meta['SeriesDescription']
+    series_desc = series_desc.upper()
+    return 'T1' in series_desc or 'T2' in series_desc
+
 def main():
     for study_dir in tqdm(list(src_dir.iterdir()), dynamic_ncols=True):
         if not study_dir.is_dir():
             continue
         for meta_file in study_dir.glob('*.json'):
-            # 检查是否有超过2个同名文件
-            if len(list(study_dir.glob(f'{meta_file.stem}.*'))) > 2:
+            try:
+                series_num = int(meta_file.stem)
+            except ValueError:
                 continue
-            series_num = meta_file.stem.split('-', 1)[0]
-            if len(image_files :=list(study_dir.glob(f'{series_num}-*.nii'))) > 1:
+            # make sure there are only $sn.json and $sn.nii for this series
+            pattern = re.compile(rf'{series_num}\D?.*')
+            if cytoolz.count(
+                filter(
+                    lambda path: pattern.match(str(path)) is not None,
+                    study_dir.glob(f'{series_num}*'),
+                ),
+            ) > 2:
                 continue
-            image_file = image_files[0]
+            image_file = study_dir / f'{series_num}.nii'
             if not is_axial(image_file):
                 continue
             meta = json.loads(meta_file.read_bytes())
+            assert series_num == meta['SeriesNumber']
+            if not check_modality(meta):
+                continue
             dst_study_dir = dst_dir / study_dir.name
             dst_study_dir.mkdir(exist_ok=True)
             (dst_study_dir / image_file.name).hardlink_to(image_file)
