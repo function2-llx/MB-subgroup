@@ -10,7 +10,6 @@ from luolib.models import ClsModel, Mask2Former
 from luolib.models.init import init_common
 from luolib.models.utils import get_no_weight_decay_keys
 # from luolib.types import NamedParamGroup
-from luolib.utils import DataKey
 
 from mbs.conf import MBClsConf, get_cls_names, MBM2FClsConf
 from mbs.utils.enums import SegClass, MBDataKey

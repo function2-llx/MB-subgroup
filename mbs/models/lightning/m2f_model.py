@@ -3,7 +3,6 @@ import torch
 from torch.nn import functional as nnf
 
 from luolib.models.lightning import Mask2Former, SegInferer
-from luolib.utils import DataKey
 from mbs.utils.enums import SegClass
 from monai.metrics import DiceMetric
 from monai.utils import MetricReduction

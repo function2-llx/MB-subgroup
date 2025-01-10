@@ -8,7 +8,7 @@ import torchmetrics
 from torchmetrics.utilities.enums import AverageMethod
 
 from luolib.lightning import LightningModule
-from luolib.models import MaskFormer, load_ckpt
+from luolib.models import MaskFormer
 from luolib.utils import DataSplit
 
 __all__ = [

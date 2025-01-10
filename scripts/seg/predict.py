@@ -6,15 +6,12 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from luolib.conf import parse_cli
-from luolib.models import SegInferer
 from luolib.utils import DataKey
 import monai
 from monai.data import MetaTensor
 
-from mbs.conf import MBSegPredConf
-from mbs.datamodule import MBSegDataModule, load_split, MBM2FDataModule
-from mbs.models import MBSegModel, MBM2FModel
+from mbs.datamodule import MBSegDataModule, load_split
+from mbs.models import MBSegModel
 
 SEG_PROB_FILENAME = 'seg-prob.pt'
 

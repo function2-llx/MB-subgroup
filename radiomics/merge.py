@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from luolib.utils import DataKey
 
 from mbs.datamodule import parse_age, load_clinical
+from mbs.utils.enums import MBDataKey
 
 def main():
     parser = ArgumentParser()
@@ -13,9 +13,9 @@ def main():
     parser.add_argument('-o', default='features.csv', type=Path)
 
     args = parser.parse_args()
-    df = pd.read_csv(args.i, dtype='string').set_index(DataKey.CASE).drop(columns=['Image', 'Mask'])
+    df = pd.read_csv(args.i, dtype='string').set_index(MBDataKey.CASE).drop(columns=['Image', 'Mask'])
     clinical = load_clinical()
-    shared_names = {DataKey.CASE, 'molecular', 'split'}
+    shared_names = {MBDataKey.CASE, 'molecular', 'split'}
     ret = pd.concat(
         [
             df[df['modality'] == modality]

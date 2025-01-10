@@ -3,6 +3,11 @@ from pathlib import Path
 from monai.utils import StrEnum
 
 class MBDataKey(StrEnum):
+    CASE = 'case'
+    IMG = 'img'
+    CLS = 'cls'
+    SEG = 'seg'
+    MASK = 'mask'
     NUMBER = 'number'
     GROUP = 'group'
     SUBGROUP = 'subgroup'
