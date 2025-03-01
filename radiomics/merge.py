@@ -27,7 +27,7 @@ def main():
     )
 
     ret.insert(2, 'sex', clinical['sex'])
-    ret.insert(3, 'age', clinical['age'].map(parse_age))
+    ret.insert(3, 'age', clinical['age'])
 
     ret.loc[:, ~ret.columns.duplicated()].to_csv(args.o)
 

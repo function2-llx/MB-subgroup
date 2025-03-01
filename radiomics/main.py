@@ -41,19 +41,19 @@ model_registry = [
     #     'learning_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
     #     'max_depth': [3, 4, 5, 6],
     # }),
-    # ModelConf('MLP', MLPClassifier, {'max_iter': 2000, 'random_state': 42}, {
-    #     'hidden_layer_sizes': [(100, 100, 50), (50, 100, 50), (100, 50, 100)],
-    #     'learning_rate': ['constant', 'invscaling', 'adaptive'],
-    # }),
-    ModelConf(
-        'MLP',
-        MLPClassifier, {
-            'max_iter': 2000, 'random_state': 42,
-            'hidden_layer_sizes': (100, 100, 50),
-            'learning_rate': 'constant',
-        },
-        {},
-    ),
+    ModelConf('MLP', MLPClassifier, {'max_iter': 2000, 'random_state': 42}, {
+        'hidden_layer_sizes': [(100, 100, 50), (50, 100, 50), (100, 50, 100)],
+        'learning_rate': ['constant', 'invscaling', 'adaptive'],
+    }),
+    # ModelConf(
+    #     'MLP',
+    #     MLPClassifier, {
+    #         'max_iter': 2000, 'random_state': 42,
+    #         'hidden_layer_sizes': (100, 100, 50),
+    #         'learning_rate': 'constant',
+    #     },
+    #     {},
+    # ),
 ]
 
 model_names = [model_conf.name for model_conf in model_registry]

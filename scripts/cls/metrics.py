@@ -4,6 +4,8 @@ from functools import partial
 from pathlib import Path
 from typing import TypeAlias
 
+import itertools as itt
+
 from datasets import ClassLabel
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -37,13 +39,6 @@ def compute(df: pd.DataFrame, subgroups: ClassLabel, seed: int | None = None):
             for _, group in df.groupby('true')
         ]
         df = pd.concat(groups)
-        # for subgroup in subgroups.names:
-        #     class_data = df.groupby('true').
-        # while True:
-        #     sampled_df = df.sample(frac=1, random_state=rng, replace=True)
-        #     if len(sampled_df['true'].unique()) == subgroups.num_classes:
-        #         df = sampled_df
-        #         break
     label = torch.tensor(df['true'].map(subgroups.str2int).to_numpy())
     pred = torch.tensor(df['pred'].map(subgroups.str2int).to_numpy())
     prob = torch.tensor(np.stack([df[subgroup].to_numpy() for subgroup in subgroups.names], axis=-1))
@@ -71,16 +66,18 @@ def compute(df: pd.DataFrame, subgroups: ClassLabel, seed: int | None = None):
             report.at['micro', name] = metric.compute().item()
     return report
 
-def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
-    df_index = df['split'] == 'test'
+def run(config_name: str, output_root: Path, split: str, group: MBGroup | None = None):
+    output_dir = output_root / split / config_name
+    df = pd.read_excel(
+        f'MB-data/outputs/{split}/{config_name}.xlsx',
+        dtype={'case': pd.StringDtype()},
+    ).set_index('case')
     if group is not None:
-        df_index &= test_plan[MBDataKey.GROUP] == group
-    df = df[df_index]
+        df = df[df['group'] == group]
+        output_dir = output_dir / group
     all_subgroups = df['true']
     subgroups = ClassLabel(names=sorted(np.unique(all_subgroups).tolist(), key=lambda x: SUBGROUPS.index(x)))
 
-    group_name = 'all' if group is None else group
-    output_dir: Path = args.output_dir / group_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     report = compute(df, subgroups)
@@ -89,6 +86,8 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
         partial(compute, df, subgroups),
         np.random.SeedSequence(42).generate_state(n_bootstraps).tolist(),
         max_workers=8,
+        chunksize=50,
+        dynamic_ncols=True,
     )
     bs_metrics = np.stack([bs_report.to_numpy() for bs_report in bs_reports])
     np.save(output_dir / 'bs_metrics.npy', bs_metrics)
@@ -113,12 +112,6 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 12
     fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-    # if subgroups.num_classes == 4:
-    #     fig, axes = plt.subplots(2, 2, figsize=(12.2, 12))
-    # else:
-    #     fig, axes = plt.subplots(1, 3, figsize=(18.3, 6))
-    #     subgroup_ids = [SUBGROUPS.index(subgroup) for subgroup in subgroups.names]
-    # fig.suptitle(group_name, size=32)
     prob = torch.tensor(np.stack([df[subgroup].to_numpy() for subgroup in subgroups.names], axis=-1))
     label = torch.tensor(df['true'].map(subgroups.str2int).to_numpy())
     fig.set_facecolor('lightgray')
@@ -146,15 +139,16 @@ def run(args: Namespace, df: pd.DataFrame, group: MBGroup | None = None):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('file', type=Path)
-    parser.add_argument('--output_dir', type=Path, default='plot')
-    parser.add_argument('--all', action='store_true')
+    parser.add_argument('--output_root', type=Path, default='MB-data/metrics')
     args = parser.parse_args()
-    case_outputs = pd.read_excel(args.file, sheet_name='4way', dtype={'case': 'string'}).set_index('case')
-    run(args, case_outputs)
-    if not args.all:
-        run(args, case_outputs, MBGroup.CHILD)
-        run(args, case_outputs, MBGroup.ADULT)
+    for config_name, split in itt.product(
+        ['mbmf', 'scratch', 'radiomics'],
+        ['test', 'val'],
+    ):
+        run(config_name, args.output_root, split)
+        if config_name == 'mbmf' and split == 'test':
+            run(config_name, args.output_root, split, MBGroup.CHILD)
+            run(config_name, args.output_root, split, MBGroup.ADULT)
 
 if __name__ == '__main__':
     main()
