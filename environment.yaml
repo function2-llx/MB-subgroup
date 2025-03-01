@@ -5,7 +5,7 @@ dependencies:
   - notebook
   - numpy
   - cupy
-  - pytorch=2.5
+  - pytorch
   - torchvision
   - einops
   - lightning
@@ -38,7 +38,7 @@ dependencies:
     - python-gdcm
     - jsonargparse[signatures, omegaconf]  # only for extras
     - pyradiomics
-#    - -e third-party/nnUNet
+    - -e third-party/nnUNet
 #    - git+https://github.com/FabianIsensee/hiddenlayer.git
     - rpy2
 channel_priority: strict
